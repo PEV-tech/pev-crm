@@ -38,7 +38,7 @@ const navigationItems = [
   },
   {
     label: 'Ma Clientèle',
-    href: '/dashboard/clients',
+    href: '/dashboard/ma-clientele',
     icon: Users,
   },
   {

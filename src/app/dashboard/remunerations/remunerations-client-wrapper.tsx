@@ -1,47 +1,19 @@
 'use client'
 
 import * as React from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { RoleType } from '@/types/database'
+import { createClient } from '@/lib/supabase/client'
+import { useUser } from '@/hooks/use-user'
 import { RemunerationsClient } from './remunerations-client'
 
 export function RemunerationsClientWrapper() {
+  const { consultant } = useUser()
   const [dossiers, setDossiers] = React.useState<any[]>([])
-  const [consultant, setConsultant] = React.useState<any>(null)
-  const [role, setRole] = React.useState<RoleType | null>(null)
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
-        if (userError || !user) {
-          setDossiers([])
-          setConsultant(null)
-          setRole(null)
-          setLoading(false)
-          return
-        }
-
-        const { data: consultantData, error: consultantError } = await supabase
-          .from('consultants')
-          .select('*')
-          .eq('auth_user_id', user.id)
-          .single()
-
-        if (consultantError) {
-          console.error('Error fetching consultant:', consultantError)
-          setDossiers([])
-          setConsultant(null)
-          setRole(null)
-          setLoading(false)
-          return
-        }
+        const supabase = createClient()
 
         const { data: dossiersData, error: dossiersError } = await supabase
           .from('v_dossiers_complets')
@@ -50,18 +22,12 @@ export function RemunerationsClientWrapper() {
         if (dossiersError) {
           console.error('Error fetching dossiers:', dossiersError)
           setDossiers([])
-          setConsultant(consultantData)
-          setRole(consultantData?.role)
         } else {
           setDossiers(dossiersData || [])
-          setConsultant(consultantData)
-          setRole(consultantData?.role)
         }
       } catch (error) {
         console.error('Error fetching remuneration data:', error)
         setDossiers([])
-        setConsultant(null)
-        setRole(null)
       } finally {
         setLoading(false)
       }
@@ -74,5 +40,11 @@ export function RemunerationsClientWrapper() {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   }
 
-  return <RemunerationsClient dossiers={dossiers} consultant={consultant} role={role} />
+  return (
+    <RemunerationsClient
+      dossiers={dossiers}
+      consultant={consultant}
+      role={consultant?.role || null}
+    />
+  )
 }

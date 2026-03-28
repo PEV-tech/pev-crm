@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 import { ChallengesClient } from './challenges-client'
 
 interface ChallengeData {
@@ -18,10 +18,7 @@ export function ChallengesClientWrapper() {
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
+        const supabase = createClient()
 
         const currentYear = new Date().getFullYear()
 
@@ -50,7 +47,7 @@ export function ChallengesClientWrapper() {
             .reduce((sum: number, d: any) => sum + (d.montant || 0), 0) || 0
 
           return {
-            consultant: consultant.nom || consultant.prenom || 'Inconnu',
+            consultant: consultant.prenom || consultant.nom || 'Inconnu',
             objectif: challenge?.objectif || 0,
             collecte: collecte,
             challengeId: challenge?.id,

@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 import { EncaissementsClient } from './encaissements-client'
 
 export function EncaissementsClientWrapper() {
@@ -11,10 +11,7 @@ export function EncaissementsClientWrapper() {
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
+        const supabase = createClient()
 
         const [dossiersRes, facturesRes] = await Promise.all([
           supabase.from('v_dossiers_complets').select('*'),
@@ -24,12 +21,11 @@ export function EncaissementsClientWrapper() {
         const dossiers = dossiersRes.data || []
         const factures = facturesRes.data || []
 
-        const encaissements = factures
-          .filter((f: any) => f.facturee && f.payee === 'oui')
-          .map((f: any) => {
-            const dossier = dossiers.find((d: any) => d.id === f.dossier_id)
-            return { ...f, dossier }
-          })
+        // Show all factures with dossier info, marking payment status
+        const encaissements = factures.map((f: any) => {
+          const dossier = dossiers.find((d: any) => d.id === f.dossier_id)
+          return { ...f, dossier }
+        })
 
         setData(encaissements)
       } catch (error) {

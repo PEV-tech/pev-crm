@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 import { VDossiersComplets } from '@/types/database'
 import { DossiersClient } from './dossiers-client'
 
@@ -12,10 +12,7 @@ export function DossiersClientWrapper() {
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
+        const supabase = createClient()
 
         const { data, error } = await supabase
           .from('v_dossiers_complets')

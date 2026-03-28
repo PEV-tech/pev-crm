@@ -3,7 +3,8 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
-import { TrendingUp } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { TrendingUp, Clock, CheckCircle, XCircle } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -13,50 +14,61 @@ const formatCurrency = (value: number | null | undefined): string => {
   }).format(value)
 }
 
-const monthNames = [
-  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-]
+const PayeeBadge = ({ status }: { status: string }) => {
+  const config: Record<string, { label: string; variant: string; icon: any }> = {
+    oui: { label: 'Payé', variant: 'success', icon: CheckCircle },
+    en_cours: { label: 'En cours', variant: 'warning', icon: Clock },
+    non: { label: 'Non payé', variant: 'destructive', icon: XCircle },
+  }
+  const conf = config[status] || config['non']
+  return <Badge variant={conf.variant as any}>{conf.label}</Badge>
+}
 
 interface EncaissementsClientProps {
   initialData: any[]
 }
 
+type TabKey = 'all' | 'paid' | 'pending' | 'unpaid'
+
 export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
   const [data] = React.useState(initialData)
+  const [activeTab, setActiveTab] = React.useState<TabKey>('all')
 
-  // Group by month
-  const groupedByMonth = React.useMemo(() => {
-    const groups: Record<string, any[]> = {}
-
-    data.forEach((item: any) => {
-      if (item.date_paiement) {
-        const date = new Date(item.date_paiement)
-        const monthKey = `${date.getFullYear()}-${date.getMonth()}`
-        const monthName = monthNames[date.getMonth()] + ' ' + date.getFullYear()
-
-        if (!groups[monthKey]) {
-          groups[monthKey] = []
-        }
-        groups[monthKey].push({ ...item, monthName })
-      }
-    })
-
-    return Object.entries(groups).sort(([keyA], [keyB]) => keyB.localeCompare(keyA))
+  const categorized = React.useMemo(() => {
+    const paid = data.filter((f: any) => f.payee === 'oui')
+    const pending = data.filter((f: any) => f.payee === 'en_cours')
+    const unpaid = data.filter((f: any) => f.payee === 'non')
+    return { paid, pending, unpaid }
   }, [data])
 
-  // Calculate totals
+  const filteredData = React.useMemo(() => {
+    switch (activeTab) {
+      case 'paid':
+        return categorized.paid
+      case 'pending':
+        return categorized.pending
+      case 'unpaid':
+        return categorized.unpaid
+      default:
+        return data
+    }
+  }, [data, activeTab, categorized])
+
   const totals = React.useMemo(() => {
-    let totalMontant = 0
-    let totalCommission = 0
-
-    data.forEach((item: any) => {
-      totalMontant += item.dossier?.montant || 0
-      totalCommission += item.dossier?.commission_brute || 0
-    })
-
-    return { totalMontant, totalCommission }
-  }, [data])
+    const totalMontant = categorized.paid.reduce(
+      (sum: number, item: any) => sum + (item.dossier?.montant || 0),
+      0
+    )
+    const totalCommission = categorized.paid.reduce(
+      (sum: number, item: any) => sum + (item.dossier?.commission_brute || 0),
+      0
+    )
+    const enCoursTotal = categorized.pending.reduce(
+      (sum: number, item: any) => sum + (item.dossier?.montant || 0),
+      0
+    )
+    return { totalMontant, totalCommission, enCoursTotal }
+  }, [categorized])
 
   const columns: ColumnDefinition<any>[] = [
     {
@@ -86,21 +98,31 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
       render: (_, row) => formatCurrency(row.dossier?.commission_brute),
     },
     {
-      key: 'date_paiement',
-      label: 'Date paiement',
-      render: (value) => {
-        if (!value) return '-'
-        return new Date(value).toLocaleDateString('fr-FR')
-      },
+      key: 'facturee',
+      label: 'Facturée',
+      render: (value) => (
+        <Badge variant={value ? 'success' : 'destructive'}>
+          {value ? 'Oui' : 'Non'}
+        </Badge>
+      ),
     },
     {
-      key: 'dossier.consultant_nom',
-      label: 'Consultant',
-      render: (_, row) =>
-        row.dossier?.consultant_prenom && row.dossier?.consultant_nom
-          ? `${row.dossier.consultant_prenom} ${row.dossier.consultant_nom}`
-          : '-',
+      key: 'payee',
+      label: 'Statut paiement',
+      render: (value) => <PayeeBadge status={value || 'non'} />,
     },
+    {
+      key: 'dossier.consultant_prenom',
+      label: 'Consultant',
+      render: (_, row) => row.dossier?.consultant_prenom || row.dossier?.consultant_nom || '-',
+    },
+  ]
+
+  const tabs: { key: TabKey; label: string; count: number }[] = [
+    { key: 'all', label: 'Tous', count: data.length },
+    { key: 'paid', label: 'Payés', count: categorized.paid.length },
+    { key: 'pending', label: 'En cours', count: categorized.pending.length },
+    { key: 'unpaid', label: 'Non payés', count: categorized.unpaid.length },
   ]
 
   return (
@@ -108,28 +130,47 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Encaissements</h1>
-        <p className="text-gray-600 mt-1">Paiements reçus par mois</p>
+        <p className="text-gray-600 mt-1">Suivi des paiements et encaissements</p>
       </div>
 
-      {/* YTD Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp size={20} className="text-green-600" />
-              Total collecté
+              <CheckCircle size={20} className="text-green-600" />
+              Total encaissé
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-gray-900">
               {formatCurrency(totals.totalMontant)}
             </p>
+            <p className="text-sm text-gray-500 mt-1">{categorized.paid.length} paiement(s)</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Total commissions</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock size={20} className="text-orange-600" />
+              En attente de paiement
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-orange-600">
+              {formatCurrency(totals.enCoursTotal)}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">{categorized.pending.length} en cours</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp size={20} className="text-blue-600" />
+              Commissions encaissées
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-gray-900">
@@ -139,65 +180,35 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
         </Card>
       </div>
 
-      {/* Monthly Sections */}
-      {groupedByMonth.length > 0 ? (
-        <div className="space-y-6">
-          {groupedByMonth.map(([monthKey, monthData]: [string, any[]]) => {
-            const monthTotal = monthData.reduce((sum, item) => sum + (item.dossier?.montant || 0), 0)
-            const commissionTotal = monthData.reduce(
-              (sum, item) => sum + (item.dossier?.commission_brute || 0),
-              0
-            )
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-gray-200 pb-0">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === tab.key
+                ? 'bg-white text-blue-600 border border-gray-200 border-b-white -mb-px'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {tab.label} ({tab.count})
+          </button>
+        ))}
+      </div>
 
-            return (
-              <Card key={monthKey}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">
-                      {monthData[0].monthName}
-                    </CardTitle>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">Total du mois</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        {formatCurrency(monthTotal)}
-                      </p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    data={monthData}
-                    columns={columns}
-                    pageSize={10}
-                  />
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Total du mois</p>
-                        <p className="text-lg font-bold text-gray-900">
-                          {formatCurrency(monthTotal)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Commissions du mois</p>
-                        <p className="text-lg font-bold text-gray-900">
-                          {formatCurrency(commissionTotal)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-gray-500">Aucun encaissement disponible</p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Table */}
+      <Card>
+        <CardContent className="pt-6">
+          {filteredData.length > 0 ? (
+            <DataTable data={filteredData} columns={columns} pageSize={15} />
+          ) : (
+            <p className="text-center text-gray-500 py-6">
+              Aucun encaissement dans cette catégorie
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
