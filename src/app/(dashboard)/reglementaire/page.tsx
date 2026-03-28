@@ -1,26 +1,7 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
-import { createClient } from '@/lib/supabase/server'
-import { ReglementaireClient } from './reglementaire-client'
+import { ReglementaireClientWrapper } from './reglementaire-client-wrapper'
 
-async function getComplianceData() {
-  const supabase = await createClient()
-
-  // Get all dossiers
-  const { data: dossiers, error: dossiersError } = await supabase
-    .from('v_dossiers_complets')
-    .select('*')
-
-  if (dossiersError) {
-    console.error('Error fetching dossiers:', dossiersError)
-    return []
-  }
-
-  return dossiers || []
-}
-
-export default async function ReglementairePage() {
-  const dossiers = await getComplianceData()
-
-  return <ReglementaireClient initialData={dossiers} />
+export default function ReglementairePage() {
+  return <ReglementaireClientWrapper />
 }

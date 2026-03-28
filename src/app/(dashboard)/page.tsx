@@ -1,7 +1,8 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
-import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { Card } from '@/components/ui/card'
 import { DashboardClient } from './dashboard-client'
 import { TrendingUp, DollarSign, Clock, CheckCircle } from 'lucide-react'
 
@@ -13,88 +14,76 @@ const formatCurrency = (value: number | null | undefined): string => {
   }).format(value)
 }
 
-async function getRecentDossiers() {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('v_dossiers_complets')
-    .select('*')
-    .order('date_operation', { ascending: false })
-    .limit(5)
+export default function DashboardPage() {
+  const [stats, setStats] = useState({ collecte: 0, caGenere: 0, pipelineEnCours: 0, dossiersFinalisés: 0 })
+  const [recentDossiers, setRecentDossiers] = useState<any[]>([])
+  const [pendingInvoices, setPendingInvoices] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  if (error) {
-    console.error('Error fetching recent dossiers:', error)
-    return []
+  useEffect(() => {
+    async function loadData() {
+      const supabase = createClient()
+
+      // Get all dossiers for stats
+      const { data: dossiers } = await supabase
+        .from('v_dossiers_complets')
+        .select('*')
+
+      if (dossiers) {
+        const collecte = dossiers
+          .filter((d: any) => d.statut === 'client_finalise')
+          .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
+
+        const pipelineEnCours = dossiers
+          .filter((d: any) => d.statut === 'client_en_cours')
+          .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
+
+        const caGenere = dossiers
+          .reduce((sum: number, d: any) => sum + (d.commission_brute || 0), 0)
+
+        const dossiersFinalisés = dossiers.filter((d: any) => d.statut === 'client_finalise').length
+
+        setStats({ collecte, caGenere, pipelineEnCours, dossiersFinalisés })
+      }
+
+      // Get recent dossiers
+      const { data: recent } = await supabase
+        .from('v_dossiers_complets')
+        .select('*')
+        .order('date_operation', { ascending: false })
+        .limit(5)
+
+      setRecentDossiers(recent || [])
+
+      // Get pending invoices
+      const { data: factures } = await supabase
+        .from('factures')
+        .select('*')
+
+      if (factures && dossiers) {
+        const pending = factures
+          .filter((f: any) => !f.facturee)
+          .slice(0, 5)
+          .map((f: any) => {
+            const dossier = dossiers.find((d: any) => d.id === f.dossier_id)
+            return { ...f, dossier }
+          })
+        setPendingInvoices(pending)
+      }
+
+      setLoading(false)
+    }
+
+    loadData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Chargement...</div>
+      </div>
+    )
   }
-
-  return data || []
-}
-
-async function getPendingInvoices() {
-  const supabase = await createClient()
-  const { data: dossiers, error: dossiersError } = await supabase
-    .from('v_dossiers_complets')
-    .select('*')
-
-  if (dossiersError) {
-    console.error('Error fetching dossiers:', dossiersError)
-    return []
-  }
-
-  const { data: factures, error: facturesError } = await supabase
-    .from('factures')
-    .select('*')
-
-  if (facturesError) {
-    console.error('Error fetching factures:', facturesError)
-    return []
-  }
-
-  // Filter dossiers where facturee=false
-  const pendingFacures = factures
-    .filter((f: any) => !f.facturee)
-    .slice(0, 5)
-
-  return pendingFacures.map((f: any) => {
-    const dossier = dossiers?.find((d: any) => d.id === f.dossier_id)
-    return { ...f, dossier }
-  })
-}
-
-async function getStats() {
-  const supabase = await createClient()
-
-  // Get all dossiers for stats
-  const { data: dossiers, error: dossiersError } = await supabase
-    .from('v_dossiers_complets')
-    .select('*')
-
-  if (dossiersError) {
-    console.error('Error:', dossiersError)
-    return { collecte: 0, caGenere: 0, pipelineEnCours: 0, dossiersFinalisés: 0 }
-  }
-
-  const collecte = dossiers
-    ?.filter((d: any) => d.statut === 'client_finalise')
-    .reduce((sum: number, d: any) => sum + (d.montant || 0), 0) || 0
-
-  const pipelineEnCours = dossiers
-    ?.filter((d: any) => d.statut === 'client_en_cours')
-    .reduce((sum: number, d: any) => sum + (d.montant || 0), 0) || 0
-
-  const caGenere = dossiers
-    ?.reduce((sum: number, d: any) => sum + (d.commission_brute || 0), 0) || 0
-
-  const dossiersFinalisés = dossiers?.filter((d: any) => d.statut === 'client_finalise').length || 0
-
-  return { collecte, caGenere, pipelineEnCours, dossiersFinalisés }
-}
-
-export default async function DashboardPage() {
-  const [stats, recentDossiers, pendingInvoices] = await Promise.all([
-    getStats(),
-    getRecentDossiers(),
-    getPendingInvoices(),
-  ])
 
   return (
     <div className="space-y-8">
