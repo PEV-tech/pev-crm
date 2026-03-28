@@ -1,68 +1,81 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { DashboardLayoutClient } from './layout-client'
 import { UserContext } from '@/hooks/use-user'
 import type { Consultant } from '@/types/database'
 
-async function getCurrentUser() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
-
-  return user
-}
-
-async function getConsultantData(userId: string) {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('consultants')
-    .select('*')
-    .eq('auth_user_id', userId)
-    .single()
-
-  if (error) {
-    console.error('Error fetching consultant:', error)
-    return null
-  }
-
-  return data as Consultant | null
-}
-
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const user = await getCurrentUser()
-  const consultant = await getConsultantData(user.id)
+  const router = useRouter()
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
+  const [consultant, setConsultant] = useState<Consultant | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  if (!consultant) {
-    redirect('/login')
+  useEffect(() => {
+    async function loadUserData() {
+      const supabase = createClient()
+
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
+
+      if (!authUser) {
+        router.push('/login')
+        return
+      }
+
+      setUser({ id: authUser.id, email: authUser.email })
+
+      const { data: consultantData } = await supabase
+        .from('consultants')
+        .select('*')
+        .eq('auth_user_id', authUser.id)
+        .single()
+
+      if (!consultantData) {
+        router.push('/login')
+        return
+      }
+
+      setConsultant(consultantData as Consultant)
+      setLoading(false)
+    }
+
+    loadUserData()
+  }, [router])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-gray-500">Chargement...</div>
+      </div>
+    )
+  }
+
+  if (!consultant || !user) {
+    return null
   }
 
   const userInitials = `${consultant.prenom[0]}${consultant.nom[0]}`.toUpperCase()
   const userName = `${consultant.prenom} ${consultant.nom}`
 
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   const contextValue = {
-    user: {
-      id: user.id,
-      email: user.email,
-    },
+    user,
     consultant,
     isLoading: false,
     error: null,
-  }
-
-  async function handleLogout() {
-    'use server'
-    const supabase = await createClient()
-    await supabase.auth.signOut()
-    redirect('/login')
   }
 
   return (
