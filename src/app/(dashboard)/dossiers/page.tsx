@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { createClient } from '@/lib/supabase/server'
 import { VDossiersComplets } from '@/types/database'
 import { DossiersClient } from './dossiers-client'
