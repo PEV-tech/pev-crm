@@ -74,7 +74,7 @@ export default function ParametresPage() {
     {
       key: 'taux_remuneration',
       label: 'Taux rémunération',
-      render: (value) => `${value}%`,
+      render: (value) => value != null ? `${(value * 100).toFixed(0)}%` : '-',
     },
     {
       key: 'zone',

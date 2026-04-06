@@ -47,9 +47,9 @@ export function ChallengesClientWrapper() {
           .map((consultant: any) => {
             const challenge = challenges.find((c: any) => c.consultant_id === consultant.id)
 
-            // Calculate collecte from finalized dossiers matching this consultant
+            // Calculate collecte from finalized dossiers matching this consultant (by nom AND prenom)
             const collecte = dossiers
-              .filter((d: any) => d.consultant_nom === consultant.nom)
+              .filter((d: any) => d.consultant_nom === consultant.nom && d.consultant_prenom === consultant.prenom)
               .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
 
             return {
