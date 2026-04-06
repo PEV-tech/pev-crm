@@ -20,7 +20,8 @@ export function MaClienteleClientWrapper() {
         let query = supabase.from('v_dossiers_complets').select('*')
 
         if (consultant?.role !== 'manager') {
-          query = query.eq('consultant_nom', consultant?.nom)
+          // Filter by prenom (unique per consultant) since noms have placeholder values in DB
+          query = query.eq('consultant_prenom', consultant?.prenom)
         }
 
         const { data: dossiersData, error: dossiersError } = await query

@@ -41,9 +41,12 @@ interface RemEntry {
 
 interface EncaissementsClientProps {
   initialData: RemEntry[]
+  role?: string
 }
 
-export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
+export function EncaissementsClient({ initialData, role = 'manager' }: EncaissementsClientProps) {
+  // Back office sees POOL (thelo+maxine+pool_plus) instead of individual split
+  const isBackOffice = role === 'back_office'
   const [data] = React.useState(initialData)
   const [expandedMonths, setExpandedMonths] = React.useState<Record<string, boolean>>({})
 
@@ -141,25 +144,41 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
             <p className="text-2xl font-bold">{formatCurrency(totals.net_cabinet)}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-              <Users size={16} className="text-purple-600" />
-              Maxine
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-purple-700">{formatCurrency(totals.maxine)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500">Thélo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-blue-700">{formatCurrency(totals.thelo)}</p>
-          </CardContent>
-        </Card>
+        {isBackOffice ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                <Users size={16} className="text-indigo-600" />
+                POOL
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-indigo-700">{formatCurrency(totals.thelo + totals.maxine + totals.pool_plus)}</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                  <Users size={16} className="text-purple-600" />
+                  Maxine
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-purple-700">{formatCurrency(totals.maxine)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">Thélo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-blue-700">{formatCurrency(totals.thelo)}</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Cabinet</CardTitle>
@@ -172,10 +191,12 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
 
       {/* Detailed breakdown cards */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">POOL+</p>
-          <p className="text-sm font-semibold">{formatCurrency(totals.pool_plus)}</p>
-        </div>
+        {!isBackOffice && (
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-500">POOL+</p>
+            <p className="text-sm font-semibold">{formatCurrency(totals.pool_plus)}</p>
+          </div>
+        )}
         <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p className="text-xs text-gray-500">Stéph FR</p>
           <p className="text-sm font-semibold">{formatCurrency(totals.steph_fr)}</p>
@@ -215,8 +236,14 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
                   <span className="text-lg font-bold text-blue-700">{formatCurrency(mt.net_cabinet)}</span>
                 </div>
                 <div className="flex items-center gap-6 text-sm">
-                  <span className="text-purple-600">Max: {formatCurrency(mt.maxine)}</span>
-                  <span className="text-blue-600">Thélo: {formatCurrency(mt.thelo)}</span>
+                  {isBackOffice ? (
+                    <span className="text-indigo-600">POOL: {formatCurrency(mt.maxine + mt.thelo + mt.pool_plus)}</span>
+                  ) : (
+                    <>
+                      <span className="text-purple-600">Max: {formatCurrency(mt.maxine)}</span>
+                      <span className="text-blue-600">Thélo: {formatCurrency(mt.thelo)}</span>
+                    </>
+                  )}
                   <span className="text-gray-600">Cab: {formatCurrency(mt.part_cabinet)}</span>
                   {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                 </div>
@@ -230,9 +257,15 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
                       <tr className="border-b text-left text-gray-500">
                         <th className="py-2 pr-4 font-medium">Dossier</th>
                         <th className="py-2 px-2 font-medium text-right">Net cabinet</th>
-                        <th className="py-2 px-2 font-medium text-right">POOL+</th>
-                        <th className="py-2 px-2 font-medium text-right text-blue-600">Thélo</th>
-                        <th className="py-2 px-2 font-medium text-right text-purple-600">Maxine</th>
+                        {isBackOffice ? (
+                          <th className="py-2 px-2 font-medium text-right text-indigo-600">POOL</th>
+                        ) : (
+                          <>
+                            <th className="py-2 px-2 font-medium text-right">POOL+</th>
+                            <th className="py-2 px-2 font-medium text-right text-blue-600">Thélo</th>
+                            <th className="py-2 px-2 font-medium text-right text-purple-600">Maxine</th>
+                          </>
+                        )}
                         <th className="py-2 px-2 font-medium text-right">Stéph FR</th>
                         <th className="py-2 px-2 font-medium text-right">Consultant</th>
                         <th className="py-2 px-2 font-medium text-right">Mathias</th>
@@ -244,9 +277,15 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
                         <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="py-2 pr-4 font-medium text-gray-900">{entry.label}</td>
                           <td className="py-2 px-2 text-right font-semibold">{formatCurrency(Number(entry.net_cabinet))}</td>
-                          <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.pool_plus))}</td>
-                          <td className="py-2 px-2 text-right text-blue-700 font-medium">{formatCurrency(Number(entry.thelo))}</td>
-                          <td className="py-2 px-2 text-right text-purple-700 font-medium">{formatCurrency(Number(entry.maxine))}</td>
+                          {isBackOffice ? (
+                            <td className="py-2 px-2 text-right text-indigo-700 font-medium">{formatCurrency(Number(entry.thelo) + Number(entry.maxine) + Number(entry.pool_plus))}</td>
+                          ) : (
+                            <>
+                              <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.pool_plus))}</td>
+                              <td className="py-2 px-2 text-right text-blue-700 font-medium">{formatCurrency(Number(entry.thelo))}</td>
+                              <td className="py-2 px-2 text-right text-purple-700 font-medium">{formatCurrency(Number(entry.maxine))}</td>
+                            </>
+                          )}
                           <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.steph_fr))}</td>
                           <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.consultant))}</td>
                           <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.mathias))}</td>
@@ -257,9 +296,15 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
                       <tr className="bg-gray-100 font-bold">
                         <td className="py-2 pr-4">Total {MONTH_LABELS[mois]}</td>
                         <td className="py-2 px-2 text-right">{formatCurrency(mt.net_cabinet)}</td>
-                        <td className="py-2 px-2 text-right">{formatCurrency(mt.pool_plus)}</td>
-                        <td className="py-2 px-2 text-right text-blue-700">{formatCurrency(mt.thelo)}</td>
-                        <td className="py-2 px-2 text-right text-purple-700">{formatCurrency(mt.maxine)}</td>
+                        {isBackOffice ? (
+                          <td className="py-2 px-2 text-right text-indigo-700">{formatCurrency(mt.thelo + mt.maxine + mt.pool_plus)}</td>
+                        ) : (
+                          <>
+                            <td className="py-2 px-2 text-right">{formatCurrency(mt.pool_plus)}</td>
+                            <td className="py-2 px-2 text-right text-blue-700">{formatCurrency(mt.thelo)}</td>
+                            <td className="py-2 px-2 text-right text-purple-700">{formatCurrency(mt.maxine)}</td>
+                          </>
+                        )}
                         <td className="py-2 px-2 text-right">{formatCurrency(mt.steph_fr)}</td>
                         <td className="py-2 px-2 text-right">{formatCurrency(mt.consultant)}</td>
                         <td className="py-2 px-2 text-right">{formatCurrency(mt.mathias)}</td>
