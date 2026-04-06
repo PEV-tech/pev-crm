@@ -16,6 +16,7 @@ import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } 
 
 interface DossiersClientProps {
   initialData: VDossiersComplets[]
+  role?: string
 }
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -30,7 +31,8 @@ const mapStatutForBadge = (statut: StatutDossierType | null | undefined): 'prosp
   return (statut as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'
 }
 
-export function DossiersClient({ initialData }: DossiersClientProps) {
+export function DossiersClient({ initialData, role = 'manager' }: DossiersClientProps) {
+  const isConsultant = role === 'consultant'
   const router = useRouter()
   const searchParams = useSearchParams()
   const [data] = React.useState(initialData)
@@ -197,8 +199,8 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
       },
     },
     {
-      key: 'commission_brute',
-      label: 'Commission',
+      key: isConsultant ? 'rem_apporteur' : 'commission_brute',
+      label: isConsultant ? 'Ma commission' : 'Commission',
       sortable: true,
       render: (value) => value ? formatCurrency(value) : '-',
     },

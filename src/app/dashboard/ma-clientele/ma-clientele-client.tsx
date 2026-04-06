@@ -24,6 +24,7 @@ interface MaClienteleClientProps {
 
 export function MaClienteleClient({ initialData, consultant }: MaClienteleClientProps) {
   const [data] = React.useState(initialData)
+  const isConsultant = consultant?.role === 'consultant'
   const [activeTab, setActiveTab] = React.useState('tous')
 
   const stats = React.useMemo(() => {
@@ -94,8 +95,8 @@ export function MaClienteleClient({ initialData, consultant }: MaClienteleClient
       },
     },
     {
-      key: 'commission_brute',
-      label: 'Commission',
+      key: isConsultant ? 'rem_apporteur' : 'commission_brute',
+      label: isConsultant ? 'Ma commission' : 'Commission',
       sortable: true,
       render: (value) => value ? formatCurrency(value) : '-',
     },

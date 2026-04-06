@@ -2,10 +2,12 @@
 
 import * as React from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useUser } from '@/hooks/use-user'
 import { VDossiersComplets } from '@/types/database'
 import { DossiersClient } from './dossiers-client'
 
 export function DossiersClientWrapper() {
+  const { consultant } = useUser()
   const [data, setData] = React.useState<VDossiersComplets[]>([])
   const [loading, setLoading] = React.useState(true)
 
@@ -40,5 +42,5 @@ export function DossiersClientWrapper() {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   }
 
-  return <DossiersClient initialData={data} />
+  return <DossiersClient initialData={data} role={consultant?.role || 'manager'} />
 }
