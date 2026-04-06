@@ -26,6 +26,7 @@ const formatCurrency = (value: number | null | undefined): string => {
 interface DashboardClientProps {
   recentDossiers: any[]
   pendingInvoices: any[]
+  allFinalisedDossiers?: any[]
 }
 
 const monthLabels = [
@@ -50,8 +51,8 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null
 }
 
-export function DashboardClient({ recentDossiers, pendingInvoices }: DashboardClientProps) {
-  // Calculate collecte by month (only finalized dossiers)
+export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedDossiers = [] }: DashboardClientProps) {
+  // Calculate collecte by month using ALL finalized dossiers (not just recent 5)
   const collecteParMois = useMemo(() => {
     const monthlyData: Record<number, number> = {}
 
@@ -60,9 +61,10 @@ export function DashboardClient({ recentDossiers, pendingInvoices }: DashboardCl
       monthlyData[i] = 0
     }
 
-    // Sum up collecte by month for finalized dossiers only
-    recentDossiers.forEach((dossier) => {
-      if (dossier.statut === 'client_finalise' && dossier.date_operation) {
+    // Use all finalized dossiers for accurate monthly breakdown
+    const source = allFinalisedDossiers.length > 0 ? allFinalisedDossiers : recentDossiers
+    source.forEach((dossier) => {
+      if (dossier.date_operation) {
         const date = new Date(dossier.date_operation)
         const month = date.getMonth()
         monthlyData[month] += dossier.montant || 0
@@ -74,7 +76,7 @@ export function DashboardClient({ recentDossiers, pendingInvoices }: DashboardCl
       name: label,
       collecte: monthlyData[index],
     }))
-  }, [recentDossiers])
+  }, [allFinalisedDossiers, recentDossiers])
   const dossiersColumns: ColumnDefinition<any>[] = [
     {
       key: 'client_nom',

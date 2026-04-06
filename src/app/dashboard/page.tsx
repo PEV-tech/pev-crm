@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const isManager = role === 'manager' || role === 'back_office'
 
   const [stats, setStats] = useState({ collecte: 0, caGenere: 0, pipelineEnCours: 0, dossiersFinalisés: 0 })
+  const [allFinalisedDossiers, setAllFinalisedDossiers] = useState<any[]>([])
   const [recentDossiers, setRecentDossiers] = useState<any[]>([])
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([])
   const [consultantRank, setConsultantRank] = useState<{ rank: number; totalConsultants: number } | null>(null)
@@ -62,6 +63,9 @@ export default function DashboardPage() {
         const dossiersFinalisés = filteredDossiers.filter((d: any) => d.statut === 'client_finalise').length
 
         setStats({ collecte, caGenere, pipelineEnCours, dossiersFinalisés })
+
+        // Store all finalized dossiers for the monthly chart
+        setAllFinalisedDossiers(filteredDossiers.filter((d: any) => d.statut === 'client_finalise'))
 
         // Calculate consultant ranking if not a manager
         if (!isManager && consultantInfo?.name) {
@@ -242,7 +246,7 @@ export default function DashboardPage() {
       <PodiumWrapper />
 
       {/* Content Grid */}
-      <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} />
+      <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} allFinalisedDossiers={allFinalisedDossiers} />
     </div>
   )
 }

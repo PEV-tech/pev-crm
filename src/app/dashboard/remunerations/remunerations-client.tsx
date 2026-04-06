@@ -29,8 +29,11 @@ export function RemunerationsClient({
 }: RemunerationsClientProps) {
   const isManager = role === 'manager' || role === 'back_office'
 
+  // Get current user's full name for highlighting
+  const myName = consultant ? `${consultant.prenom || ''} ${consultant.nom || ''}`.trim() : ''
+
   if (isManager) {
-    // Manager view: consolidated by consultant + detail
+    // Manager view: MY rémunération highlighted at top + consolidated team view
     const byConsultant = React.useMemo(() => {
       const map: Record<string, { name: string; dossiers: any[]; totalCommission: number; totalRemuneration: number; totalCabinet: number }> = {}
       dossiers.forEach(d => {
@@ -45,6 +48,13 @@ export function RemunerationsClient({
       })
       return Object.values(map).sort((a, b) => b.totalCommission - a.totalCommission)
     }, [dossiers])
+
+    // Separate my data from others
+    const myData = React.useMemo(() => byConsultant.find(c => c.name === myName), [byConsultant, myName])
+    const myDossiers = React.useMemo(() => dossiers.filter(d => {
+      const name = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+      return name === myName
+    }), [dossiers, myName])
 
     const totals = React.useMemo(() => ({
       totalCommission: dossiers.reduce((sum, d) => sum + (d.commission_brute || 0), 0),
@@ -86,6 +96,38 @@ export function RemunerationsClient({
       {
         key: 'part_cabinet',
         label: 'Part Cabinet',
+        render: (value) => formatCurrency(value),
+      },
+    ]
+
+    const myColumns: ColumnDefinition<any>[] = [
+      {
+        key: 'client_nom',
+        label: 'Client',
+        render: (_, row) =>
+          `${row.client_prenom || ''} ${row.client_nom || ''}`.trim(),
+      },
+      {
+        key: 'produit_nom',
+        label: 'Produit',
+      },
+      {
+        key: 'compagnie_nom',
+        label: 'Compagnie',
+      },
+      {
+        key: 'montant',
+        label: 'Montant',
+        render: (value) => formatCurrency(value),
+      },
+      {
+        key: 'commission_brute',
+        label: 'Commission brute',
+        render: (value) => formatCurrency(value),
+      },
+      {
+        key: 'rem_apporteur',
+        label: 'Ma commission',
         render: (value) => formatCurrency(value),
       },
     ]
@@ -133,13 +175,48 @@ export function RemunerationsClient({
           </Button>
         </div>
 
-        {/* Summary Cards */}
+        {/* MA RÉMUNÉRATION - Highlighted section */}
+        {myData && (
+          <Card className="border-2 border-indigo-200 bg-indigo-50/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <DollarSign size={22} className="text-indigo-600" />
+                Ma rémunération
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-600">Ma commission totale</p>
+                  <p className="text-2xl font-bold text-indigo-700">{formatCurrency(myData.totalRemuneration)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Commission brute générée</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(myData.totalCommission)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Part cabinet</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(myData.totalCabinet)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Dossiers finalisés</p>
+                  <p className="text-2xl font-bold text-gray-900">{myData.dossiers.length}</p>
+                </div>
+              </div>
+              {myDossiers.length > 0 && (
+                <DataTable data={myDossiers} columns={myColumns} pageSize={5} />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Summary Cards - Cabinet global */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <DollarSign size={20} className="text-blue-600" />
-                Total commissions
+                Total commissions cabinet
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -187,13 +264,15 @@ export function RemunerationsClient({
           <CardContent>
             <div className="space-y-3">
               {byConsultant.map((c) => (
-                <div key={c.name} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+                <div key={c.name} className={`flex items-center justify-between py-3 border-b border-gray-100 last:border-0 ${c.name === myName ? 'bg-indigo-50 -mx-4 px-4 rounded-lg border-indigo-200' : ''}`}>
                   <div>
-                    <p className="font-medium text-gray-900">{c.name}</p>
+                    <p className={`font-medium ${c.name === myName ? 'text-indigo-700' : 'text-gray-900'}`}>
+                      {c.name}{c.name === myName ? ' (vous)' : ''}
+                    </p>
                     <p className="text-sm text-gray-500">{c.dossiers.length} dossier(s)</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-gray-900">{formatCurrency(c.totalCommission)}</p>
+                    <p className={`font-bold ${c.name === myName ? 'text-indigo-700' : 'text-gray-900'}`}>{formatCurrency(c.totalCommission)}</p>
                     <p className="text-sm text-gray-500">Part consultant : {formatCurrency(c.totalRemuneration)}</p>
                   </div>
                 </div>
@@ -205,7 +284,7 @@ export function RemunerationsClient({
         {/* Detail Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Détail des commissions</CardTitle>
+            <CardTitle>Détail des commissions (équipe)</CardTitle>
           </CardHeader>
           <CardContent>
             <DataTable data={dossiers} columns={managerColumns} pageSize={15} />
