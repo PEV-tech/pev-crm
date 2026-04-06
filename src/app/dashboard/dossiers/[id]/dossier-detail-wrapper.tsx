@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { useUser } from '@/hooks/use-user'
 import { VDossiersComplets } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,11 +11,16 @@ import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { ArrowLeft, Edit, Save, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)
+}
+
+const formatPct = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return '-'
+  return `${(value * 100).toFixed(2)}%`
 }
 
 const mapStatutForBadge = (statut: string | null | undefined): 'prospect' | 'client_en_cours' | 'client_finalise' => {
@@ -33,6 +39,7 @@ const statutLabel = (s: string | null | undefined) => {
 interface DossierDetailWrapperProps { id: string }
 
 export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
+  const { consultant: currentUser } = useUser()
   const [dossier, setDossier] = React.useState<VDossiersComplets | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [notFound, setNotFound] = React.useState(false)
@@ -40,6 +47,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [saving, setSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState('')
   const [editForm, setEditForm] = React.useState<any>({})
+  const [tauxGestion, setTauxGestion] = React.useState<number | null>(null)
+
+  const isConsultant = currentUser?.role === 'consultant'
 
   const supabase = React.useMemo(() => createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,6 +70,21 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             date_operation: data.date_operation || '',
             commentaire: data.commentaire || '',
           })
+
+          // Fetch frais de gestion taux for encours commission
+          if (data.montant && data.montant > 0) {
+            try {
+              const { data: taux } = await supabase.rpc('get_frais_taux', {
+                p_type: 'gestion',
+                p_encours: data.montant,
+              })
+              if (typeof taux === 'number' && taux > 0) {
+                setTauxGestion(taux)
+              }
+            } catch {
+              // gestion taux not available, silently ignore
+            }
+          }
         }
       } catch { setNotFound(true) }
       finally { setLoading(false) }
@@ -93,6 +118,23 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     finally { setSaving(false) }
   }
 
+  // Compute quarterly encours commission for this dossier
+  const quarterlyEncoursCommission = React.useMemo(() => {
+    if (!dossier?.montant || !tauxGestion) return null
+    const montant = dossier.montant
+    const annual = montant * tauxGestion
+    if (isConsultant) {
+      // Consultant's share: derived from rem_apporteur / commission_brute ratio
+      if (dossier.rem_apporteur && dossier.commission_brute && dossier.commission_brute > 0) {
+        const consultantPct = dossier.rem_apporteur / dossier.commission_brute
+        return (annual * consultantPct) / 4
+      }
+      return null
+    }
+    // Manager sees total encours revenue for cabinet
+    return annual / 4
+  }, [dossier, tauxGestion, isConsultant])
+
   if (loading) return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   if (notFound || !dossier) {
     return (
@@ -107,11 +149,13 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     ? dossier.payee === 'oui' ? ('payée' as const) : ('émise' as const)
     : ('à émettre' as const)
 
+  const hasCommissionData = !!(dossier.commission_brute || dossier.rem_apporteur)
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/dossiers">
+        <Link href="/dashboard/dossiers">
           <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button>
         </Link>
         <div>
@@ -230,43 +274,114 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             </CardContent>
           </Card>
 
-          {/* Commission Card */}
-          {dossier.statut === 'client_finalise' && dossier.commission_brute && (
+          {/* Commission Card — visible for all statuses if data is available */}
+          {hasCommissionData && (
             <Card>
-              <CardHeader><CardTitle>Détail de la commission</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Commission brute</p>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">{formatCurrency(dossier.commission_brute)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Taux commission</p>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">
-                      {dossier.taux_commission ? `${(dossier.taux_commission * 100).toFixed(2)}%` : '-'}
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award size={20} className="text-indigo-600" />
+                  {isConsultant ? 'Ma rémunération' : 'Détail de la commission'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Droits d'entrée (souscription) */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                    À la souscription (droits d'entrée)
+                  </p>
+                  {isConsultant ? (
+                    <div className="bg-indigo-50 rounded-lg p-4">
+                      <p className="text-sm text-indigo-700">Votre rémunération</p>
+                      <p className="text-2xl font-bold text-indigo-900 mt-1">{formatCurrency(dossier.rem_apporteur)}</p>
+                      {dossier.taux_commission && (
+                        <p className="text-xs text-indigo-600 mt-1">Taux commission : {formatPct(dossier.taux_commission)}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-sm text-gray-600">Commission brute</p>
+                        <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.commission_brute)}</p>
+                        {dossier.taux_commission && (
+                          <p className="text-xs text-gray-500 mt-0.5">{formatPct(dossier.taux_commission)}</p>
+                        )}
+                      </div>
+                      {dossier.rem_apporteur !== null && dossier.rem_apporteur !== undefined && (
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-sm text-gray-600">Part consultant</p>
+                          <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.rem_apporteur)}</p>
+                        </div>
+                      )}
+                      {dossier.part_cabinet !== null && dossier.part_cabinet !== undefined && (
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-sm text-gray-600">Part cabinet</p>
+                          <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.part_cabinet)}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Encours trimestriel */}
+                {(tauxGestion || quarterlyEncoursCommission !== null) && (
+                  <div className="border-t border-gray-200 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1">
+                      <TrendingUp size={13} />
+                      Sur encours (rémunération trimestrielle)
                     </p>
+                    {isConsultant ? (
+                      quarterlyEncoursCommission !== null ? (
+                        <div className="bg-green-50 rounded-lg p-4">
+                          <p className="text-sm text-green-700">Votre part estimée / trimestre</p>
+                          <p className="text-2xl font-bold text-green-900 mt-1">
+                            {formatCurrency(quarterlyEncoursCommission)}
+                          </p>
+                          <p className="text-xs text-green-600 mt-1">
+                            Taux gestion : {formatPct(tauxGestion)} · Encours : {formatCurrency(dossier.montant)}
+                          </p>
+                        </div>
+                      ) : tauxGestion ? (
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-sm text-gray-600">Frais de gestion annuels (cabinet)</p>
+                          <p className="text-xl font-bold text-gray-900 mt-1">
+                            {formatCurrency((dossier.montant || 0) * tauxGestion)}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">Taux gestion : {formatPct(tauxGestion)}</p>
+                        </div>
+                      ) : null
+                    ) : (
+                      tauxGestion && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-sm text-gray-600">Frais gestion annuels</p>
+                            <p className="text-xl font-bold text-gray-900 mt-1">
+                              {formatCurrency((dossier.montant || 0) * tauxGestion)}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">{formatPct(tauxGestion)}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-sm text-gray-600">Par trimestre</p>
+                            <p className="text-xl font-bold text-gray-900 mt-1">
+                              {formatCurrency(((dossier.montant || 0) * tauxGestion) / 4)}
+                            </p>
+                            {quarterlyEncoursCommission !== null && (
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                Consultant : {formatCurrency(quarterlyEncoursCommission)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    )}
                   </div>
-                </div>
-                <div className="space-y-2">
-                  {dossier.rem_apporteur && (
-                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                      <span className="text-gray-600">Part Consultant</span>
-                      <span className="font-semibold">{formatCurrency(dossier.rem_apporteur)}</span>
-                    </div>
-                  )}
-                  {dossier.rem_support && (
-                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                      <span className="text-gray-600">Part Support</span>
-                      <span className="font-semibold">{formatCurrency(dossier.rem_support)}</span>
-                    </div>
-                  )}
-                  {dossier.part_cabinet && (
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-gray-600">Part Cabinet</span>
-                      <span className="font-semibold">{formatCurrency(dossier.part_cabinet)}</span>
-                    </div>
-                  )}
-                </div>
+                )}
+
+                {/* Status note for non-finalised */}
+                {dossier.statut !== 'client_finalise' && (
+                  <p className="text-xs text-amber-600 bg-amber-50 rounded p-2">
+                    ⚠ Dossier non finalisé — ces montants sont des estimations basées sur le montant actuel.
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}

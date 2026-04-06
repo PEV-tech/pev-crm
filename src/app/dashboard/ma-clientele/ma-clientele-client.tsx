@@ -17,15 +17,43 @@ const formatCurrency = (value: number | null | undefined): string => {
   }).format(value)
 }
 
+interface GrilleGestion {
+  encours_min: number
+  encours_max: number | null
+  taux: number
+}
+
+function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
+  const grille = grilles.find(
+    (g) => montant >= g.encours_min && (g.encours_max === null || montant <= g.encours_max)
+  )
+  return grille?.taux || 0
+}
+
+function computeQuarterlyConsultant(
+  montant: number | null | undefined,
+  remApporteur: number | null | undefined,
+  commissionBrute: number | null | undefined,
+  grilles: GrilleGestion[]
+): number | null {
+  if (!montant || grilles.length === 0) return null
+  const tauxGestion = getGestionTaux(grilles, montant)
+  if (!tauxGestion) return null
+  if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
+  const consultantPct = remApporteur / commissionBrute
+  return (montant * tauxGestion * consultantPct) / 4
+}
+
 interface MaClienteleClientProps {
   initialData: VDossiersComplets[]
   consultant: any
+  gestionGrilles?: GrilleGestion[]
 }
 
-export function MaClienteleClient({ initialData, consultant }: MaClienteleClientProps) {
+export function MaClienteleClient({ initialData, consultant, gestionGrilles = [] }: MaClienteleClientProps) {
   const [data] = React.useState(initialData)
-  const isConsultant = consultant?.role === 'consultant'
   const [activeTab, setActiveTab] = React.useState('tous')
+  const isConsultant = consultant?.role === 'consultant'
 
   const stats = React.useMemo(() => {
     const totalDossiers = data.length
@@ -94,11 +122,33 @@ export function MaClienteleClient({ initialData, consultant }: MaClienteleClient
         return new Date(value).toLocaleDateString('fr-FR')
       },
     },
+    // Commission column: entry fee + quarterly encours for consultants
     {
       key: isConsultant ? 'rem_apporteur' : 'commission_brute',
       label: isConsultant ? 'Ma commission' : 'Commission',
       sortable: true,
-      render: (value) => value ? formatCurrency(value) : '-',
+      render: (value, row) => {
+        const entree = value ? formatCurrency(value) : '-'
+        if (!isConsultant || gestionGrilles.length === 0) return entree
+
+        const quarterly = computeQuarterlyConsultant(
+          row.montant,
+          row.rem_apporteur,
+          row.commission_brute,
+          gestionGrilles
+        )
+
+        if (quarterly === null) return entree
+
+        return (
+          <div className="text-sm">
+            <div className="font-medium">{entree}</div>
+            <div className="text-xs text-green-600 mt-0.5">
+              + {formatCurrency(quarterly)}/trim. encours
+            </div>
+          </div>
+        )
+      },
     },
     {
       key: 'statut',
@@ -119,7 +169,7 @@ export function MaClienteleClient({ initialData, consultant }: MaClienteleClient
           href={`/dashboard/dossiers/${value}`}
           className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
         >
-          Modifier <ExternalLink size={14} />
+          Voir <ExternalLink size={14} />
         </Link>
       ),
     },

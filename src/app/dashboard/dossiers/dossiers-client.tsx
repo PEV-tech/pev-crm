@@ -14,9 +14,36 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Plus, Download } from 'lucide-react'
 import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
+interface GrilleGestion {
+  encours_min: number
+  encours_max: number | null
+  taux: number
+}
+
+function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
+  const grille = grilles.find(
+    (g) => montant >= g.encours_min && (g.encours_max === null || montant <= g.encours_max)
+  )
+  return grille?.taux || 0
+}
+
+function computeQuarterlyConsultant(
+  montant: number | null | undefined,
+  remApporteur: number | null | undefined,
+  commissionBrute: number | null | undefined,
+  grilles: GrilleGestion[]
+): number | null {
+  if (!montant || grilles.length === 0) return null
+  const tauxGestion = getGestionTaux(grilles, montant)
+  if (!tauxGestion) return null
+  if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
+  return (montant * tauxGestion * (remApporteur / commissionBrute)) / 4
+}
+
 interface DossiersClientProps {
   initialData: VDossiersComplets[]
   role?: string
+  gestionGrilles?: GrilleGestion[]
 }
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -31,7 +58,7 @@ const mapStatutForBadge = (statut: StatutDossierType | null | undefined): 'prosp
   return (statut as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'
 }
 
-export function DossiersClient({ initialData, role = 'manager' }: DossiersClientProps) {
+export function DossiersClient({ initialData, role = 'manager', gestionGrilles = [] }: DossiersClientProps) {
   const isConsultant = role === 'consultant'
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -202,7 +229,20 @@ export function DossiersClient({ initialData, role = 'manager' }: DossiersClient
       key: isConsultant ? 'rem_apporteur' : 'commission_brute',
       label: isConsultant ? 'Ma commission' : 'Commission',
       sortable: true,
-      render: (value) => value ? formatCurrency(value) : '-',
+      render: (value, row) => {
+        const entree = value ? formatCurrency(value) : '-'
+        if (!isConsultant || gestionGrilles.length === 0) return entree
+        const quarterly = computeQuarterlyConsultant(
+          row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles
+        )
+        if (quarterly === null) return entree
+        return (
+          <div className="text-sm">
+            <div className="font-medium">{entree}</div>
+            <div className="text-xs text-green-600 mt-0.5">+ {formatCurrency(quarterly)}/trim.</div>
+          </div>
+        )
+      },
     },
     {
       key: 'client_pays',

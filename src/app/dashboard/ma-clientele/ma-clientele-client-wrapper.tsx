@@ -6,9 +6,16 @@ import { useUser } from '@/hooks/use-user'
 import { VDossiersComplets } from '@/types/database'
 import { MaClienteleClient } from './ma-clientele-client'
 
+interface GrilleGestion {
+  encours_min: number
+  encours_max: number | null
+  taux: number
+}
+
 export function MaClienteleClientWrapper() {
   const { consultant } = useUser()
   const [dossiers, setDossiers] = React.useState<VDossiersComplets[]>([])
+  const [gestionGrilles, setGestionGrilles] = React.useState<GrilleGestion[]>([])
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -24,13 +31,26 @@ export function MaClienteleClientWrapper() {
           query = query.eq('consultant_prenom', consultant?.prenom)
         }
 
-        const { data: dossiersData, error: dossiersError } = await query
+        // Also fetch frais de gestion grilles for quarterly encours computation
+        const [dossiersRes, grillesRes] = await Promise.all([
+          query,
+          supabase
+            .from('grilles_frais')
+            .select('encours_min, encours_max, taux')
+            .eq('type_frais', 'gestion')
+            .eq('actif', true)
+            .order('encours_min', { ascending: true }),
+        ])
 
-        if (dossiersError) {
-          console.error('Error fetching dossiers:', dossiersError)
+        if (dossiersRes.error) {
+          console.error('Error fetching dossiers:', dossiersRes.error)
           setDossiers([])
         } else {
-          setDossiers((dossiersData || []) as VDossiersComplets[])
+          setDossiers((dossiersRes.data || []) as VDossiersComplets[])
+        }
+
+        if (!grillesRes.error && grillesRes.data) {
+          setGestionGrilles(grillesRes.data)
         }
       } catch (error) {
         console.error('Error fetching data:', error)
@@ -47,5 +67,5 @@ export function MaClienteleClientWrapper() {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   }
 
-  return <MaClienteleClient initialData={dossiers} consultant={consultant} />
+  return <MaClienteleClient initialData={dossiers} consultant={consultant} gestionGrilles={gestionGrilles} />
 }

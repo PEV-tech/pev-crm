@@ -6,9 +6,16 @@ import { useUser } from '@/hooks/use-user'
 import { VDossiersComplets } from '@/types/database'
 import { DossiersClient } from './dossiers-client'
 
+interface GrilleGestion {
+  encours_min: number
+  encours_max: number | null
+  taux: number
+}
+
 export function DossiersClientWrapper() {
   const { consultant } = useUser()
   const [data, setData] = React.useState<VDossiersComplets[]>([])
+  const [gestionGrilles, setGestionGrilles] = React.useState<GrilleGestion[]>([])
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -16,16 +23,25 @@ export function DossiersClientWrapper() {
       try {
         const supabase = createClient()
 
-        const { data, error } = await supabase
-          .from('v_dossiers_complets')
-          .select('*')
-          .order('date_operation', { ascending: false })
+        const [dossiersRes, grillesRes] = await Promise.all([
+          supabase.from('v_dossiers_complets').select('*').order('date_operation', { ascending: false }),
+          supabase
+            .from('grilles_frais')
+            .select('encours_min, encours_max, taux')
+            .eq('type_frais', 'gestion')
+            .eq('actif', true)
+            .order('encours_min', { ascending: true }),
+        ])
 
-        if (error) {
-          console.error('Error fetching dossiers:', error)
+        if (dossiersRes.error) {
+          console.error('Error fetching dossiers:', dossiersRes.error)
           setData([])
         } else {
-          setData((data || []) as VDossiersComplets[])
+          setData((dossiersRes.data || []) as VDossiersComplets[])
+        }
+
+        if (!grillesRes.error && grillesRes.data) {
+          setGestionGrilles(grillesRes.data)
         }
       } catch (error) {
         console.error('Error fetching dossiers:', error)
@@ -42,5 +58,11 @@ export function DossiersClientWrapper() {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   }
 
-  return <DossiersClient initialData={data} role={consultant?.role || 'manager'} />
+  return (
+    <DossiersClient
+      initialData={data}
+      role={consultant?.role || 'manager'}
+      gestionGrilles={gestionGrilles}
+    />
+  )
 }
