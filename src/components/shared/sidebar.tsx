@@ -104,9 +104,12 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
     }
   }
 
+  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances']
+  const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
+
   const visibleItems = navigationItems.filter((item) => {
-    if (item.label === 'Relances') {
-      return userRole === 'manager' || userRole === 'back_office'
+    if (managerOnlyLabels.includes(item.label)) {
+      return isManagerOrBO
     }
     return true
   })
@@ -169,8 +172,8 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
             )
           })}
 
-          {/* Settings - Only for managers */}
-          {userRole === 'manager' && (
+          {/* Settings - Only for managers and back office */}
+          {isManagerOrBO && (
             <Link
               href="/dashboard/parametres"
               onClick={() => setIsOpen(false)}
