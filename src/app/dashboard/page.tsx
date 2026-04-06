@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/card'
 import { useRole, useConsultantInfo } from '@/hooks/use-user'
 import { DashboardClient } from './dashboard-client'
+import { PodiumWrapper } from '@/components/dashboard/podium-wrapper'
 import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -236,6 +237,9 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {/* Podium / Classement des consultants */}
+      <PodiumWrapper />
 
       {/* Content Grid */}
       <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} />

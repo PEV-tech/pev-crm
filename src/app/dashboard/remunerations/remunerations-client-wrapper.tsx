@@ -25,7 +25,9 @@ export function RemunerationsClientWrapper() {
           .eq('statut', 'client_finalise')
 
         if (consultant.role !== 'manager' && consultant.role !== 'back_office') {
-          query = query.eq('consultant_nom', consultant.nom)
+          query = query
+            .eq('consultant_nom', consultant.nom)
+            .eq('consultant_prenom', consultant.prenom)
         }
 
         const { data: dossiersData, error: dossiersError } = await query
