@@ -11,7 +11,8 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { Plus } from 'lucide-react'
+import { Plus, Download } from 'lucide-react'
+import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
 interface DossiersClientProps {
   initialData: VDossiersComplets[]
@@ -38,6 +39,40 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
   const [filterPays, setFilterPays] = React.useState('')
   const [filterConsultant, setFilterConsultant] = React.useState('')
   const [searchQuery, setSearchQuery] = React.useState(searchParams.get('q') || '')
+
+  const handleExportCSV = React.useCallback(() => {
+    // Transform data to match export format
+    const exportData = filteredData.map((d) => ({
+      client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
+      produit: d.produit_nom || '',
+      compagnie: d.compagnie_nom || '',
+      montant: formatCurrencyForCSV(d.montant),
+      financement: d.financement || '',
+      date: formatDateForCSV(d.date_operation),
+      pays: d.client_pays || '',
+      consultant: `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim() || '-',
+      statut: d.statut || '',
+      kyc: d.statut_kyc || '',
+    }))
+
+    const columns = [
+      { key: 'client', label: 'Client' },
+      { key: 'produit', label: 'Produit' },
+      { key: 'compagnie', label: 'Compagnie' },
+      { key: 'montant', label: 'Montant (EUR)' },
+      { key: 'financement', label: 'Financement' },
+      { key: 'date', label: 'Date' },
+      { key: 'pays', label: 'Pays' },
+      { key: 'consultant', label: 'Consultant' },
+      { key: 'statut', label: 'Statut' },
+      { key: 'kyc', label: 'KYC' },
+    ]
+
+    exportCSV(exportData, columns, {
+      filename: getExportFilename('dossiers_export'),
+      separator: ';',
+    })
+  }, [filteredData])
 
   // Filter data based on active tab, filters, and search
   const filteredData = React.useMemo(() => {
@@ -202,12 +237,22 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
           <h1 className="text-3xl font-bold text-gray-900">Dossiers</h1>
           <p className="text-gray-600 mt-1">Gérez votre pipeline de dossiers</p>
         </div>
-        <Link href="/dashboard/dossiers/nouveau">
-          <Button className="gap-2">
-            <Plus size={18} />
-            Nouveau dossier
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExportCSV}
+          >
+            <Download size={18} />
+            Exporter CSV
           </Button>
-        </Link>
+          <Link href="/dashboard/dossiers/nouveau">
+            <Button className="gap-2">
+              <Plus size={18} />
+              Nouveau dossier
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Bar */}

@@ -2,9 +2,11 @@
 
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { TrendingUp, Clock, CheckCircle, XCircle, Download } from 'lucide-react'
+import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -125,12 +127,52 @@ export function EncaissementsClient({ initialData }: EncaissementsClientProps) {
     { key: 'unpaid', label: 'Non payés', count: categorized.unpaid.length },
   ]
 
+  const handleExportCSV = React.useCallback(() => {
+    // Transform data to match export format
+    const exportData = filteredData.map((item: any) => ({
+      client: `${item.dossier?.client_prenom || ''} ${item.dossier?.client_nom || ''}`.trim(),
+      produit: item.dossier?.produit_nom || '',
+      compagnie: item.dossier?.compagnie_nom || '',
+      montant: formatCurrencyForCSV(item.dossier?.montant),
+      commission: formatCurrencyForCSV(item.dossier?.commission_brute),
+      facturee: item.facturee ? 'Oui' : 'Non',
+      payee: item.payee === 'oui' ? 'Payé' : item.payee === 'en_cours' ? 'En cours' : 'Non payé',
+      consultant: `${item.dossier?.consultant_prenom || ''} ${item.dossier?.consultant_nom || ''}`.trim() || '-',
+    }))
+
+    const columns = [
+      { key: 'client', label: 'Client' },
+      { key: 'produit', label: 'Produit' },
+      { key: 'compagnie', label: 'Compagnie' },
+      { key: 'montant', label: 'Montant (EUR)' },
+      { key: 'commission', label: 'Commission (EUR)' },
+      { key: 'facturee', label: 'Facturée' },
+      { key: 'payee', label: 'Statut paiement' },
+      { key: 'consultant', label: 'Consultant' },
+    ]
+
+    exportCSV(exportData, columns, {
+      filename: getExportFilename('encaissements_export'),
+      separator: ';',
+    })
+  }, [filteredData])
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Encaissements</h1>
-        <p className="text-gray-600 mt-1">Suivi des paiements et encaissements</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Encaissements</h1>
+          <p className="text-gray-600 mt-1">Suivi des paiements et encaissements</p>
+        </div>
+        <Button
+          variant="outline"
+          className="gap-2"
+          onClick={handleExportCSV}
+        >
+          <Download size={18} />
+          Exporter CSV
+        </Button>
       </div>
 
       {/* Stats Cards */}

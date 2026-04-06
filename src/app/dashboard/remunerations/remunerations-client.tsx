@@ -2,9 +2,11 @@
 
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
-import { DollarSign, Users, TrendingUp } from 'lucide-react'
+import { DollarSign, Users, TrendingUp, Download } from 'lucide-react'
 import { RoleType } from '@/types/database'
+import { exportCSV, getExportFilename, formatCurrencyForCSV } from '@/lib/export-csv'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -88,12 +90,47 @@ export function RemunerationsClient({
       },
     ]
 
+    const handleExportCSV = React.useCallback(() => {
+      const exportData = dossiers.map((d) => ({
+        client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
+        consultant: `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim(),
+        montant: formatCurrencyForCSV(d.montant),
+        commission_brute: formatCurrencyForCSV(d.commission_brute),
+        rem_apporteur: formatCurrencyForCSV(d.rem_apporteur),
+        part_cabinet: formatCurrencyForCSV(d.part_cabinet),
+      }))
+
+      const columns = [
+        { key: 'client', label: 'Client' },
+        { key: 'consultant', label: 'Consultant' },
+        { key: 'montant', label: 'Montant brut (EUR)' },
+        { key: 'commission_brute', label: 'Commission brute (EUR)' },
+        { key: 'rem_apporteur', label: 'Part Consultant (EUR)' },
+        { key: 'part_cabinet', label: 'Part Cabinet (EUR)' },
+      ]
+
+      exportCSV(exportData, columns, {
+        filename: getExportFilename('remunerations_export'),
+        separator: ';',
+      })
+    }, [dossiers])
+
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Rémunérations</h1>
-          <p className="text-gray-600 mt-1">Vue consolidée de toutes les commissions</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Rémunérations</h1>
+            <p className="text-gray-600 mt-1">Vue consolidée de toutes les commissions</p>
+          </div>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExportCSV}
+          >
+            <Download size={18} />
+            Exporter CSV
+          </Button>
         </div>
 
         {/* Summary Cards */}
@@ -238,14 +275,49 @@ export function RemunerationsClient({
       },
     ]
 
+    const handleExportCSVConsultant = React.useCallback(() => {
+      const exportData = dossiers.map((d) => ({
+        client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
+        produit: d.produit_nom || '',
+        compagnie: d.compagnie_nom || '',
+        montant: formatCurrencyForCSV(d.montant),
+        commission_brute: formatCurrencyForCSV(d.commission_brute),
+        rem_apporteur: formatCurrencyForCSV(d.rem_apporteur),
+      }))
+
+      const columns = [
+        { key: 'client', label: 'Client' },
+        { key: 'produit', label: 'Produit' },
+        { key: 'compagnie', label: 'Compagnie' },
+        { key: 'montant', label: 'Montant (EUR)' },
+        { key: 'commission_brute', label: 'Commission brute (EUR)' },
+        { key: 'rem_apporteur', label: 'Ma commission (EUR)' },
+      ]
+
+      exportCSV(exportData, columns, {
+        filename: getExportFilename('mes_commissions_export'),
+        separator: ';',
+      })
+    }, [dossiers])
+
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Ma Rémunération</h1>
-          <p className="text-gray-600 mt-1">
-            Mes commissions et rémunérations
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Ma Rémunération</h1>
+            <p className="text-gray-600 mt-1">
+              Mes commissions et rémunérations
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExportCSVConsultant}
+          >
+            <Download size={18} />
+            Exporter CSV
+          </Button>
         </div>
 
         {/* Summary Card */}

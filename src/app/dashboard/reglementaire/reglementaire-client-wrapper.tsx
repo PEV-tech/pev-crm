@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { ManagerOnly } from '@/components/shared/manager-only'
 import { ReglementaireClient } from './reglementaire-client'
 
 export function ReglementaireClientWrapper() {
@@ -38,5 +39,9 @@ export function ReglementaireClientWrapper() {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   }
 
-  return <ReglementaireClient initialData={data} />
+  return (
+    <ManagerOnly>
+      <ReglementaireClient initialData={data} />
+    </ManagerOnly>
+  )
 }

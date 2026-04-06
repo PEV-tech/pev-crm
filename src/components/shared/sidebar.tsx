@@ -12,6 +12,7 @@ import {
   DollarSign,
   Shield,
   Trophy,
+  Bell,
   Settings,
   Menu,
   X,
@@ -66,6 +67,11 @@ const navigationItems = [
     href: '/dashboard/challenges',
     icon: Trophy,
   },
+  {
+    label: 'Relances',
+    href: '/dashboard/relances',
+    icon: Bell,
+  },
 ]
 
 export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onLogout }: SidebarProps) {
@@ -99,8 +105,8 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
   }
 
   const visibleItems = navigationItems.filter((item) => {
-    if (item.label === 'Paramètres') {
-      return userRole === 'manager'
+    if (item.label === 'Relances') {
+      return userRole === 'manager' || userRole === 'back_office'
     }
     return true
   })

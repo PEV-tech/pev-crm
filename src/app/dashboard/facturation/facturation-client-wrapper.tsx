@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { VDossiersComplets } from '@/types/database'
+import { ManagerOnly } from '@/components/shared/manager-only'
 import { FacturationClient } from './facturation-client'
 
 export function FacturationClientWrapper() {
@@ -41,5 +42,9 @@ export function FacturationClientWrapper() {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   }
 
-  return <FacturationClient initialData={data} />
+  return (
+    <ManagerOnly>
+      <FacturationClient initialData={data} />
+    </ManagerOnly>
+  )
 }

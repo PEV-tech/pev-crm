@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/card'
+import { useRole, useConsultantInfo } from '@/hooks/use-user'
 import { DashboardClient } from './dashboard-client'
-import { TrendingUp, DollarSign, Clock, CheckCircle } from 'lucide-react'
+import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '0 €'
@@ -15,9 +16,14 @@ const formatCurrency = (value: number | null | undefined): string => {
 }
 
 export default function DashboardPage() {
+  const role = useRole()
+  const consultantInfo = useConsultantInfo()
+  const isManager = role === 'manager' || role === 'back_office'
+
   const [stats, setStats] = useState({ collecte: 0, caGenere: 0, pipelineEnCours: 0, dossiersFinalisés: 0 })
   const [recentDossiers, setRecentDossiers] = useState<any[]>([])
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([])
+  const [consultantRank, setConsultantRank] = useState<{ rank: number; totalConsultants: number } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -30,30 +36,81 @@ export default function DashboardPage() {
         .select('*')
 
       if (dossiers) {
-        const collecte = dossiers
+        let filteredDossiers = dossiers
+
+        // If consultant, filter by their name
+        if (!isManager && consultantInfo?.name) {
+          const fullName = consultantInfo.name
+          filteredDossiers = dossiers.filter((d: any) => {
+            const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+            return dossierConsultant === fullName
+          })
+        }
+
+        const collecte = filteredDossiers
           .filter((d: any) => d.statut === 'client_finalise')
           .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
 
-        const pipelineEnCours = dossiers
+        const pipelineEnCours = filteredDossiers
           .filter((d: any) => d.statut === 'client_en_cours')
           .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
 
-        const caGenere = dossiers
+        const caGenere = filteredDossiers
           .reduce((sum: number, d: any) => sum + (d.commission_brute || 0), 0)
 
-        const dossiersFinalisés = dossiers.filter((d: any) => d.statut === 'client_finalise').length
+        const dossiersFinalisés = filteredDossiers.filter((d: any) => d.statut === 'client_finalise').length
 
         setStats({ collecte, caGenere, pipelineEnCours, dossiersFinalisés })
+
+        // Calculate consultant ranking if not a manager
+        if (!isManager && consultantInfo?.name) {
+          const consultantRankings: Record<string, number> = {}
+
+          dossiers.forEach((d: any) => {
+            const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+            if (d.statut === 'client_finalise' && dossierConsultant) {
+              consultantRankings[dossierConsultant] = (consultantRankings[dossierConsultant] || 0) + (d.montant || 0)
+            }
+          })
+
+          const sortedConsultants = Object.entries(consultantRankings)
+            .sort((a, b) => b[1] - a[1])
+            .map(([name]) => name)
+
+          const rank = sortedConsultants.indexOf(consultantInfo.name) + 1
+          setConsultantRank({
+            rank,
+            totalConsultants: sortedConsultants.length
+          })
+        }
       }
 
       // Get recent dossiers
-      const { data: recent } = await supabase
+      let recentQuery = supabase
         .from('v_dossiers_complets')
         .select('*')
         .order('date_operation', { ascending: false })
         .limit(5)
 
-      setRecentDossiers(recent || [])
+      // If consultant, filter by their name
+      if (!isManager && consultantInfo?.name) {
+        const fullName = consultantInfo.name
+        const { data: recent } = await supabase
+          .from('v_dossiers_complets')
+          .select('*')
+          .order('date_operation', { ascending: false })
+          .limit(100)
+
+        const filtered = (recent || []).filter((d: any) => {
+          const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+          return dossierConsultant === fullName
+        }).slice(0, 5)
+
+        setRecentDossiers(filtered)
+      } else {
+        const { data: recent } = await recentQuery
+        setRecentDossiers(recent || [])
+      }
 
       // Get pending invoices
       const { data: factures } = await supabase
@@ -61,13 +118,25 @@ export default function DashboardPage() {
         .select('*')
 
       if (factures && dossiers) {
+        let invoiceDossiers = dossiers
+
+        // If consultant, filter by their name
+        if (!isManager && consultantInfo?.name) {
+          const fullName = consultantInfo.name
+          invoiceDossiers = dossiers.filter((d: any) => {
+            const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+            return dossierConsultant === fullName
+          })
+        }
+
         const pending = factures
           .filter((f: any) => !f.facturee)
           .slice(0, 5)
           .map((f: any) => {
-            const dossier = dossiers.find((d: any) => d.id === f.dossier_id)
+            const dossier = invoiceDossiers.find((d: any) => d.id === f.dossier_id)
             return { ...f, dossier }
           })
+          .filter((f: any) => f.dossier)
         setPendingInvoices(pending)
       }
 
@@ -75,7 +144,7 @@ export default function DashboardPage() {
     }
 
     loadData()
-  }, [])
+  }, [isManager, consultantInfo])
 
   if (loading) {
     return (
@@ -94,7 +163,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className={`grid ${!isManager && consultantRank ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-6`}>
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -150,6 +219,22 @@ export default function DashboardPage() {
             </div>
           </div>
         </Card>
+
+        {!isManager && consultantRank && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Mon classement</p>
+                <p className="text-2xl font-bold text-gray-900 mt-2">
+                  {consultantRank.rank}/{consultantRank.totalConsultants}
+                </p>
+              </div>
+              <div className="bg-indigo-100 p-3 rounded-lg">
+                <Trophy className="text-indigo-600" size={24} />
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Content Grid */}
