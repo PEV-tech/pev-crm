@@ -12,12 +12,23 @@ export function RemunerationsClientWrapper() {
 
   React.useEffect(() => {
     const fetchData = async () => {
+      if (!consultant) return
+
       try {
         const supabase = createClient()
 
-        const { data: dossiersData, error: dossiersError } = await supabase
+        // For manager: get all finalized dossiers with commission data
+        // For consultant: get only their own
+        let query = supabase
           .from('v_dossiers_complets')
           .select('*')
+          .eq('statut', 'client_finalise')
+
+        if (consultant.role !== 'manager' && consultant.role !== 'back_office') {
+          query = query.eq('consultant_nom', consultant.nom)
+        }
+
+        const { data: dossiersData, error: dossiersError } = await query
 
         if (dossiersError) {
           console.error('Error fetching dossiers:', dossiersError)
@@ -33,8 +44,10 @@ export function RemunerationsClientWrapper() {
       }
     }
 
-    fetchData()
-  }, [])
+    if (consultant) {
+      fetchData()
+    }
+  }, [consultant])
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>

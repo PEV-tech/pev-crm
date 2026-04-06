@@ -26,33 +26,40 @@ export function ChallengesClientWrapper() {
           supabase
             .from('consultants')
             .select('*')
-            .eq('actif', true),
+            .eq('actif', true)
+            .neq('role', 'back_office'),
           supabase
             .from('challenges')
             .select('*')
             .eq('annee', currentYear),
           supabase
             .from('v_dossiers_complets')
-            .select('*'),
+            .select('*')
+            .eq('statut', 'client_finalise'),
         ])
 
         const consultants = consultantsRes.data || []
         const challenges = challengesRes.data || []
         const dossiers = dossiersRes.data || []
 
-        const result = consultants.map((consultant: any) => {
-          const challenge = challenges.find((c: any) => c.consultant_id === consultant.id)
-          const collecte = dossiers
-            .filter((d: any) => d.consultant_nom === consultant.nom && d.statut === 'client_finalise')
-            .reduce((sum: number, d: any) => sum + (d.montant || 0), 0) || 0
+        const result = consultants
+          .filter((c: any) => c.role === 'consultant' || c.role === 'manager')
+          .map((consultant: any) => {
+            const challenge = challenges.find((c: any) => c.consultant_id === consultant.id)
 
-          return {
-            consultant: consultant.prenom || consultant.nom || 'Inconnu',
-            objectif: challenge?.objectif || 0,
-            collecte: collecte,
-            challengeId: challenge?.id,
-          }
-        })
+            // Calculate collecte from finalized dossiers matching this consultant
+            const collecte = dossiers
+              .filter((d: any) => d.consultant_nom === consultant.nom)
+              .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
+
+            return {
+              consultant: `${consultant.prenom} ${consultant.nom}`,
+              objectif: challenge?.objectif || 0,
+              collecte: collecte,
+              challengeId: challenge?.id,
+            }
+          })
+          .sort((a, b) => b.collecte - a.collecte)
 
         setData(result)
       } catch (error) {

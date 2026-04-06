@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
-import { DollarSign, Users } from 'lucide-react'
+import { DollarSign, Users, TrendingUp } from 'lucide-react'
 import { RoleType } from '@/types/database'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -25,10 +25,31 @@ export function RemunerationsClient({
   consultant,
   role,
 }: RemunerationsClientProps) {
-  const isManager = role === 'manager'
+  const isManager = role === 'manager' || role === 'back_office'
 
   if (isManager) {
-    // Manager view: all consultants consolidated
+    // Manager view: consolidated by consultant + detail
+    const byConsultant = React.useMemo(() => {
+      const map: Record<string, { name: string; dossiers: any[]; totalCommission: number; totalRemuneration: number; totalCabinet: number }> = {}
+      dossiers.forEach(d => {
+        const name = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim() || 'Non attribué'
+        if (!map[name]) {
+          map[name] = { name, dossiers: [], totalCommission: 0, totalRemuneration: 0, totalCabinet: 0 }
+        }
+        map[name].dossiers.push(d)
+        map[name].totalCommission += d.commission_brute || 0
+        map[name].totalRemuneration += d.rem_apporteur || 0
+        map[name].totalCabinet += d.part_cabinet || 0
+      })
+      return Object.values(map).sort((a, b) => b.totalCommission - a.totalCommission)
+    }, [dossiers])
+
+    const totals = React.useMemo(() => ({
+      totalCommission: dossiers.reduce((sum, d) => sum + (d.commission_brute || 0), 0),
+      totalRemuneration: dossiers.reduce((sum, d) => sum + (d.rem_apporteur || 0), 0),
+      totalCabinet: dossiers.reduce((sum, d) => sum + (d.part_cabinet || 0), 0),
+    }), [dossiers])
+
     const managerColumns: ColumnDefinition<any>[] = [
       {
         key: 'client_nom',
@@ -37,13 +58,22 @@ export function RemunerationsClient({
           `${row.client_prenom || ''} ${row.client_nom || ''}`.trim(),
       },
       {
+        key: 'consultant_nom',
+        label: 'Consultant',
+        sortable: true,
+        render: (_, row) =>
+          `${row.consultant_prenom || ''} ${row.consultant_nom || ''}`.trim(),
+      },
+      {
         key: 'montant',
         label: 'Montant brut',
+        sortable: true,
         render: (value) => formatCurrency(value),
       },
       {
         key: 'commission_brute',
         label: 'Commission brute',
+        sortable: true,
         render: (value) => formatCurrency(value),
       },
       {
@@ -52,24 +82,11 @@ export function RemunerationsClient({
         render: (value) => formatCurrency(value),
       },
       {
-        key: 'rem_apporteur_ext',
-        label: 'Part POOL+',
-        render: (value) => formatCurrency(value),
-      },
-      {
         key: 'part_cabinet',
         label: 'Part Cabinet',
         render: (value) => formatCurrency(value),
       },
     ]
-
-    const totals = React.useMemo(() => {
-      return {
-        totalCommission: dossiers.reduce((sum, d) => sum + (d.commission_brute || 0), 0),
-        totalRemuneration: dossiers.reduce((sum, d) => sum + (d.rem_apporteur || 0), 0),
-        totalCabinet: dossiers.reduce((sum, d) => sum + (d.part_cabinet || 0), 0),
-      }
-    }, [dossiers])
 
     return (
       <div className="space-y-6">
@@ -92,6 +109,7 @@ export function RemunerationsClient({
               <p className="text-3xl font-bold text-gray-900">
                 {formatCurrency(totals.totalCommission)}
               </p>
+              <p className="text-sm text-gray-500 mt-1">{dossiers.length} dossier(s) finalisé(s)</p>
             </CardContent>
           </Card>
 
@@ -99,7 +117,7 @@ export function RemunerationsClient({
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Users size={20} className="text-green-600" />
-                Total rémunérations versées
+                Total rémunérations consultants
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -111,7 +129,10 @@ export function RemunerationsClient({
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Part cabinet</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp size={20} className="text-purple-600" />
+                Part cabinet
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold text-gray-900">
@@ -121,17 +142,40 @@ export function RemunerationsClient({
           </Card>
         </div>
 
-        {/* Table */}
+        {/* Par consultant */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Récapitulatif par consultant</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {byConsultant.map((c) => (
+                <div key={c.name} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+                  <div>
+                    <p className="font-medium text-gray-900">{c.name}</p>
+                    <p className="text-sm text-gray-500">{c.dossiers.length} dossier(s)</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-gray-900">{formatCurrency(c.totalCommission)}</p>
+                    <p className="text-sm text-gray-500">Part consultant : {formatCurrency(c.totalRemuneration)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Detail Table */}
         <Card>
           <CardHeader>
             <CardTitle>Détail des commissions</CardTitle>
           </CardHeader>
           <CardContent>
-            <DataTable data={dossiers} columns={managerColumns} pageSize={10} />
+            <DataTable data={dossiers} columns={managerColumns} pageSize={15} />
 
             {/* Totals Row */}
             <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 font-bold text-gray-900">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-bold text-gray-900">
                 <div>
                   <p className="text-xs text-gray-600">Total montant</p>
                   <p className="text-lg">
@@ -147,18 +191,6 @@ export function RemunerationsClient({
                   <p className="text-lg">{formatCurrency(totals.totalRemuneration)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-600">Total POOL+</p>
-                  <p className="text-lg">
-                    {formatCurrency(dossiers.reduce((sum, d) => sum + (d.rem_apporteur_ext || 0), 0))}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Total support</p>
-                  <p className="text-lg">
-                    {formatCurrency(dossiers.reduce((sum, d) => sum + (d.rem_support || 0), 0))}
-                  </p>
-                </div>
-                <div>
                   <p className="text-xs text-gray-600">Total cabinet</p>
                   <p className="text-lg">{formatCurrency(totals.totalCabinet)}</p>
                 </div>
@@ -170,13 +202,9 @@ export function RemunerationsClient({
     )
   } else {
     // Consultant view: only their own commissions
-    const consultantDossiers = React.useMemo(() => {
-      return dossiers.filter((d) => d.consultant_nom === consultant?.nom)
-    }, [dossiers, consultant])
-
     const consultantTotal = React.useMemo(() => {
-      return consultantDossiers.reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
-    }, [consultantDossiers])
+      return dossiers.reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
+    }, [dossiers])
 
     const myCommissionsColumns: ColumnDefinition<any>[] = [
       {
@@ -188,6 +216,10 @@ export function RemunerationsClient({
       {
         key: 'produit_nom',
         label: 'Produit',
+      },
+      {
+        key: 'compagnie_nom',
+        label: 'Compagnie',
       },
       {
         key: 'montant',
@@ -229,7 +261,7 @@ export function RemunerationsClient({
               {formatCurrency(consultantTotal)}
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              Total de {consultantDossiers.length} dossier(s)
+              Total de {dossiers.length} dossier(s)
             </p>
           </CardContent>
         </Card>
@@ -240,8 +272,8 @@ export function RemunerationsClient({
             <CardTitle>Détail de mes dossiers</CardTitle>
           </CardHeader>
           <CardContent>
-            {consultantDossiers.length > 0 ? (
-              <DataTable data={consultantDossiers} columns={myCommissionsColumns} pageSize={10} />
+            {dossiers.length > 0 ? (
+              <DataTable data={dossiers} columns={myCommissionsColumns} pageSize={10} />
             ) : (
               <p className="text-center text-gray-500 py-6">
                 Aucun dossier attribué

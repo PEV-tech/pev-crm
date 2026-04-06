@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { VDossiersComplets, StatutDossierType } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,15 +31,30 @@ const mapStatutForBadge = (statut: StatutDossierType | null | undefined): 'prosp
 
 export function DossiersClient({ initialData }: DossiersClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [data] = React.useState(initialData)
   const [activeTab, setActiveTab] = React.useState('tous')
   const [filterProduit, setFilterProduit] = React.useState('')
   const [filterPays, setFilterPays] = React.useState('')
   const [filterConsultant, setFilterConsultant] = React.useState('')
+  const [searchQuery, setSearchQuery] = React.useState(searchParams.get('q') || '')
 
-  // Filter data based on active tab and filters
+  // Filter data based on active tab, filters, and search
   const filteredData = React.useMemo(() => {
     let result = data
+
+    // Text search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((d) => {
+        const text = [
+          d.client_nom, d.client_prenom, d.produit_nom,
+          d.compagnie_nom, d.consultant_nom, d.consultant_prenom,
+          d.client_pays
+        ].filter(Boolean).join(' ').toLowerCase()
+        return text.includes(q)
+      })
+    }
 
     // Filter by statut
     if (activeTab !== 'tous') {
@@ -70,7 +85,7 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
     }
 
     return result
-  }, [data, activeTab, filterProduit, filterPays, filterConsultant])
+  }, [data, activeTab, filterProduit, filterPays, filterConsultant, searchQuery])
 
   // Get unique values for filters
   const produits = React.useMemo(
@@ -187,7 +202,7 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
           <h1 className="text-3xl font-bold text-gray-900">Dossiers</h1>
           <p className="text-gray-600 mt-1">Gérez votre pipeline de dossiers</p>
         </div>
-        <Link href="/dossiers/nouveau">
+        <Link href="/dashboard/dossiers/nouveau">
           <Button className="gap-2">
             <Plus size={18} />
             Nouveau dossier
@@ -248,8 +263,14 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
               </TabsTrigger>
             </TabsList>
 
-            {/* Filters */}
+            {/* Search + Filters */}
             <div className="flex gap-3 flex-wrap">
+              <Input
+                placeholder="Rechercher un client..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="max-w-sm"
+              />
               <Select
                 value={filterProduit}
                 onChange={(e) => setFilterProduit(e.target.value)}
@@ -296,7 +317,7 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
                 columns={columns}
                 onRowClick={(row) => {
                   if (row.id) {
-                    router.push(`/dossiers/${row.id}`)
+                    router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
                 pageSize={10}
@@ -309,7 +330,7 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
                 columns={columns}
                 onRowClick={(row) => {
                   if (row.id) {
-                    router.push(`/dossiers/${row.id}`)
+                    router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
                 pageSize={10}
@@ -322,7 +343,7 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
                 columns={columns}
                 onRowClick={(row) => {
                   if (row.id) {
-                    router.push(`/dossiers/${row.id}`)
+                    router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
                 pageSize={10}
@@ -335,7 +356,7 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
                 columns={columns}
                 onRowClick={(row) => {
                   if (row.id) {
-                    router.push(`/dossiers/${row.id}`)
+                    router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
                 pageSize={10}

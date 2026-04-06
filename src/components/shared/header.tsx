@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Search, ChevronDown, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -9,7 +10,6 @@ interface HeaderProps {
   userName?: string
   userInitials?: string
   onLogout?: () => void
-  onSearch?: (query: string) => void
 }
 
 export function Header({
@@ -17,15 +17,16 @@ export function Header({
   userName = 'Utilisateur',
   userInitials = 'U',
   onLogout,
-  onSearch,
 }: HeaderProps) {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
   const [showUserMenu, setShowUserMenu] = useState(false)
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value
-    setSearchQuery(query)
-    onSearch?.(query)
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      router.push(`/dashboard/dossiers?q=${encodeURIComponent(searchQuery.trim())}`)
+    }
   }
 
   return (
@@ -37,18 +38,18 @@ export function Header({
         </div>
 
         {/* Center section - Search */}
-        <div className="flex-1 max-w-md mx-8">
+        <form onSubmit={handleSearch} className="flex-1 max-w-md mx-8">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Rechercher..."
+              placeholder="Rechercher un client, dossier..."
               value={searchQuery}
-              onChange={handleSearch}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
             />
           </div>
-        </div>
+        </form>
 
         {/* Right section - User Avatar and Menu */}
         <div className="flex items-center gap-4">
