@@ -113,7 +113,7 @@ export default function ParametresPage() {
     {
       key: 'taux_defaut',
       label: 'Taux défaut',
-      render: (value) => `${value}%`,
+      render: (value) => value != null ? `${(value * 100).toFixed(0)}%` : '-',
     },
   ]
 
@@ -140,7 +140,7 @@ export default function ParametresPage() {
     {
       key: 'taux',
       label: 'Taux',
-      render: (value) => `${value}%`,
+      render: (value) => value != null ? `${(value * 100).toFixed(2)}%` : '-',
     },
     {
       key: 'actif',
