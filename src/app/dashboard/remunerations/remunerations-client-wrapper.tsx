@@ -19,10 +19,10 @@ export function RemunerationsClientWrapper() {
 
         // For manager: get all finalized dossiers with commission data
         // For consultant: get only their own
+        // Fetch ALL dossiers (not just finalized) to show commissions on en_cours too
         let query = supabase
           .from('v_dossiers_complets')
           .select('*')
-          .eq('statut', 'client_finalise')
 
         if (consultant.role !== 'manager' && consultant.role !== 'back_office') {
           query = query

@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Users, TrendingUp, CheckCircle } from 'lucide-react'
+import { Users, TrendingUp, CheckCircle, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -93,6 +94,12 @@ export function MaClienteleClient({ initialData, consultant }: MaClienteleClient
       },
     },
     {
+      key: 'commission_brute',
+      label: 'Commission',
+      sortable: true,
+      render: (value) => value ? formatCurrency(value) : '-',
+    },
+    {
       key: 'statut',
       label: 'Statut',
       sortable: true,
@@ -101,6 +108,18 @@ export function MaClienteleClient({ initialData, consultant }: MaClienteleClient
           status={(value as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'}
           type="dossier"
         />
+      ),
+    },
+    {
+      key: 'id',
+      label: '',
+      render: (value) => (
+        <Link
+          href={`/dashboard/dossiers/${value}`}
+          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+        >
+          Modifier <ExternalLink size={14} />
+        </Link>
       ),
     },
   ]

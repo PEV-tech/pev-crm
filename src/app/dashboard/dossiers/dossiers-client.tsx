@@ -197,6 +197,12 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
       },
     },
     {
+      key: 'commission_brute',
+      label: 'Commission',
+      sortable: true,
+      render: (value) => value ? formatCurrency(value) : '-',
+    },
+    {
       key: 'client_pays',
       label: 'Pays',
       sortable: true,
