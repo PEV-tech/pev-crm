@@ -40,40 +40,6 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
   const [filterConsultant, setFilterConsultant] = React.useState('')
   const [searchQuery, setSearchQuery] = React.useState(searchParams.get('q') || '')
 
-  const handleExportCSV = React.useCallback(() => {
-    // Transform data to match export format
-    const exportData = filteredData.map((d) => ({
-      client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
-      produit: d.produit_nom || '',
-      compagnie: d.compagnie_nom || '',
-      montant: formatCurrencyForCSV(d.montant),
-      financement: d.financement || '',
-      date: formatDateForCSV(d.date_operation),
-      pays: d.client_pays || '',
-      consultant: `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim() || '-',
-      statut: d.statut || '',
-      kyc: d.statut_kyc || '',
-    }))
-
-    const columns = [
-      { key: 'client', label: 'Client' },
-      { key: 'produit', label: 'Produit' },
-      { key: 'compagnie', label: 'Compagnie' },
-      { key: 'montant', label: 'Montant (EUR)' },
-      { key: 'financement', label: 'Financement' },
-      { key: 'date', label: 'Date' },
-      { key: 'pays', label: 'Pays' },
-      { key: 'consultant', label: 'Consultant' },
-      { key: 'statut', label: 'Statut' },
-      { key: 'kyc', label: 'KYC' },
-    ]
-
-    exportCSV(exportData, columns, {
-      filename: getExportFilename('dossiers_export'),
-      separator: ';',
-    })
-  }, [filteredData])
-
   // Filter data based on active tab, filters, and search
   const filteredData = React.useMemo(() => {
     let result = data
@@ -121,6 +87,39 @@ export function DossiersClient({ initialData }: DossiersClientProps) {
 
     return result
   }, [data, activeTab, filterProduit, filterPays, filterConsultant, searchQuery])
+
+  const handleExportCSV = React.useCallback(() => {
+    const exportData = filteredData.map((d) => ({
+      client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
+      produit: d.produit_nom || '',
+      compagnie: d.compagnie_nom || '',
+      montant: formatCurrencyForCSV(d.montant),
+      financement: d.financement || '',
+      date: formatDateForCSV(d.date_operation),
+      pays: d.client_pays || '',
+      consultant: `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim() || '-',
+      statut: d.statut || '',
+      kyc: d.statut_kyc || '',
+    }))
+
+    const columns = [
+      { key: 'client', label: 'Client' },
+      { key: 'produit', label: 'Produit' },
+      { key: 'compagnie', label: 'Compagnie' },
+      { key: 'montant', label: 'Montant (EUR)' },
+      { key: 'financement', label: 'Financement' },
+      { key: 'date', label: 'Date' },
+      { key: 'pays', label: 'Pays' },
+      { key: 'consultant', label: 'Consultant' },
+      { key: 'statut', label: 'Statut' },
+      { key: 'kyc', label: 'KYC' },
+    ]
+
+    exportCSV(exportData, columns, {
+      filename: getExportFilename('dossiers_export'),
+      separator: ';',
+    })
+  }, [filteredData])
 
   // Get unique values for filters
   const produits = React.useMemo(
