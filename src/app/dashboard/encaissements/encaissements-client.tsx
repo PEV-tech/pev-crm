@@ -66,23 +66,37 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       .sort(([a], [b]) => (MONTH_ORDER[a] || 99) - (MONTH_ORDER[b] || 99))
   }, [data])
 
-  // Grand totals
+  // Grand totals — from encaissements_rem, or fallback to facturesPaid
   const totals = React.useMemo(() => {
-    return data.reduce(
-      (acc, e) => ({
-        net_cabinet: acc.net_cabinet + Number(e.net_cabinet || 0),
-        pool_plus: acc.pool_plus + Number(e.pool_plus || 0),
-        thelo: acc.thelo + Number(e.thelo || 0),
-        maxine: acc.maxine + Number(e.maxine || 0),
-        steph_asie: acc.steph_asie + Number(e.steph_asie || 0),
-        steph_fr: acc.steph_fr + Number(e.steph_fr || 0),
-        consultant: acc.consultant + Number(e.consultant || 0),
-        mathias: acc.mathias + Number(e.mathias || 0),
-        part_cabinet: acc.part_cabinet + Number(e.part_cabinet || 0),
-      }),
-      { net_cabinet: 0, pool_plus: 0, thelo: 0, maxine: 0, steph_asie: 0, steph_fr: 0, consultant: 0, mathias: 0, part_cabinet: 0 }
-    )
-  }, [data])
+    if (data.length > 0) {
+      return data.reduce(
+        (acc, e) => ({
+          net_cabinet: acc.net_cabinet + Number(e.net_cabinet || 0),
+          pool_plus: acc.pool_plus + Number(e.pool_plus || 0),
+          thelo: acc.thelo + Number(e.thelo || 0),
+          maxine: acc.maxine + Number(e.maxine || 0),
+          steph_asie: acc.steph_asie + Number(e.steph_asie || 0),
+          steph_fr: acc.steph_fr + Number(e.steph_fr || 0),
+          consultant: acc.consultant + Number(e.consultant || 0),
+          mathias: acc.mathias + Number(e.mathias || 0),
+          part_cabinet: acc.part_cabinet + Number(e.part_cabinet || 0),
+        }),
+        { net_cabinet: 0, pool_plus: 0, thelo: 0, maxine: 0, steph_asie: 0, steph_fr: 0, consultant: 0, mathias: 0, part_cabinet: 0 }
+      )
+    }
+    // Fallback: compute from paid factures
+    const totalCommission = facturesPaid.reduce((s: number, f: any) => s + (f.commission_brute || 0), 0)
+    const totalConsultant = facturesPaid.reduce((s: number, f: any) => s + (f.rem_apporteur || 0), 0)
+    const totalCabinet = facturesPaid.reduce((s: number, f: any) => s + (f.part_cabinet || 0), 0)
+    return {
+      net_cabinet: totalCommission,
+      pool_plus: 0, thelo: 0, maxine: 0,
+      steph_asie: 0, steph_fr: 0,
+      consultant: totalConsultant,
+      mathias: 0,
+      part_cabinet: totalCabinet,
+    }
+  }, [data, facturesPaid])
 
   const monthTotals = React.useCallback((entries: RemEntry[]) => {
     return entries.reduce(
@@ -123,7 +137,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Encaissements</h1>
           <p className="text-gray-600 mt-1">
-            Commissions reçues et répartition — {data.length} entrée(s) sur {byMonth.length} mois
+            Commissions reçues et répartition — {data.length > 0 ? `${data.length} entrée(s) sur ${byMonth.length} mois` : `${facturesPaid.length} facture(s) encaissée(s)`}
           </p>
         </div>
         <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
@@ -220,7 +234,64 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </div>
       </div>
 
-      {/* Monthly sections */}
+      {/* Factures encaissées (payées) — affiché quand encaissements_rem est vide ou en complément */}
+      {data.length === 0 && facturesPaid.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp size={20} className="text-green-600" />
+              Factures encaissées
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="py-2 pr-4 font-medium">Client</th>
+                    <th className="py-2 px-2 font-medium">Consultant</th>
+                    <th className="py-2 px-2 font-medium">Produit</th>
+                    <th className="py-2 px-2 font-medium text-right">Montant</th>
+                    <th className="py-2 px-2 font-medium text-right">Commission</th>
+                    <th className="py-2 px-2 font-medium text-right">Part consultant</th>
+                    <th className="py-2 px-2 font-medium text-right">Date facture</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {facturesPaid.map((f: any, i: number) => (
+                    <tr key={f.id || i} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 pr-4 font-medium text-gray-900">{f.client_prenom} {f.client_nom}</td>
+                      <td className="py-2 px-2 text-gray-600">{f.consultant_prenom} {f.consultant_nom}</td>
+                      <td className="py-2 px-2 text-gray-600">{f.produit_nom || '-'}</td>
+                      <td className="py-2 px-2 text-right">{formatCurrency(f.montant)}</td>
+                      <td className="py-2 px-2 text-right font-semibold">{formatCurrency(f.commission_brute)}</td>
+                      <td className="py-2 px-2 text-right text-indigo-700">{formatCurrency(f.rem_apporteur)}</td>
+                      <td className="py-2 px-2 text-right text-gray-600">{f.date_facture ? new Date(f.date_facture).toLocaleDateString('fr-FR') : '-'}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-gray-100 font-bold">
+                    <td className="py-2 pr-4" colSpan={3}>Total</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(facturesPaid.reduce((s: number, f: any) => s + (f.montant || 0), 0))}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(facturesPaid.reduce((s: number, f: any) => s + (f.commission_brute || 0), 0))}</td>
+                    <td className="py-2 px-2 text-right text-indigo-700">{formatCurrency(facturesPaid.reduce((s: number, f: any) => s + (f.rem_apporteur || 0), 0))}</td>
+                    <td className="py-2 px-2"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {data.length === 0 && facturesPaid.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center text-gray-500">
+            Aucun encaissement enregistré
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Monthly sections (encaissements_rem) */}
       {byMonth.map(([mois, entries]) => {
         const mt = monthTotals(entries)
         const isExpanded = expandedMonths[mois] !== false // default expanded

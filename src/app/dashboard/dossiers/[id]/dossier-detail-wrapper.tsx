@@ -211,8 +211,15 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     }
   }
 
+  // Encours only for PE, CAPI LUX, CAV LUX
+  const dossierHasEncours = React.useMemo(() => {
+    const nom = (dossier?.produit_nom || '').toUpperCase().trim()
+    return ['PE', 'CAPI LUX', 'CAV LUX'].includes(nom)
+  }, [dossier?.produit_nom])
+
   // Compute quarterly encours commission for this dossier
   const quarterlyEncoursCommission = React.useMemo(() => {
+    if (!dossierHasEncours) return null
     if (!dossier?.montant || !tauxGestion) return null
     const montant = dossier.montant
     const annual = montant * tauxGestion
@@ -480,7 +487,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-sm text-gray-600">Commission brute</p>
+                          <p className="text-sm text-gray-600">Commission brute (grille)</p>
                           <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.commission_brute)}</p>
                           {dossier.taux_commission && (
                             <p className="text-xs text-gray-500 mt-0.5">Taux : {formatPct(dossier.taux_commission)}</p>
@@ -493,31 +500,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                           <div className="bg-indigo-50 rounded-lg p-3">
                             <p className="text-sm text-indigo-600">Part consultant</p>
                             <p className="text-xl font-bold text-indigo-900 mt-1">{formatCurrency(dossier.rem_apporteur)}</p>
-                            {dossier.commission_brute && dossier.commission_brute > 0 && (
-                              <p className="text-xs text-indigo-500 mt-0.5">{((dossier.rem_apporteur / dossier.commission_brute) * 100).toFixed(0)}% de la commission</p>
-                            )}
                           </div>
                         )}
                       </div>
-                      {dossier.part_cabinet !== null && dossier.part_cabinet !== undefined && (
-                        <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-gray-600">Part cabinet</p>
-                            <p className="text-lg font-bold text-gray-900">{formatCurrency(dossier.part_cabinet)}</p>
-                          </div>
-                          {dossier.pct_cabinet && (
-                            <span className="text-sm font-medium text-gray-500">{formatPct(dossier.pct_cabinet)}</span>
-                          )}
-                        </div>
-                      )}
-                      {dossier.rem_support !== null && dossier.rem_support !== undefined && dossier.rem_support > 0 && (
-                        <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-gray-600">Rém. support</p>
-                            <p className="text-lg font-bold text-gray-900">{formatCurrency(dossier.rem_support)}</p>
-                          </div>
-                        </div>
-                      )}
                       {dossier.produit_nom && dossier.compagnie_nom && (
                         <p className="text-xs text-gray-400 pt-1 border-t border-gray-100">
                           {dossier.produit_nom} · {dossier.compagnie_nom} · {dossier.financement || '-'}
@@ -527,8 +512,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   )}
                 </div>
 
-                {/* Encours trimestriel */}
-                {(tauxGestion || quarterlyEncoursCommission !== null) && (
+                {/* Encours trimestriel — uniquement pour PE, CAPI LUX, CAV LUX */}
+                {dossierHasEncours && (tauxGestion || quarterlyEncoursCommission !== null) && (
                   <div className="border-t border-gray-200 pt-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1">
                       <TrendingUp size={13} />
@@ -558,11 +543,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                       tauxGestion && (
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-gray-50 rounded-lg p-3">
-                            <p className="text-sm text-gray-600">Frais gestion annuels</p>
+                            <p className="text-sm text-gray-600">Encours annuel (grille)</p>
                             <p className="text-xl font-bold text-gray-900 mt-1">
                               {formatCurrency((dossier.montant || 0) * tauxGestion)}
                             </p>
-                            <p className="text-xs text-gray-500 mt-0.5">{formatPct(tauxGestion)}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Taux : {formatPct(tauxGestion)}</p>
                           </div>
                           <div className="bg-gray-50 rounded-lg p-3">
                             <p className="text-sm text-gray-600">Par trimestre</p>
@@ -570,8 +555,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                               {formatCurrency(((dossier.montant || 0) * tauxGestion) / 4)}
                             </p>
                             {quarterlyEncoursCommission !== null && (
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                Consultant : {formatCurrency(quarterlyEncoursCommission)}
+                              <p className="text-xs text-green-600 mt-0.5">
+                                Part consultant : {formatCurrency(quarterlyEncoursCommission)}
                               </p>
                             )}
                           </div>
