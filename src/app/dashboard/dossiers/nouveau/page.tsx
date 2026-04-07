@@ -92,7 +92,12 @@ export default function NewDossierPage() {
         }).select().single()
       if (dossierError) throw dossierError
 
-      await supabase.from('factures').insert({ dossier_id: dossierData.id, facturee: false, payee: 'non' })
+      // Facture is auto-created by on_dossier_finalise trigger on INSERT.
+      // As safety net, check if facture exists and create one if trigger didn't.
+      const { data: existingFacture } = await supabase.from('factures').select('id').eq('dossier_id', dossierData.id).maybeSingle()
+      if (!existingFacture) {
+        await supabase.from('factures').insert({ dossier_id: dossierData.id, facturee: false, payee: 'non' })
+      }
       router.push(`/dashboard/dossiers/${dossierData.id}`)
     } catch (err: any) {
       console.error('Error creating dossier:', err)
