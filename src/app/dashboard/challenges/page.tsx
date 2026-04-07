@@ -34,18 +34,32 @@ export default function ChallengesPage() {
   useEffect(() => {
     async function loadRanking() {
       const supabase = createClient()
-      // Fetch only 2026 finalized dossiers directly from server
-      const { data: dossiers } = await supabase
-        .from('v_dossiers_complets')
-        .select('consultant_nom, consultant_prenom, montant')
-        .eq('statut', 'client_finalise')
-        .gte('date_operation', '2026-01-01')
-        .lte('date_operation', '2026-12-31')
+      // Fetch 2026 finalized dossiers AND all consultants to show everyone
+      const [dossiersRes, consultantsRes] = await Promise.all([
+        supabase
+          .from('v_dossiers_complets')
+          .select('consultant_nom, consultant_prenom, montant')
+          .eq('statut', 'client_finalise')
+          .gte('date_operation', '2026-01-01')
+          .lte('date_operation', '2026-12-31'),
+        supabase
+          .from('consultants')
+          .select('nom, prenom, role')
+          .in('role', ['consultant', 'manager']),
+      ])
 
-      if (!dossiers) { setLoading(false); return }
+      const dossiers = dossiersRes.data || []
+      const allConsultants = consultantsRes.data || []
 
-      // Aggregate collecte per consultant
+      // Seed map with ALL consultants (except back_office)
       const map: Record<string, { nom: string; prenom: string; collecte: number; nbDossiers: number }> = {}
+      allConsultants.forEach((c: any) => {
+        if (!c.prenom) return
+        const key = `${c.prenom} ${c.nom || ''}`.trim()
+        if (!map[key]) map[key] = { nom: c.nom || '', prenom: c.prenom, collecte: 0, nbDossiers: 0 }
+      })
+
+      // Aggregate collecte from dossiers
       dossiers.forEach((d: any) => {
         if (!d.consultant_nom || d.consultant_nom.toLowerCase() === 'back office') return
         const key = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()

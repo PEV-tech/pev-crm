@@ -28,11 +28,11 @@ function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
 }
 
 // Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
-function hasEncours(compagnieNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
-  const comp = (compagnieNom || '').toUpperCase()
-  const cat = (produitCategorie || '').toUpperCase()
-  if (comp.startsWith('PE-') || comp.startsWith('LUX-') || cat === 'PE' || cat === 'LUX' || cat === 'CAPI LUX' || cat === 'CAV LUX') return true
-  return false
+function hasEncours(produitNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
+  const nom = (produitNom || '').toUpperCase().trim()
+  const cat = (produitCategorie || '').toUpperCase().trim()
+  const ENCOURS_TYPES = ['PE', 'CAPI LUX', 'CAV LUX']
+  return ENCOURS_TYPES.includes(nom) || ENCOURS_TYPES.includes(cat)
 }
 
 function computeQuarterlyConsultant(
@@ -40,11 +40,11 @@ function computeQuarterlyConsultant(
   remApporteur: number | null | undefined,
   commissionBrute: number | null | undefined,
   grilles: GrilleGestion[],
-  compagnieNom?: string | null,
+  produitNom?: string | null,
   produitCategorie?: string | null
 ): number | null {
   if (!montant || grilles.length === 0) return null
-  if (!hasEncours(compagnieNom, produitCategorie)) return null
+  if (!hasEncours(produitNom, produitCategorie)) return null
   const tauxGestion = getGestionTaux(grilles, montant)
   if (!tauxGestion) return null
   if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
@@ -244,7 +244,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
         const entree = value ? formatCurrency(value) : '-'
         if (!isConsultant || gestionGrilles.length === 0) return entree
         const quarterly = computeQuarterlyConsultant(
-          row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.compagnie_nom, row.produit_categorie
+          row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.produit_nom, row.produit_categorie
         )
         if (quarterly === null) return entree
         return (

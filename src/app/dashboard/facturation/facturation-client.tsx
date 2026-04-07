@@ -100,13 +100,33 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
   const selectedDossiers = filteredData.filter((d) => d.id && selectedIds.has(d.id))
   const selectedTotal = selectedDossiers.reduce((sum, d) => sum + (d.commission_brute || 0), 0)
 
+  // Helper: upsert facture (update if exists, insert if not)
+  const upsertFacture = async (dossierId: string, fields: Record<string, any>) => {
+    const { data: updated, error: updateErr } = await supabase
+      .from('factures')
+      .update(fields)
+      .eq('dossier_id', dossierId)
+      .select()
+    if (updateErr) throw updateErr
+    // If update matched 0 rows, insert a new facture
+    if (!updated || updated.length === 0) {
+      const { error: insertErr } = await supabase.from('factures').insert({
+        dossier_id: dossierId,
+        facturee: fields.facturee ?? false,
+        payee: fields.payee ?? 'non',
+        date_facture: fields.date_facture ?? null,
+        date_paiement: fields.date_paiement ?? null,
+      })
+      if (insertErr) throw insertErr
+    }
+  }
+
   const handleMarkInvoiced = async (dossier: VDossiersComplets) => {
     if (!dossier.id) return
     setLoadingIds((prev) => new Set(prev).add(dossier.id!))
     try {
       const today = new Date().toISOString().split('T')[0]
-      const { error } = await supabase.from('factures').update({ facturee: true, date_facture: today }).eq('dossier_id', dossier.id)
-      if (error) throw error
+      await upsertFacture(dossier.id, { facturee: true, date_facture: today })
       setData((prev) => prev.map((d) => d.id === dossier.id ? { ...d, facturee: true, date_facture: today } : d))
     } catch (err) {
       console.error('Error marking as invoiced:', err)
@@ -121,8 +141,7 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
     setLoadingIds((prev) => new Set(prev).add(dossier.id!))
     try {
       const today = new Date().toISOString().split('T')[0]
-      const { error } = await supabase.from('factures').update({ payee: 'oui' as PaiementType, date_paiement: today }).eq('dossier_id', dossier.id)
-      if (error) throw error
+      await upsertFacture(dossier.id, { facturee: true, payee: 'oui', date_paiement: today })
       setData((prev) => prev.map((d) => d.id === dossier.id ? { ...d, payee: 'oui' as PaiementType, date_paiement: today } : d))
     } catch (err) {
       console.error('Error marking as paid:', err)
@@ -132,23 +151,26 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
     }
   }
 
-  // Bulk invoice: mark all selected as facturée
+  // Bulk invoice: mark all selected as facturée (upsert if facture row missing)
   const handleBulkInvoice = async () => {
     if (selectedIds.size === 0) return
     setBulkLoading(true)
     const today = new Date().toISOString().split('T')[0]
     const ids = Array.from(selectedIds)
+    let errorCount = 0
     try {
-      // Update each selected dossier (Supabase doesn't support IN for update on factures easily without array ops)
-      const results = await Promise.all(
-        ids.map((id) =>
-          supabase.from('factures').update({ facturee: true, date_facture: today }).eq('dossier_id', id)
-        )
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            await upsertFacture(id, { facturee: true, date_facture: today })
+          } catch (err) {
+            errorCount++
+            console.error(`Failed to invoice dossier ${id}:`, err)
+          }
+        })
       )
-      const errors = results.filter((r) => r.error)
-      if (errors.length > 0) {
-        console.error('Some updates failed:', errors)
-        alert(`${errors.length} mise(s) à jour ont échoué`)
+      if (errorCount > 0) {
+        alert(`${errorCount} mise(s) à jour ont échoué`)
       }
       // Update local state for all that succeeded
       setData((prev) =>

@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2 } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -41,6 +41,10 @@ interface DossierDetailWrapperProps { id: string }
 
 export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const fromPage = searchParams.get('from')
+  const backHref = fromPage === 'ma-clientele' ? '/dashboard/ma-clientele' : '/dashboard/dossiers'
+  const backLabel = fromPage === 'ma-clientele' ? 'Retour à ma clientèle' : 'Retour aux dossiers'
   const { consultant: currentUser } = useUser()
   const [dossier, setDossier] = React.useState<VDossiersComplets | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -229,7 +233,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Dossier non trouvé</h1>
-        <Link href="/dashboard/dossiers"><Button variant="outline">Retour aux dossiers</Button></Link>
+        <Link href={backHref}><Button variant="outline">{backLabel}</Button></Link>
       </div>
     )
   }
@@ -245,8 +249,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/dossiers">
-            <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button>
+          <Link href={backHref}>
+            <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />{backLabel}</Button>
           </Link>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dossier #{dossier.id?.slice(0, 8).toUpperCase()}</h1>

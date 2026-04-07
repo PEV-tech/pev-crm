@@ -15,6 +15,12 @@ const formatCurrency = (value: number | null | undefined): string => {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)
 }
 
+// Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
+function hasEncours(produitNom: string | null | undefined): boolean {
+  const nom = (produitNom || '').toUpperCase().trim()
+  return ['PE', 'CAPI LUX', 'CAV LUX'].includes(nom)
+}
+
 const statutLabel = (s: string) => {
   switch (s) {
     case 'client_finalise': return 'Finalisé'
@@ -215,9 +221,21 @@ export function RemunerationsClient({
         const name = `${row.consultant_prenom || ''} ${row.consultant_nom || ''}`.trim()
         return name === 'Pool Pool' ? 'Pool' : name
       }},
+      { key: 'produit_nom', label: 'Produit', sortable: true },
       { key: 'statut', label: 'Statut', render: (value) => <Badge variant={statutVariant(value)}>{statutLabel(value)}</Badge> },
       { key: 'montant', label: 'Montant', sortable: true, render: (value) => formatCurrency(value) },
-      { key: 'commission_brute', label: 'Commission brute', sortable: true, render: (value) => formatCurrency(value) },
+      { key: 'commission_brute', label: 'Commission brute', sortable: true, render: (value, row) => {
+        const entree = formatCurrency(value)
+        if (hasEncours(row.produit_nom) && row.montant && row.montant > 0) {
+          return (
+            <div className="text-sm">
+              <div className="font-medium">{entree}</div>
+              <div className="text-xs text-green-600">Encours: PE/LUX</div>
+            </div>
+          )
+        }
+        return entree
+      }},
       { key: 'rem_apporteur', label: 'Part Consultant', render: (value) => formatCurrency(value) },
       {
         key: 'facturee', label: 'Facturation',
@@ -351,7 +369,18 @@ export function RemunerationsClient({
       { key: 'compagnie_nom', label: 'Compagnie' },
       { key: 'statut', label: 'Statut', render: (value) => <Badge variant={statutVariant(value)}>{statutLabel(value)}</Badge> },
       { key: 'montant', label: 'Montant', render: (value) => formatCurrency(value) },
-      { key: 'rem_apporteur', label: 'Ma commission', render: (value) => formatCurrency(value) },
+      { key: 'rem_apporteur', label: 'Ma commission', render: (value, row) => {
+        const entree = formatCurrency(value)
+        if (hasEncours(row.produit_nom) && row.montant && row.montant > 0) {
+          return (
+            <div className="text-sm">
+              <div className="font-medium">{entree}</div>
+              <div className="text-xs text-green-600">+ encours trimestriel</div>
+            </div>
+          )
+        }
+        return entree
+      }},
       {
         key: 'facturee', label: 'Facturation',
         render: (value, row) => {

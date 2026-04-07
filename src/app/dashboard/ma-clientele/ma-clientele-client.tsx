@@ -35,11 +35,11 @@ function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
 }
 
 // Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
-function hasEncours(compagnieNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
-  const comp = (compagnieNom || '').toUpperCase()
-  const cat = (produitCategorie || '').toUpperCase()
-  if (comp.startsWith('PE-') || comp.startsWith('LUX-') || cat === 'PE' || cat === 'LUX' || cat === 'CAPI LUX' || cat === 'CAV LUX') return true
-  return false
+function hasEncours(produitNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
+  const nom = (produitNom || '').toUpperCase().trim()
+  const cat = (produitCategorie || '').toUpperCase().trim()
+  const ENCOURS_TYPES = ['PE', 'CAPI LUX', 'CAV LUX']
+  return ENCOURS_TYPES.includes(nom) || ENCOURS_TYPES.includes(cat)
 }
 
 function computeQuarterlyConsultant(
@@ -47,11 +47,11 @@ function computeQuarterlyConsultant(
   remApporteur: number | null | undefined,
   commissionBrute: number | null | undefined,
   grilles: GrilleGestion[],
-  compagnieNom?: string | null,
+  produitNom?: string | null,
   produitCategorie?: string | null
 ): number | null {
   if (!montant || grilles.length === 0) return null
-  if (!hasEncours(compagnieNom, produitCategorie)) return null
+  if (!hasEncours(produitNom, produitCategorie)) return null
   const tauxGestion = getGestionTaux(grilles, montant)
   if (!tauxGestion) return null
   if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
@@ -71,8 +71,8 @@ function CommissionTooltip({
   const [visible, setVisible] = React.useState(false)
   const entree = isConsultant ? row.rem_apporteur : row.commission_brute
   const quarterly = isConsultant
-    ? computeQuarterlyConsultant(row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.compagnie_nom, row.produit_categorie)
-    : (row.montant && gestionGrilles.length > 0 && hasEncours(row.compagnie_nom, row.produit_categorie))
+    ? computeQuarterlyConsultant(row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.produit_nom, row.produit_categorie)
+    : (row.montant && gestionGrilles.length > 0 && hasEncours(row.produit_nom, row.produit_categorie))
     ? (row.montant * getGestionTaux(gestionGrilles, row.montant)) / 4
     : null
 
@@ -206,9 +206,11 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
   const [data] = React.useState(initialData)
   const [activeTab, setActiveTab] = React.useState('tous')
   const [filterYear, setFilterYear] = React.useState<string>('tous')
+  const [filterProduit, setFilterProduit] = React.useState<string>('tous')
+  const [filterPays, setFilterPays] = React.useState<string>('tous')
   const isConsultant = consultant?.role === 'consultant'
 
-  // Extract available years from data
+  // Extract available years, products, countries from data
   const availableYears = React.useMemo(() => {
     const years = new Set<string>()
     data.forEach((d) => {
@@ -217,6 +219,14 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
       }
     })
     return Array.from(years).sort((a, b) => b.localeCompare(a))
+  }, [data])
+
+  const availableProduits = React.useMemo(() => {
+    return Array.from(new Set(data.map(d => d.produit_nom).filter(Boolean) as string[])).sort()
+  }, [data])
+
+  const availablePays = React.useMemo(() => {
+    return Array.from(new Set(data.map(d => d.client_pays).filter(Boolean) as string[])).sort()
   }, [data])
 
   const stats = React.useMemo(() => {
@@ -242,12 +252,20 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
     if (filterYear !== 'tous') {
       result = result.filter((d) => d.date_operation && d.date_operation.startsWith(filterYear))
     }
+    // Product filter
+    if (filterProduit !== 'tous') {
+      result = result.filter((d) => d.produit_nom === filterProduit)
+    }
+    // Country filter
+    if (filterPays !== 'tous') {
+      result = result.filter((d) => d.client_pays === filterPays)
+    }
     // Status tab filter
     if (activeTab === 'prospects') result = result.filter((d) => d.statut === 'prospect')
     else if (activeTab === 'en_cours') result = result.filter((d) => d.statut === 'client_en_cours')
     else if (activeTab === 'finalises') result = result.filter((d) => d.statut === 'client_finalise')
     return result
-  }, [data, activeTab, filterYear])
+  }, [data, activeTab, filterYear, filterProduit, filterPays])
 
   // --- Portfolio distributions (finalisés only for real AUM) ---
   const distributions = React.useMemo(() => {
@@ -429,19 +447,33 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="tous" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <TabsList>
                 <TabsTrigger value="tous">Tous ({stats.totalDossiers})</TabsTrigger>
                 <TabsTrigger value="prospects">Prospects ({stats.prospects})</TabsTrigger>
                 <TabsTrigger value="en_cours">En cours ({stats.enCours})</TabsTrigger>
                 <TabsTrigger value="finalises">Finalisés ({stats.finalisés})</TabsTrigger>
               </TabsList>
-              <Select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-32">
-                <option value="tous">Toutes années</option>
-                {availableYears.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-32">
+                  <option value="tous">Toutes années</option>
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </Select>
+                <Select value={filterProduit} onChange={(e) => setFilterProduit(e.target.value)} className="w-40">
+                  <option value="tous">Tous produits</option>
+                  {availableProduits.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </Select>
+                <Select value={filterPays} onChange={(e) => setFilterPays(e.target.value)} className="w-36">
+                  <option value="tous">Tous pays</option>
+                  {availablePays.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
             {['tous', 'prospects', 'en_cours', 'finalises'].map((tab) => (
               <TabsContent key={tab} value={tab}>
@@ -450,7 +482,7 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
                   columns={columns}
                   pageSize={10}
                   onRowClick={(row) => {
-                    if (row.id) router.push(`/dashboard/dossiers/${row.id}`)
+                    if (row.id) router.push(`/dashboard/dossiers/${row.id}?from=ma-clientele`)
                   }}
                 />
               </TabsContent>
