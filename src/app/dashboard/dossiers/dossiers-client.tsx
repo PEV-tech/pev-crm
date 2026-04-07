@@ -55,6 +55,7 @@ interface DossiersClientProps {
   initialData: VDossiersComplets[]
   role?: string
   gestionGrilles?: GrilleGestion[]
+  entreeGrilles?: GrilleGestion[]
 }
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -69,7 +70,7 @@ const mapStatutForBadge = (statut: StatutDossierType | null | undefined): 'prosp
   return (statut as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'
 }
 
-export function DossiersClient({ initialData, role = 'manager', gestionGrilles = [] }: DossiersClientProps) {
+export function DossiersClient({ initialData, role = 'manager', gestionGrilles = [], entreeGrilles = [] }: DossiersClientProps) {
   const isConsultant = role === 'consultant'
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -241,8 +242,21 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
       label: isConsultant ? 'Ma commission' : 'Commission',
       sortable: true,
       render: (value, row) => {
-        const entree = value ? formatCurrency(value) : '-'
-        if (!isConsultant || gestionGrilles.length === 0) return entree
+        // For LUX/PE: use grille entrée instead of taux_produit_compagnie
+        const isLuxPe = hasEncours(row.produit_nom, row.produit_categorie)
+        let displayValue = value
+        if (isLuxPe && entreeGrilles.length > 0 && row.montant) {
+          const entreeTaux = getGestionTaux(entreeGrilles, row.montant)
+          if (entreeTaux > 0) {
+            const grilleCommission = row.montant * entreeTaux
+            if (isConsultant && row.commission_brute && row.commission_brute > 0 && row.rem_apporteur) {
+              displayValue = grilleCommission * (row.rem_apporteur / row.commission_brute)
+            } else {
+              displayValue = grilleCommission
+            }
+          }
+        }
+        const entree = displayValue ? formatCurrency(displayValue) : '-'
         const quarterly = computeQuarterlyConsultant(
           row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.produit_nom, row.produit_categorie
         )

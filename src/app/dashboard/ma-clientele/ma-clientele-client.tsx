@@ -63,13 +63,30 @@ function CommissionTooltip({
   row,
   isConsultant,
   gestionGrilles,
+  entreeGrilles = [],
 }: {
   row: VDossiersComplets
   isConsultant: boolean
   gestionGrilles: GrilleGestion[]
+  entreeGrilles?: GrilleGestion[]
 }) {
   const [visible, setVisible] = React.useState(false)
-  const entree = isConsultant ? row.rem_apporteur : row.commission_brute
+  const isLuxPe = hasEncours(row.produit_nom, row.produit_categorie)
+
+  // For LUX/PE: compute entry commission from grille
+  let entree = isConsultant ? row.rem_apporteur : row.commission_brute
+  if (isLuxPe && entreeGrilles.length > 0 && row.montant) {
+    const entreeTaux = getGestionTaux(entreeGrilles, row.montant)
+    if (entreeTaux > 0) {
+      const grilleCommission = row.montant * entreeTaux
+      if (isConsultant && row.commission_brute && row.commission_brute > 0 && row.rem_apporteur) {
+        entree = grilleCommission * (row.rem_apporteur / row.commission_brute)
+      } else {
+        entree = grilleCommission
+      }
+    }
+  }
+
   const quarterly = isConsultant
     ? computeQuarterlyConsultant(row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.produit_nom, row.produit_categorie)
     : (row.montant && gestionGrilles.length > 0 && hasEncours(row.produit_nom, row.produit_categorie))
@@ -95,8 +112,8 @@ function CommissionTooltip({
           <p className="font-semibold text-gray-800 mb-2">Détail commission</p>
           <div className="space-y-1.5">
             <div className="flex justify-between">
-              <span className="text-gray-600">Droits d'entrée (souscription)</span>
-              <span className="font-semibold text-gray-900">{formatCurrency(isConsultant ? row.rem_apporteur : row.commission_brute)}</span>
+              <span className="text-gray-600">Droits d'entrée (grille)</span>
+              <span className="font-semibold text-gray-900">{formatCurrency(entree)}</span>
             </div>
             {quarterly !== null && (
               <div className="flex justify-between border-t border-gray-100 pt-1.5">
@@ -199,9 +216,10 @@ interface MaClienteleClientProps {
   initialData: VDossiersComplets[]
   consultant: any
   gestionGrilles?: GrilleGestion[]
+  entreeGrilles?: GrilleGestion[]
 }
 
-export function MaClienteleClient({ initialData, consultant, gestionGrilles = [] }: MaClienteleClientProps) {
+export function MaClienteleClient({ initialData, consultant, gestionGrilles = [], entreeGrilles = [] }: MaClienteleClientProps) {
   const router = useRouter()
   const [data] = React.useState(initialData)
   const [activeTab, setActiveTab] = React.useState('tous')
@@ -344,6 +362,7 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
           row={row}
           isConsultant={isConsultant}
           gestionGrilles={gestionGrilles}
+          entreeGrilles={entreeGrilles}
         />
       ),
     },

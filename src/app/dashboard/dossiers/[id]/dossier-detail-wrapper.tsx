@@ -54,6 +54,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [saveError, setSaveError] = React.useState('')
   const [editForm, setEditForm] = React.useState<any>({})
   const [tauxGestion, setTauxGestion] = React.useState<number | null>(null)
+  const [tauxEntree, setTauxEntree] = React.useState<number | null>(null)
   const [produits, setProduits] = React.useState<{ id: string; nom: string }[]>([])
   const [compagnies, setCompagnies] = React.useState<{ id: string; nom: string }[]>([])
   const [tauxMap, setTauxMap] = React.useState<{ produit_id: string | null; compagnie_id: string | null; taux: number }[]>([])
@@ -105,18 +106,23 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             telephone: data.client_telephone || '',
           })
 
-          // Fetch frais de gestion taux for encours commission
+          // Fetch grille taux for entry + encours commission (LUX/PE)
           if (data.montant && data.montant > 0) {
+            const prodNom = (data.produit_nom || '').toUpperCase().trim()
+            const isLuxPe = ['PE', 'CAPI LUX', 'CAV LUX'].includes(prodNom)
             try {
-              const { data: taux } = await supabase.rpc('get_frais_taux', {
-                p_type: 'gestion',
-                p_encours: data.montant,
-              })
-              if (typeof taux === 'number' && taux > 0) {
-                setTauxGestion(taux)
+              const [gestionRes, entreeRes] = await Promise.all([
+                supabase.rpc('get_frais_taux', { p_type: 'gestion', p_encours: data.montant }),
+                isLuxPe ? supabase.rpc('get_frais_taux', { p_type: 'entree', p_encours: data.montant }) : Promise.resolve({ data: null }),
+              ])
+              if (typeof gestionRes.data === 'number' && gestionRes.data > 0) {
+                setTauxGestion(gestionRes.data)
+              }
+              if (typeof entreeRes.data === 'number' && entreeRes.data > 0) {
+                setTauxEntree(entreeRes.data)
               }
             } catch {
-              // gestion taux not available, silently ignore
+              // taux not available, silently ignore
             }
           }
         }
@@ -249,7 +255,19 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     ? dossier.payee === 'oui' ? ('payée' as const) : ('émise' as const)
     : ('à émettre' as const)
 
-  const hasCommissionData = !!(dossier.commission_brute || dossier.rem_apporteur)
+  const hasCommissionData = !!(dossier.commission_brute || dossier.rem_apporteur || tauxEntree)
+
+  // For LUX/PE: entry commission from grille, not from taux_produit_compagnie
+  const entreeFromGrille = tauxEntree && dossier.montant ? dossier.montant * tauxEntree : null
+  // Part consultant from grille entry: proportional to existing ratio, or use rem_apporteur directly
+  const partConsultantEntree = React.useMemo(() => {
+    if (!entreeFromGrille) return dossier.rem_apporteur
+    if (dossier.commission_brute && dossier.commission_brute > 0 && dossier.rem_apporteur) {
+      const ratio = dossier.rem_apporteur / dossier.commission_brute
+      return entreeFromGrille * ratio
+    }
+    return dossier.rem_apporteur
+  }, [entreeFromGrille, dossier.commission_brute, dossier.rem_apporteur])
 
   return (
     <div className="space-y-6">
@@ -488,18 +506,27 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-gray-50 rounded-lg p-3">
                           <p className="text-sm text-gray-600">Commission brute (grille)</p>
-                          <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.commission_brute)}</p>
-                          {dossier.taux_commission && (
-                            <p className="text-xs text-gray-500 mt-0.5">Taux : {formatPct(dossier.taux_commission)}</p>
-                          )}
-                          {dossier.montant && dossier.taux_commission && (
-                            <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(dossier.taux_commission)}</p>
-                          )}
+                          <p className="text-xl font-bold text-gray-900 mt-1">
+                            {formatCurrency(entreeFromGrille || dossier.commission_brute)}
+                          </p>
+                          {tauxEntree ? (
+                            <>
+                              <p className="text-xs text-gray-500 mt-0.5">Taux grille entrée : {formatPct(tauxEntree)}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(tauxEntree)}</p>
+                            </>
+                          ) : dossier.taux_commission ? (
+                            <>
+                              <p className="text-xs text-gray-500 mt-0.5">Taux : {formatPct(dossier.taux_commission)}</p>
+                              {dossier.montant && (
+                                <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(dossier.taux_commission)}</p>
+                              )}
+                            </>
+                          ) : null}
                         </div>
-                        {dossier.rem_apporteur !== null && dossier.rem_apporteur !== undefined && (
+                        {(partConsultantEntree !== null && partConsultantEntree !== undefined) && (
                           <div className="bg-indigo-50 rounded-lg p-3">
                             <p className="text-sm text-indigo-600">Part consultant</p>
-                            <p className="text-xl font-bold text-indigo-900 mt-1">{formatCurrency(dossier.rem_apporteur)}</p>
+                            <p className="text-xl font-bold text-indigo-900 mt-1">{formatCurrency(partConsultantEntree)}</p>
                           </div>
                         )}
                       </div>
