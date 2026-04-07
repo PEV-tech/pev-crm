@@ -21,9 +21,9 @@ const formatCurrency = (value: number | null | undefined): string => {
 }
 
 const formatCompact = (value: number): string => {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M\u20AC`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k\u20AC`
-  return `${value.toFixed(0)}\u20AC`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M€`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k€`
+  return `${value.toFixed(0)}€`
 }
 
 interface Consultant {
@@ -62,7 +62,7 @@ function MiniDistribution({
       </CardHeader>
       <CardContent className="pt-0">
         {top.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-3">Aucune donn\u00E9e</p>
+          <p className="text-xs text-gray-400 text-center py-3">Aucune donnée</p>
         ) : (
           <div className="space-y-2">
             {top.map((item, i) => {
@@ -71,7 +71,7 @@ function MiniDistribution({
               return (
                 <div key={item.label}>
                   <div className="flex items-center justify-between text-xs mb-0.5">
-                    <span className="font-medium text-gray-700 truncate max-w-[55%]">{item.label || 'Non renseign\u00E9'}</span>
+                    <span className="font-medium text-gray-700 truncate max-w-[55%]">{item.label || 'Non renseigné'}</span>
                     <span className="text-gray-500">{formatCompact(item.montant)} <span className="text-gray-400">({pct}%)</span></span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-1.5">
@@ -175,7 +175,7 @@ function ConversionFunnel({
           </div>
           <div>
             <div className="flex justify-between text-xs mb-1">
-              <span className="text-gray-600">Finalis\u00E9s</span>
+              <span className="text-gray-600">Finalisés</span>
               <span className="font-semibold">{finalises} <span className="text-green-600">({convFin}%)</span></span>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-3">
@@ -184,7 +184,7 @@ function ConversionFunnel({
           </div>
         </div>
         <p className="text-[10px] text-gray-400 mt-2 text-center">
-          Taux global : {total > 0 ? (finalises / total * 100).toFixed(1) : '0'}% prospect &rarr; finalis\u00E9
+          Taux global : {total > 0 ? (finalises / total * 100).toFixed(1) : '0'}% prospect &rarr; finalisé
         </p>
       </CardContent>
     </Card>
@@ -301,7 +301,7 @@ export default function AnalysePage() {
   // ===== MONTHLY EVOLUTION =====
   const monthlyCollecte = React.useMemo(() => {
     const year = periodeDebut ? parseInt(periodeDebut.substring(0, 4)) : new Date().getFullYear()
-    const monthLabels = ['Jan', 'F\u00E9v', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Ao\u00FB', 'Sep', 'Oct', 'Nov', 'D\u00E9c']
+    const monthLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
     const monthData = monthLabels.map((label) => ({ label, value: 0 }))
 
     filteredData
@@ -318,7 +318,7 @@ export default function AnalysePage() {
 
   const monthlyCommissions = React.useMemo(() => {
     const year = periodeDebut ? parseInt(periodeDebut.substring(0, 4)) : new Date().getFullYear()
-    const monthLabels = ['Jan', 'F\u00E9v', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Ao\u00FB', 'Sep', 'Oct', 'Nov', 'D\u00E9c']
+    const monthLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
     const monthData = monthLabels.map((label) => ({ label, value: 0 }))
 
     filteredData
@@ -337,7 +337,7 @@ export default function AnalysePage() {
   const buildDist = React.useCallback((keyFn: (d: VDossiersComplets) => string) => {
     const map = new Map<string, { count: number; montant: number }>()
     filteredData.forEach((d) => {
-      const key = keyFn(d) || 'Non renseign\u00E9'
+      const key = keyFn(d) || 'Non renseigné'
       const prev = map.get(key) || { count: 0, montant: 0 }
       map.set(key, { count: prev.count + 1, montant: prev.montant + (d.montant || 0) })
     })
@@ -387,21 +387,21 @@ export default function AnalysePage() {
   // Export
   const handleExport = () => {
     const cols = [
-      { key: 'client_prenom', label: 'Pr\u00E9nom' },
+      { key: 'client_prenom', label: 'Prénom' },
       { key: 'client_nom', label: 'Nom' },
       { key: 'client_pays', label: 'Pays' },
       { key: 'produit_nom', label: 'Produit' },
       { key: 'compagnie_nom', label: 'Compagnie' },
       { key: 'montant', label: 'Montant', formatter: formatCurrencyForCSV },
       { key: 'financement', label: 'Financement' },
-      { key: 'date_operation', label: 'Date op\u00E9ration', formatter: formatDateForCSV },
+      { key: 'date_operation', label: 'Date opération', formatter: formatDateForCSV },
       { key: 'statut', label: 'Statut' },
       { key: 'commission_brute', label: 'Commission brute', formatter: formatCurrencyForCSV },
-      { key: 'rem_apporteur', label: 'R\u00E9m. apporteur', formatter: formatCurrencyForCSV },
-      { key: 'consultant_prenom', label: 'Consultant pr\u00E9nom' },
+      { key: 'rem_apporteur', label: 'Rém. apporteur', formatter: formatCurrencyForCSV },
+      { key: 'consultant_prenom', label: 'Consultant prénom' },
       { key: 'consultant_nom', label: 'Consultant nom' },
-      { key: 'facturee', label: 'Factur\u00E9e', formatter: (v: any) => (v ? 'Oui' : 'Non') },
-      { key: 'payee', label: 'Pay\u00E9e' },
+      { key: 'facturee', label: 'Facturée', formatter: (v: any) => (v ? 'Oui' : 'Non') },
+      { key: 'payee', label: 'Payée' },
     ]
     exportCSV(filteredData, cols, { filename: getExportFilename('analyse-pev') })
   }
@@ -467,7 +467,7 @@ export default function AnalysePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Analyse</h1>
-          <p className="text-gray-600 mt-1">Vue strat\u00E9gique de l&apos;activit\u00E9</p>
+          <p className="text-gray-600 mt-1">Vue stratégique de l&apos;activité</p>
         </div>
         <Button className="gap-2" onClick={handleExport} disabled={filteredData.length === 0}>
           <Download size={18} />
@@ -486,7 +486,7 @@ export default function AnalysePage() {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">D\u00E9but</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Début</label>
               <input type="date" value={periodeDebut} onChange={(e) => setPeriodeDebut(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
             </div>
@@ -514,7 +514,7 @@ export default function AnalysePage() {
                 <option value="tous">Tous</option>
                 <option value="prospect">Prospect</option>
                 <option value="client_en_cours">En cours</option>
-                <option value="client_finalise">Finalis\u00E9</option>
+                <option value="client_finalise">Finalisé</option>
               </select>
             </div>
             <div>
@@ -544,7 +544,7 @@ export default function AnalysePage() {
           </div>
           <div className="flex justify-end mt-2">
             <Button variant="ghost" size="sm" onClick={resetFilters} className="text-xs text-gray-500">
-              R\u00E9initialiser
+              Réinitialiser
             </Button>
           </div>
         </CardContent>
@@ -563,7 +563,7 @@ export default function AnalysePage() {
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-1">
             <TrendingUp size={14} className="text-green-600" />
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Collecte finalis\u00E9e</p>
+            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Collecte finalisée</p>
           </div>
           <p className="text-2xl font-bold text-green-700">{formatCompact(agg.montantFinalise)}</p>
           <p className="text-[11px] text-gray-400 mt-0.5">{agg.finalized} dossier{agg.finalized > 1 ? 's' : ''}</p>
@@ -574,7 +574,7 @@ export default function AnalysePage() {
             <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Pipeline</p>
           </div>
           <p className="text-2xl font-bold text-amber-700">{formatCompact(agg.montantEnCours)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">{agg.enCours} en cours \u00B7 {agg.prospects} prospect{agg.prospects > 1 ? 's' : ''}</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">{agg.enCours} en cours · {agg.prospects} prospect{agg.prospects > 1 ? 's' : ''}</p>
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -589,7 +589,7 @@ export default function AnalysePage() {
             <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Ticket moyen</p>
           </div>
           <p className="text-2xl font-bold text-teal-700">{formatCompact(agg.ticketMoyen)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">sur finalis\u00E9s</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">sur finalisés</p>
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -597,13 +597,13 @@ export default function AnalysePage() {
             <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Facturation</p>
           </div>
           <p className="text-2xl font-bold text-gray-900">{agg.facturees}/{agg.total}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">{agg.payees} pay\u00E9e{agg.payees > 1 ? 's' : ''} \u00B7 {agg.impayees} impay\u00E9e{agg.impayees > 1 ? 's' : ''}</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">{agg.payees} payée{agg.payees > 1 ? 's' : ''} · {agg.impayees} impayée{agg.impayees > 1 ? 's' : ''}</p>
         </Card>
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <MonthlyChart months={monthlyCollecte} label="Collecte finalis\u00E9e par mois" />
+        <MonthlyChart months={monthlyCollecte} label="Collecte finalisée par mois" />
         <MonthlyChart months={monthlyCommissions} label="Commissions par mois" />
         <ConversionFunnel prospects={agg.prospects} enCours={agg.enCours} finalises={agg.finalized} />
       </div>
@@ -619,11 +619,11 @@ export default function AnalysePage() {
       <div className={`grid grid-cols-1 ${isManager ? 'lg:grid-cols-2' : ''} gap-4`}>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Top 5 clients (collecte finalis\u00E9e)</CardTitle>
+            <CardTitle className="text-sm font-semibold">Top 5 clients (collecte finalisée)</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             {topClients.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-3">Aucun dossier finalis\u00E9</p>
+              <p className="text-xs text-gray-400 text-center py-3">Aucun dossier finalisé</p>
             ) : (
               <div className="space-y-2">
                 {topClients.map((c, i) => (
@@ -646,11 +646,11 @@ export default function AnalysePage() {
         {isManager && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Performance consultants (finalis\u00E9s)</CardTitle>
+              <CardTitle className="text-sm font-semibold">Performance consultants (finalisés)</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               {consultantRanking.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-3">Aucune donn\u00E9e</p>
+                <p className="text-xs text-gray-400 text-center py-3">Aucune donnée</p>
               ) : (
                 <div className="space-y-2">
                   {consultantRanking.map((c, i) => (
@@ -680,7 +680,7 @@ export default function AnalysePage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 size={20} className="text-gray-600" />
-            D\u00E9tail ({filteredData.length} r\u00E9sultat{filteredData.length > 1 ? 's' : ''})
+            Détail ({filteredData.length} résultat{filteredData.length > 1 ? 's' : ''})
           </CardTitle>
         </CardHeader>
         <CardContent>
