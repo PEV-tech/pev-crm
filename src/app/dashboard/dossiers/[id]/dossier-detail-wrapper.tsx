@@ -870,7 +870,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               {!isEditing && (() => {
                 const fields = [
                   dossier.statut_kyc === 'oui',
-                  !!dossier.der, !!dossier.pi, !!dossier.preco, !!dossier.lm, !!dossier.rm,
+                  !!dossier.der, !!dossier.pi, !!dossier.lm, !!dossier.rm,
                 ]
                 const done = fields.filter(Boolean).length
                 const pct = (done / 5) * 100
