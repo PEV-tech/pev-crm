@@ -23,13 +23,12 @@ export function MaClienteleClientWrapper() {
       try {
         const supabase = createClient()
 
-        // Manager sees all, consultant sees own
-        let query = supabase.from('v_dossiers_complets').select('*')
-
-        if (consultant?.role !== 'manager') {
-          // Filter by prenom (unique per consultant) since noms have placeholder values in DB
-          query = query.eq('consultant_prenom', consultant?.prenom)
-        }
+        // Always filter by current user's prenom — Ma Clientèle = MES dossiers
+        // (All dossiers = page Dossiers, accessible aux managers/BO)
+        let query = supabase
+          .from('v_dossiers_complets')
+          .select('*')
+          .eq('consultant_prenom', consultant?.prenom)
 
         // Also fetch frais de gestion grilles for quarterly encours computation
         const [dossiersRes, grillesRes] = await Promise.all([

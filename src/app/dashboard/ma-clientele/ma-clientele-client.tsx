@@ -1,12 +1,14 @@
 'use client'
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import { VDossiersComplets } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Users, TrendingUp, CheckCircle, ExternalLink } from 'lucide-react'
+import { Users, TrendingUp, CheckCircle, Plus } from 'lucide-react'
 import Link from 'next/link'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -40,8 +42,74 @@ function computeQuarterlyConsultant(
   const tauxGestion = getGestionTaux(grilles, montant)
   if (!tauxGestion) return null
   if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
-  const consultantPct = remApporteur / commissionBrute
-  return (montant * tauxGestion * consultantPct) / 4
+  return (montant * tauxGestion * (remApporteur / commissionBrute)) / 4
+}
+
+// Tooltip component for commission details
+function CommissionTooltip({
+  row,
+  isConsultant,
+  gestionGrilles,
+}: {
+  row: VDossiersComplets
+  isConsultant: boolean
+  gestionGrilles: GrilleGestion[]
+}) {
+  const [visible, setVisible] = React.useState(false)
+  const entree = isConsultant ? row.rem_apporteur : row.commission_brute
+  const quarterly = isConsultant
+    ? computeQuarterlyConsultant(row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles)
+    : row.montant && gestionGrilles.length > 0
+    ? (row.montant * getGestionTaux(gestionGrilles, row.montant)) / 4
+    : null
+
+  if (!entree && !quarterly) return <span>{formatCurrency(entree)}</span>
+
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <div className="cursor-help text-sm">
+        <div className="font-medium">{formatCurrency(entree)}</div>
+        {quarterly !== null && (
+          <div className="text-xs text-green-600">+ {formatCurrency(quarterly)}/trim.</div>
+        )}
+      </div>
+      {visible && (
+        <div className="absolute z-50 bottom-full left-0 mb-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl p-3 text-xs">
+          <p className="font-semibold text-gray-800 mb-2">Détail commission</p>
+          <div className="space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Droits d'entrée (souscription)</span>
+              <span className="font-semibold text-gray-900">{formatCurrency(isConsultant ? row.rem_apporteur : row.commission_brute)}</span>
+            </div>
+            {quarterly !== null && (
+              <div className="flex justify-between border-t border-gray-100 pt-1.5">
+                <span className="text-gray-600">Encours (par trimestre)</span>
+                <span className="font-semibold text-green-700">{formatCurrency(quarterly)}</span>
+              </div>
+            )}
+            {quarterly !== null && entree !== null && entree !== undefined && (
+              <div className="flex justify-between border-t border-gray-100 pt-1.5">
+                <span className="text-gray-500">Total annuel estimé</span>
+                <span className="font-semibold text-indigo-700">{formatCurrency((entree || 0) + quarterly * 4)}</span>
+              </div>
+            )}
+          </div>
+          {!isConsultant && row.rem_apporteur && (
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Part consultant</span>
+                <span className="font-medium">{formatCurrency(row.rem_apporteur)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface MaClienteleClientProps {
@@ -51,6 +119,7 @@ interface MaClienteleClientProps {
 }
 
 export function MaClienteleClient({ initialData, consultant, gestionGrilles = [] }: MaClienteleClientProps) {
+  const router = useRouter()
   const [data] = React.useState(initialData)
   const [activeTab, setActiveTab] = React.useState('tous')
   const isConsultant = consultant?.role === 'consultant'
@@ -68,13 +137,7 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
       .filter((d) => d.statut === 'client_finalise')
       .reduce((sum, d) => sum + (d.montant || 0), 0)
 
-    return {
-      totalDossiers,
-      enCours,
-      finalisés,
-      pipelineTotal,
-      collecteTotal,
-    }
+    return { totalDossiers, enCours, finalisés, pipelineTotal, collecteTotal }
   }, [data])
 
   const filteredData = React.useMemo(() => {
@@ -89,66 +152,35 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
       key: 'client_nom',
       label: 'Client',
       sortable: true,
-      render: (_, row) =>
-        `${row.client_prenom || ''} ${row.client_nom || ''}`.trim(),
+      render: (_, row) => `${row.client_prenom || ''} ${row.client_nom || ''}`.trim(),
     },
-    {
-      key: 'produit_nom',
-      label: 'Produit',
-      sortable: true,
-    },
-    {
-      key: 'compagnie_nom',
-      label: 'Compagnie',
-      sortable: true,
-    },
+    { key: 'produit_nom', label: 'Produit', sortable: true },
+    { key: 'compagnie_nom', label: 'Compagnie', sortable: true },
     {
       key: 'montant',
       label: 'Montant',
       sortable: true,
       render: (value) => formatCurrency(value),
     },
-    {
-      key: 'financement',
-      label: 'Financement',
-      sortable: true,
-    },
+    { key: 'financement', label: 'Financement', sortable: true },
     {
       key: 'date_operation',
       label: 'Date',
       sortable: true,
-      render: (value) => {
-        if (!value) return '-'
-        return new Date(value).toLocaleDateString('fr-FR')
-      },
+      render: (value) => (value ? new Date(value).toLocaleDateString('fr-FR') : '-'),
     },
-    // Commission column: entry fee + quarterly encours for consultants
+    // Commission with tooltip
     {
       key: isConsultant ? 'rem_apporteur' : 'commission_brute',
       label: isConsultant ? 'Ma commission' : 'Commission',
       sortable: true,
-      render: (value, row) => {
-        const entree = value ? formatCurrency(value) : '-'
-        if (!isConsultant || gestionGrilles.length === 0) return entree
-
-        const quarterly = computeQuarterlyConsultant(
-          row.montant,
-          row.rem_apporteur,
-          row.commission_brute,
-          gestionGrilles
-        )
-
-        if (quarterly === null) return entree
-
-        return (
-          <div className="text-sm">
-            <div className="font-medium">{entree}</div>
-            <div className="text-xs text-green-600 mt-0.5">
-              + {formatCurrency(quarterly)}/trim. encours
-            </div>
-          </div>
-        )
-      },
+      render: (_, row) => (
+        <CommissionTooltip
+          row={row}
+          isConsultant={isConsultant}
+          gestionGrilles={gestionGrilles}
+        />
+      ),
     },
     {
       key: 'statut',
@@ -161,28 +193,21 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
         />
       ),
     },
-    {
-      key: 'id',
-      label: '',
-      render: (value) => (
-        <Link
-          href={`/dashboard/dossiers/${value}`}
-          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
-        >
-          Voir <ExternalLink size={14} />
-        </Link>
-      ),
-    },
   ]
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Ma Clientèle</h1>
-        <p className="text-gray-600 mt-1">
-          Mes dossiers et clients
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Ma Clientèle</h1>
+          <p className="text-gray-600 mt-1">Mes dossiers et clients</p>
+        </div>
+        <Link href="/dashboard/dossiers/nouveau">
+          <Button className="gap-2">
+            <Plus size={18} />
+            Nouveau dossier
+          </Button>
+        </Link>
       </div>
 
       {/* Stats Grid */}
@@ -207,9 +232,7 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-gray-900">
-              {formatCurrency(stats.pipelineTotal)}
-            </p>
+            <p className="text-3xl font-bold text-gray-900">{formatCurrency(stats.pipelineTotal)}</p>
             <p className="text-xs text-gray-600 mt-1">({stats.enCours} dossier(s))</p>
           </CardContent>
         </Card>
@@ -222,43 +245,35 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-gray-900">
-              {formatCurrency(stats.collecteTotal)}
-            </p>
+            <p className="text-3xl font-bold text-gray-900">{formatCurrency(stats.collecteTotal)}</p>
             <p className="text-xs text-gray-600 mt-1">({stats.finalisés} dossier(s))</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Table with Tabs */}
       <Card>
         <CardHeader>
           <CardTitle>Mes dossiers</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs
-            defaultValue="tous"
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="space-y-4"
-          >
+          <Tabs defaultValue="tous" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList>
               <TabsTrigger value="tous">Tous ({stats.totalDossiers})</TabsTrigger>
               <TabsTrigger value="en_cours">En cours ({stats.enCours})</TabsTrigger>
               <TabsTrigger value="finalises">Finalisés ({stats.finalisés})</TabsTrigger>
             </TabsList>
-
-            <TabsContent value="tous">
-              <DataTable data={filteredData} columns={columns} pageSize={10} />
-            </TabsContent>
-
-            <TabsContent value="en_cours">
-              <DataTable data={filteredData} columns={columns} pageSize={10} />
-            </TabsContent>
-
-            <TabsContent value="finalises">
-              <DataTable data={filteredData} columns={columns} pageSize={10} />
-            </TabsContent>
+            {['tous', 'en_cours', 'finalises'].map((tab) => (
+              <TabsContent key={tab} value={tab}>
+                <DataTable
+                  data={filteredData}
+                  columns={columns}
+                  pageSize={10}
+                  onRowClick={(row) => {
+                    if (row.id) router.push(`/dashboard/dossiers/${row.id}`)
+                  }}
+                />
+              </TabsContent>
+            ))}
           </Tabs>
         </CardContent>
       </Card>

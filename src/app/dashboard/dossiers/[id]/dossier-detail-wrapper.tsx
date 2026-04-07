@@ -48,6 +48,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [saveError, setSaveError] = React.useState('')
   const [editForm, setEditForm] = React.useState<any>({})
   const [tauxGestion, setTauxGestion] = React.useState<number | null>(null)
+  const [produits, setProduits] = React.useState<{ id: string; nom: string }[]>([])
+  const [compagnies, setCompagnies] = React.useState<{ id: string; nom: string }[]>([])
 
   const isConsultant = currentUser?.role === 'consultant'
 
@@ -59,16 +61,30 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   React.useEffect(() => {
     const fetchAll = async () => {
       try {
-        const { data, error } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).single()
+        const [dossierRes, produitsRes, compagniesRes] = await Promise.all([
+          supabase.from('v_dossiers_complets').select('*').eq('id', id).single(),
+          supabase.from('produits').select('id, nom').order('nom'),
+          supabase.from('compagnies').select('id, nom').order('nom'),
+        ])
+
+        if (produitsRes.data) setProduits(produitsRes.data)
+        if (compagniesRes.data) setCompagnies(compagniesRes.data)
+
+        const { data, error } = dossierRes
         if (error || !data) { setNotFound(true) }
         else {
           setDossier(data as VDossiersComplets)
+          // Find IDs from view data by matching names to lists
+          const produitId = produitsRes.data?.find((p) => p.nom === data.produit_nom)?.id || ''
+          const compagnieId = compagniesRes.data?.find((c) => c.nom === data.compagnie_nom)?.id || ''
           setEditForm({
             statut: data.statut || 'prospect',
             montant: data.montant || '',
             financement: data.financement || 'cash',
             date_operation: data.date_operation || '',
             commentaire: data.commentaire || '',
+            produit_id: produitId,
+            compagnie_id: compagnieId,
           })
 
           // Fetch frais de gestion taux for encours commission
@@ -107,6 +123,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         financement: editForm.financement || null,
         date_operation: editForm.date_operation,
         commentaire: editForm.commentaire || null,
+        produit_id: editForm.produit_id || null,
+        compagnie_id: editForm.compagnie_id || null,
       }).eq('id', id)
       if (error) { setSaveError(error.message) }
       else {
@@ -203,11 +221,29 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Produit</p>
-                  <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_nom || '-'}</p>
+                  {isEditing ? (
+                    <Select name="produit_id" value={editForm.produit_id} onChange={handleEditChange} className="mt-1">
+                      <option value="">— Aucun —</option>
+                      {produits.map((p) => (
+                        <option key={p.id} value={p.id}>{p.nom}</option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_nom || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Compagnie</p>
-                  <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.compagnie_nom || '-'}</p>
+                  {isEditing ? (
+                    <Select name="compagnie_id" value={editForm.compagnie_id} onChange={handleEditChange} className="mt-1">
+                      <option value="">— Aucun —</option>
+                      {compagnies.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nom}</option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.compagnie_nom || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Stade relationnel</p>

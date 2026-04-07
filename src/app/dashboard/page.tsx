@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/card'
 import { useRole, useConsultantInfo } from '@/hooks/use-user'
 import { DashboardClient } from './dashboard-client'
-import { PodiumWrapper } from '@/components/dashboard/podium-wrapper'
 import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -25,7 +24,7 @@ export default function DashboardPage() {
   const [allFinalisedDossiers, setAllFinalisedDossiers] = useState<any[]>([])
   const [recentDossiers, setRecentDossiers] = useState<any[]>([])
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([])
-  const [consultantRank, setConsultantRank] = useState<{ rank: number; totalConsultants: number } | null>(null)
+  const [consultantRank, setConsultantRank] = useState<{ rank: number; totalConsultants: number; ecart: number | null } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -82,10 +81,16 @@ export default function DashboardPage() {
             .sort((a, b) => b[1] - a[1])
             .map(([name]) => name)
 
-          const rank = sortedConsultants.indexOf(consultantInfo.name) + 1
+          const sortedEntries = Object.entries(consultantRankings)
+            .sort((a, b) => b[1] - a[1])
+          const rank = sortedEntries.findIndex(([name]) => name === consultantInfo.name) + 1
+          const myCollecte = consultantRankings[consultantInfo.name] || 0
+          const aboveEntry = rank > 1 ? sortedEntries[rank - 2] : null
+          const ecart = aboveEntry ? aboveEntry[1] - myCollecte + 1 : null
           setConsultantRank({
             rank,
-            totalConsultants: sortedConsultants.length
+            totalConsultants: sortedEntries.length,
+            ecart,
           })
         }
       }
@@ -233,6 +238,13 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-gray-900 mt-2">
                   {consultantRank.rank}/{consultantRank.totalConsultants}
                 </p>
+                {consultantRank.ecart !== null ? (
+                  <p className="text-xs text-indigo-600 mt-1">
+                    ↑ {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(consultantRank.ecart)} pour passer {consultantRank.rank - 1}e
+                  </p>
+                ) : (
+                  <p className="text-xs text-green-600 mt-1">🏆 1ère position</p>
+                )}
               </div>
               <div className="bg-indigo-100 p-3 rounded-lg">
                 <Trophy className="text-indigo-600" size={24} />
@@ -241,9 +253,6 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
-
-      {/* Podium / Classement des consultants */}
-      <PodiumWrapper />
 
       {/* Content Grid */}
       <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} allFinalisedDossiers={allFinalisedDossiers} />

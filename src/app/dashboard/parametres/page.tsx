@@ -7,7 +7,7 @@ import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus } from 'lucide-react'
+import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -43,6 +43,7 @@ export default function ParametresPage() {
   const [produits, setProduits] = React.useState<any[]>([])
   const [compagnies, setCompagnies] = React.useState<any[]>([])
   const [grilles, setGrilles] = React.useState<any[]>([])
+  const [grillesEncours, setGrillesEncours] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
 
   // Editing states
@@ -62,17 +63,19 @@ export default function ParametresPage() {
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const [consultantsRes, produitsRes, compagniesRes, grillesRes] = await Promise.all([
+        const [consultantsRes, produitsRes, compagniesRes, grillesRes, grillesEncoursRes] = await Promise.all([
           supabase.from('consultants').select('*'),
           supabase.from('produits').select('*'),
           supabase.from('compagnies').select('*'),
           supabase.from('taux_produit_compagnie').select('*'),
+          supabase.from('grilles_frais').select('*').order('type_frais').order('encours_min'),
         ])
 
         setConsultants(consultantsRes.data || [])
         setProduits(produitsRes.data || [])
         setCompagnies(compagniesRes.data || [])
         setGrilles(grillesRes.data || [])
+        setGrillesEncours(grillesEncoursRes.data || [])
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -368,7 +371,7 @@ export default function ParametresPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="consultants" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="consultants" className="flex items-center gap-2">
                 <Users size={16} />
                 <span className="hidden sm:inline">Consultants</span>
@@ -384,6 +387,10 @@ export default function ParametresPage() {
               <TabsTrigger value="grilles" className="flex items-center gap-2">
                 <Settings size={16} />
                 <span className="hidden sm:inline">Grilles</span>
+              </TabsTrigger>
+              <TabsTrigger value="encours" className="flex items-center gap-2">
+                <TrendingUp size={16} />
+                <span className="hidden sm:inline">Encours</span>
               </TabsTrigger>
             </TabsList>
 
@@ -620,6 +627,74 @@ export default function ParametresPage() {
                     />
                   ))}
                 </div>
+              </div>
+            </TabsContent>
+            {/* Encours (Grilles de gestion trimestrielle) Tab */}
+            <TabsContent value="encours">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Grilles de rémunération sur encours</p>
+                  <p className="text-xs text-gray-500">
+                    Ces taux définissent la rémunération trimestrielle sur les encours gérés.
+                    La rémunération par trimestre = encours × taux ÷ 4 × part consultant.
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Encours min</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Encours max</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Taux annuel</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Taux trimestriel</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Actif</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grillesEncours.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                            Aucune grille de gestion configurée
+                          </td>
+                        </tr>
+                      ) : (
+                        grillesEncours.map((g: any) => (
+                          <tr key={g.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${g.type_frais === 'gestion' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                {g.type_frais === 'gestion' ? 'Gestion (encours)' : 'Entrée'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">{formatCurrency(g.encours_min)}</td>
+                            <td className="px-4 py-3">{g.encours_max ? formatCurrency(g.encours_max) : '∞'}</td>
+                            <td className="px-4 py-3 font-semibold text-green-700">{formatPercentageDecimal(g.taux)}</td>
+                            <td className="px-4 py-3 text-gray-600">{formatPercentageDecimal(g.taux / 4)}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center gap-1 text-xs ${g.actif ? 'text-green-600' : 'text-gray-400'}`}>
+                                {g.actif ? <Check size={14} /> : <X size={14} />}
+                                {g.actif ? 'Actif' : 'Inactif'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {grillesEncours.filter((g: any) => g.type_frais === 'gestion' && g.actif).length > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <p className="text-sm font-medium text-green-800 mb-2 flex items-center gap-2">
+                      <TrendingUp size={16} />
+                      Exemple de calcul de rémunération encours
+                    </p>
+                    <p className="text-xs text-green-700">
+                      Pour un encours de 500 000 € avec un taux de gestion de {formatPercentageDecimal(grillesEncours.find((g: any) => g.type_frais === 'gestion' && g.actif)?.taux || 0)} :<br />
+                      Rémunération annuelle cabinet = {formatCurrency(500000 * (grillesEncours.find((g: any) => g.type_frais === 'gestion' && g.actif)?.taux || 0))}<br />
+                      Rémunération trimestrielle cabinet = {formatCurrency(500000 * (grillesEncours.find((g: any) => g.type_frais === 'gestion' && g.actif)?.taux || 0) / 4)}
+                    </p>
+                  </div>
+                )}
               </div>
             </TabsContent>
           </Tabs>

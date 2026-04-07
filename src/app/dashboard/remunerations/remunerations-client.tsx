@@ -220,24 +220,38 @@ export function RemunerationsClient({
           </Button>
         </div>
 
-        {/* CAGNOTTES MANAGERS — Maxine + Thélo */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ManagerCagnotteCard
-            label="Maxine"
-            remTotal={remTotals.maxine}
-            cagnotteRow={cagnotteData.maxine}
-            dossiers={maxineDossiers}
-            consultantId={isMaxine ? consultant?.id : undefined}
-            isCurrentUser={isMaxine}
-          />
-          <ManagerCagnotteCard
-            label="Thélo"
-            remTotal={remTotals.thelo}
-            cagnotteRow={cagnotteData.thelo}
-            dossiers={theloDossiers}
-            consultantId={isThelo ? consultant?.id : undefined}
-            isCurrentUser={isThelo}
-          />
+        {/* CAGNOTTE MANAGER — seulement la sienne */}
+        <div className="max-w-xl">
+          {isMaxine && (
+            <ManagerCagnotteCard
+              label="Maxine"
+              remTotal={remTotals.maxine}
+              cagnotteRow={cagnotteData.maxine}
+              dossiers={maxineDossiers}
+              consultantId={consultant?.id}
+              isCurrentUser={true}
+            />
+          )}
+          {isThelo && (
+            <ManagerCagnotteCard
+              label="Thélo"
+              remTotal={remTotals.thelo}
+              cagnotteRow={cagnotteData.thelo}
+              dossiers={theloDossiers}
+              consultantId={consultant?.id}
+              isCurrentUser={true}
+            />
+          )}
+          {!isMaxine && !isThelo && (
+            <ManagerCagnotteCard
+              label={consultant?.prenom || 'Manager'}
+              remTotal={buildCagnotte(myDossiers).acquis}
+              cagnotteRow={null}
+              dossiers={myDossiers}
+              consultantId={consultant?.id}
+              isCurrentUser={true}
+            />
+          )}
         </div>
 
         {/* Facturation for current user */}
