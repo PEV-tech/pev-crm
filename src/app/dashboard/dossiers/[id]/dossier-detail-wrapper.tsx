@@ -297,8 +297,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   }, [dossier?.produit_nom])
 
   // Effective taux: prefer custom (saved in commissions) over grille default
-  const effectiveTauxEntree = dossier?.taux_commission ?? tauxEntree
-  const effectiveTauxGestion = dossier?.taux_gestion ?? tauxGestion
+  // Use custom only if it's a meaningful positive value (0 means unset)
+  const effectiveTauxEntree = (dossier?.taux_commission && dossier.taux_commission > 0)
+    ? dossier.taux_commission : tauxEntree
+  const effectiveTauxGestion = (dossier?.taux_gestion && dossier.taux_gestion > 0)
+    ? dossier.taux_gestion : tauxGestion
 
   // Compute quarterly encours commission for this dossier
   const quarterlyEncoursCommission = React.useMemo(() => {
