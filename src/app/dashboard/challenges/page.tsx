@@ -36,15 +36,22 @@ export default function ChallengesPage() {
       const supabase = createClient()
       const { data: dossiers } = await supabase
         .from('v_dossiers_complets')
-        .select('consultant_nom, consultant_prenom, montant, statut')
+        .select('consultant_nom, consultant_prenom, montant, statut, date_operation')
 
       if (!dossiers) { setLoading(false); return }
 
-      // Aggregate collecte per consultant
+      // Aggregate collecte per consultant — only 2026 finalized dossiers
       const map: Record<string, { nom: string; prenom: string; collecte: number; nbDossiers: number }> = {}
       dossiers.forEach((d: any) => {
         if (d.statut !== 'client_finalise') return
         if (!d.consultant_nom || d.consultant_nom.toLowerCase() === 'back office') return
+        // Filter: only dossiers with date_operation in 2026
+        if (d.date_operation) {
+          const year = new Date(d.date_operation).getFullYear()
+          if (year !== 2026) return
+        } else {
+          return // skip dossiers without date
+        }
         const key = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
         if (!map[key]) map[key] = { nom: d.consultant_nom, prenom: d.consultant_prenom || '', collecte: 0, nbDossiers: 0 }
         map[key].collecte += d.montant || 0
@@ -80,7 +87,7 @@ export default function ChallengesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Classement</h1>
-        <p className="text-gray-600 mt-1">Classement des consultants par collecte réalisée</p>
+        <p className="text-gray-600 mt-1">Classement des consultants par collecte réalisée depuis début 2026</p>
       </div>
 
       {/* Mon classement (consultant only) */}
@@ -117,7 +124,7 @@ export default function ChallengesPage() {
         </Card>
       )}
 
-      {/* Manager: overview cards (no full table) */}
+      {/* Manager: overview cards */}
       {isManager && ranked.length > 0 && (
         <Card>
           <CardHeader>
@@ -144,6 +151,62 @@ export default function ChallengesPage() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detail table */}
+      {ranked.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Détail du classement</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-gray-200 bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">#</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Consultant</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Collecte</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Dossiers</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Écart avec le précédent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map((r) => (
+                    <tr key={r.name} className={`border-b border-gray-200 hover:bg-gray-50 ${r.rank === 1 ? 'bg-yellow-50/50' : ''}`}>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                          r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                          r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                          r.rank === 3 ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{r.rank}</span>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{r.prenom} {ranked.find(x => x.prenom === r.prenom)?.name.split(' ').slice(1).join(' ') || ''}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.collecte)}</td>
+                      <td className="px-4 py-3 text-right text-gray-600">{r.nbDossiers}</td>
+                      <td className="px-4 py-3 text-right">
+                        {r.ecart !== null ? (
+                          <span className="text-indigo-600 font-medium">+{formatCurrency(r.ecart)}</span>
+                        ) : (
+                          <span className="text-green-600 font-medium">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {ranked.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center text-gray-500">
+            Aucune collecte finalisée en 2026
           </CardContent>
         </Card>
       )}

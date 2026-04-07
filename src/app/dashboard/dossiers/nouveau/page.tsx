@@ -96,7 +96,7 @@ export default function NewDossierPage() {
       if (dossierError) throw dossierError
 
       await supabase.from('factures').insert({ dossier_id: dossierData.id, facturee: false, payee: 'non' })
-      router.push(`/dossiers/${dossierData.id}`)
+      router.push(`/dashboard/dossiers/${dossierData.id}`)
     } catch (err: any) {
       console.error('Error creating dossier:', err)
       setError(err.message || 'Erreur lors de la création du dossier')

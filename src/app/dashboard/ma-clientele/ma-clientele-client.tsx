@@ -126,6 +126,7 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
 
   const stats = React.useMemo(() => {
     const totalDossiers = data.length
+    const prospects = data.filter((d) => d.statut === 'prospect').length
     const enCours = data.filter((d) => d.statut === 'client_en_cours').length
     const finalisés = data.filter((d) => d.statut === 'client_finalise').length
 
@@ -137,11 +138,12 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
       .filter((d) => d.statut === 'client_finalise')
       .reduce((sum, d) => sum + (d.montant || 0), 0)
 
-    return { totalDossiers, enCours, finalisés, pipelineTotal, collecteTotal }
+    return { totalDossiers, prospects, enCours, finalisés, pipelineTotal, collecteTotal }
   }, [data])
 
   const filteredData = React.useMemo(() => {
     if (activeTab === 'tous') return data
+    if (activeTab === 'prospects') return data.filter((d) => d.statut === 'prospect')
     if (activeTab === 'en_cours') return data.filter((d) => d.statut === 'client_en_cours')
     if (activeTab === 'finalises') return data.filter((d) => d.statut === 'client_finalise')
     return data
@@ -259,10 +261,11 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
           <Tabs defaultValue="tous" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList>
               <TabsTrigger value="tous">Tous ({stats.totalDossiers})</TabsTrigger>
+              <TabsTrigger value="prospects">Prospects ({stats.prospects})</TabsTrigger>
               <TabsTrigger value="en_cours">En cours ({stats.enCours})</TabsTrigger>
               <TabsTrigger value="finalises">Finalisés ({stats.finalisés})</TabsTrigger>
             </TabsList>
-            {['tous', 'en_cours', 'finalises'].map((tab) => (
+            {['tous', 'prospects', 'en_cours', 'finalises'].map((tab) => (
               <TabsContent key={tab} value={tab}>
                 <DataTable
                   data={filteredData}

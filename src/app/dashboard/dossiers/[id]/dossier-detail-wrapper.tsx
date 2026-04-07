@@ -73,7 +73,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         const { data, error } = dossierRes
         if (error || !data) { setNotFound(true) }
         else {
-          setDossier(data as VDossiersComplets)
+          // Fetch client_id from dossiers table
+          const { data: dossierRow } = await supabase.from('dossiers').select('client_id').eq('id', id).single()
+          const enrichedData = { ...data, client_id: dossierRow?.client_id || null }
+          setDossier(enrichedData as any)
           // Find IDs from view data by matching names to lists
           const produitId = produitsRes.data?.find((p) => p.nom === data.produit_nom)?.id || ''
           const compagnieId = compagniesRes.data?.find((c) => c.nom === data.compagnie_nom)?.id || ''
@@ -88,6 +91,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             statut_kyc: data.statut_kyc || 'non',
             der: data.der ? 'oui' : 'non',
             pi: data.pi ? 'oui' : 'non',
+            lm: data.lm ? 'oui' : 'non',
+            rm: data.rm ? 'oui' : 'non',
+            preco: (data as any).preco ? 'oui' : 'non',
             pays: data.client_pays || '',
           })
 
@@ -121,8 +127,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     setSaving(true)
     setSaveError('')
     try {
-      // Update dossier fields
-      const { error } = await supabase.from('dossiers').update({
+      // 1. Update dossier fields (only columns that exist on dossiers table)
+      const { error: dossierError } = await supabase.from('dossiers').update({
         statut: editForm.statut,
         montant: parseFloat(editForm.montant) || 0,
         financement: editForm.financement || null,
@@ -130,24 +136,32 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         commentaire: editForm.commentaire || null,
         produit_id: editForm.produit_id || null,
         compagnie_id: editForm.compagnie_id || null,
-        statut_kyc: editForm.statut_kyc || 'non',
-        der: editForm.der === 'oui',
-        pi: editForm.pi === 'oui',
       }).eq('id', id)
 
-      // Update client pays if changed
-      if (editForm.pays && dossier?.client_pays !== editForm.pays) {
-        const clientId = (dossier as any)?.client_id
-        if (clientId) {
-          await supabase.from('clients').update({ pays: editForm.pays }).eq('id', clientId)
+      if (dossierError) { setSaveError(dossierError.message); setSaving(false); return }
+
+      // 2. Update client fields (réglementaire + pays — columns on clients table)
+      const clientId = (dossier as any)?.client_id
+      if (clientId) {
+        const clientUpdate: Record<string, any> = {
+          statut_kyc: editForm.statut_kyc || 'non',
+          der: editForm.der === 'oui',
+          pi: editForm.pi === 'oui',
+          lm: editForm.lm === 'oui',
+          rm: editForm.rm === 'oui',
         }
+        if (editForm.pays) clientUpdate.pays = editForm.pays
+        const { error: clientError } = await supabase.from('clients').update(clientUpdate).eq('id', clientId)
+        if (clientError) { setSaveError(clientError.message); setSaving(false); return }
       }
-      if (error) { setSaveError(error.message) }
-      else {
-        const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).single()
-        if (data) setDossier(data as VDossiersComplets)
-        setIsEditing(false)
+
+      // Refresh view data
+      const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).single()
+      if (data) {
+        const { data: dossierRow } = await supabase.from('dossiers').select('client_id').eq('id', id).single()
+        setDossier({ ...data, client_id: dossierRow?.client_id || null } as any)
       }
+      setIsEditing(false)
     } catch (e: any) { setSaveError(e.message || 'Erreur lors de la sauvegarde') }
     finally { setSaving(false) }
   }
@@ -354,25 +368,51 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                       )}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm text-gray-600">Commission brute</p>
-                        <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.commission_brute)}</p>
-                        {dossier.taux_commission && (
-                          <p className="text-xs text-gray-500 mt-0.5">{formatPct(dossier.taux_commission)}</p>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-sm text-gray-600">Commission brute</p>
+                          <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.commission_brute)}</p>
+                          {dossier.taux_commission && (
+                            <p className="text-xs text-gray-500 mt-0.5">Taux : {formatPct(dossier.taux_commission)}</p>
+                          )}
+                          {dossier.montant && dossier.taux_commission && (
+                            <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(dossier.taux_commission)}</p>
+                          )}
+                        </div>
+                        {dossier.rem_apporteur !== null && dossier.rem_apporteur !== undefined && (
+                          <div className="bg-indigo-50 rounded-lg p-3">
+                            <p className="text-sm text-indigo-600">Part consultant</p>
+                            <p className="text-xl font-bold text-indigo-900 mt-1">{formatCurrency(dossier.rem_apporteur)}</p>
+                            {dossier.commission_brute && dossier.commission_brute > 0 && (
+                              <p className="text-xs text-indigo-500 mt-0.5">{((dossier.rem_apporteur / dossier.commission_brute) * 100).toFixed(0)}% de la commission</p>
+                            )}
+                          </div>
                         )}
                       </div>
-                      {dossier.rem_apporteur !== null && dossier.rem_apporteur !== undefined && (
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-sm text-gray-600">Part consultant</p>
-                          <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.rem_apporteur)}</p>
+                      {dossier.part_cabinet !== null && dossier.part_cabinet !== undefined && (
+                        <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600">Part cabinet</p>
+                            <p className="text-lg font-bold text-gray-900">{formatCurrency(dossier.part_cabinet)}</p>
+                          </div>
+                          {dossier.pct_cabinet && (
+                            <span className="text-sm font-medium text-gray-500">{formatPct(dossier.pct_cabinet)}</span>
+                          )}
                         </div>
                       )}
-                      {dossier.part_cabinet !== null && dossier.part_cabinet !== undefined && (
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-sm text-gray-600">Part cabinet</p>
-                          <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(dossier.part_cabinet)}</p>
+                      {dossier.rem_support !== null && dossier.rem_support !== undefined && dossier.rem_support > 0 && (
+                        <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600">Rém. support</p>
+                            <p className="text-lg font-bold text-gray-900">{formatCurrency(dossier.rem_support)}</p>
+                          </div>
                         </div>
+                      )}
+                      {dossier.produit_nom && dossier.compagnie_nom && (
+                        <p className="text-xs text-gray-400 pt-1 border-t border-gray-100">
+                          {dossier.produit_nom} · {dossier.compagnie_nom} · {dossier.financement || '-'}
+                        </p>
                       )}
                     </div>
                   )}
@@ -468,30 +508,23 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             <CardContent className="space-y-2">
               {isEditing ? (
                 <>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm font-medium text-gray-700">KYC</span>
-                    <Select name="statut_kyc" value={editForm.statut_kyc} onChange={handleEditChange} className="w-32">
-                      <option value="non">Non</option>
-                      <option value="en_cours">En cours</option>
-                      <option value="oui">Oui</option>
-                    </Select>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm font-medium text-gray-700">DER</span>
-                    <Select name="der" value={editForm.der} onChange={handleEditChange} className="w-32">
-                      <option value="non">Non</option>
-                      <option value="en_cours">En cours</option>
-                      <option value="oui">Oui</option>
-                    </Select>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm font-medium text-gray-700">PI</span>
-                    <Select name="pi" value={editForm.pi} onChange={handleEditChange} className="w-32">
-                      <option value="non">Non</option>
-                      <option value="en_cours">En cours</option>
-                      <option value="oui">Oui</option>
-                    </Select>
-                  </div>
+                  {[
+                    { name: 'statut_kyc', label: 'KYC' },
+                    { name: 'der', label: 'DER' },
+                    { name: 'pi', label: 'PI' },
+                    { name: 'preco', label: 'PRECO' },
+                    { name: 'lm', label: 'LM' },
+                    { name: 'rm', label: 'RM' },
+                  ].map(({ name, label }) => (
+                    <div key={name} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-sm font-medium text-gray-700">{label}</span>
+                      <Select name={name} value={editForm[name] || 'non'} onChange={handleEditChange} className="w-32">
+                        <option value="non">Non</option>
+                        <option value="en_cours">En cours</option>
+                        <option value="oui">Oui</option>
+                      </Select>
+                    </div>
+                  ))}
                 </>
               ) : (
                 <>
@@ -499,6 +532,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     { label: 'KYC', value: dossier.statut_kyc === 'oui', enCours: dossier.statut_kyc === 'en_cours' },
                     { label: 'DER', value: !!dossier.der },
                     { label: 'PI', value: !!dossier.pi },
+                    { label: 'PRECO', value: !!(dossier as any).preco },
+                    { label: 'LM', value: !!dossier.lm },
+                    { label: 'RM', value: !!dossier.rm },
                   ].map(({ label, value, enCours }) => (
                     <div key={label} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                       <span className="text-sm font-medium text-gray-700">{label}</span>
