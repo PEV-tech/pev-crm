@@ -7,7 +7,7 @@ import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp, Target } from 'lucide-react'
+import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp, Target, Eye, Shield, Lock, Unlock } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -45,9 +45,11 @@ export default function ParametresPage() {
   const [grilles, setGrilles] = React.useState<any[]>([])
   const [grillesEncours, setGrillesEncours] = React.useState<any[]>([])
   const [challenges, setChallenges] = React.useState<any[]>([])
+  const [visibilitySettings, setVisibilitySettings] = React.useState<any[]>([])
   const [editingChallenge, setEditingChallenge] = React.useState<string | null>(null)
   const [challengeForm, setChallengeForm] = React.useState<Record<string, number>>({})
   const [savingChallenge, setSavingChallenge] = React.useState(false)
+  const [savingVisibility, setSavingVisibility] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
 
   // Editing states
@@ -67,13 +69,14 @@ export default function ParametresPage() {
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const [consultantsRes, produitsRes, compagniesRes, grillesRes, grillesEncoursRes, challengesRes] = await Promise.all([
+        const [consultantsRes, produitsRes, compagniesRes, grillesRes, grillesEncoursRes, challengesRes, visibilityRes] = await Promise.all([
           supabase.from('consultants').select('*'),
           supabase.from('produits').select('*'),
           supabase.from('compagnies').select('*'),
           supabase.from('taux_produit_compagnie').select('*'),
           supabase.from('grilles_frais').select('*').order('type_frais').order('encours_min'),
           supabase.from('challenges').select('*').eq('annee', 2026),
+          supabase.from('visibility_settings').select('*').order('sort_order'),
         ])
 
         setConsultants(consultantsRes.data || [])
@@ -82,6 +85,7 @@ export default function ParametresPage() {
         setGrilles(grillesRes.data || [])
         setGrillesEncours(grillesEncoursRes.data || [])
         setChallenges(challengesRes.data || [])
+        setVisibilitySettings(visibilityRes.data || [])
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -352,6 +356,36 @@ export default function ParametresPage() {
     },
   ]
 
+  // Visibility toggle handler
+  const handleToggleVisibility = async (settingId: string, field: 'consultant_visible' | 'back_office_visible', currentValue: boolean) => {
+    setSavingVisibility(settingId + field)
+    try {
+      const { error } = await supabase
+        .from('visibility_settings')
+        .update({ [field]: !currentValue, updated_at: new Date().toISOString() })
+        .eq('id', settingId)
+      if (error) throw error
+      setVisibilitySettings(prev => prev.map(s =>
+        s.id === settingId ? { ...s, [field]: !currentValue } : s
+      ))
+    } catch (error) {
+      console.error('Error updating visibility:', error)
+      alert('Erreur lors de la sauvegarde')
+    } finally {
+      setSavingVisibility(null)
+    }
+  }
+
+  // Group visibility settings by section
+  const visibilitySections = React.useMemo(() => {
+    const sections: Record<string, any[]> = {}
+    visibilitySettings.forEach(s => {
+      if (!sections[s.section]) sections[s.section] = []
+      sections[s.section].push(s)
+    })
+    return Object.entries(sections)
+  }, [visibilitySettings])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -377,7 +411,7 @@ export default function ParametresPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="consultants" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="consultants" className="flex items-center gap-2">
                 <Users size={16} />
                 <span className="hidden sm:inline">Consultants</span>
@@ -402,6 +436,12 @@ export default function ParametresPage() {
                 <Target size={16} />
                 <span className="hidden sm:inline">Objectifs</span>
               </TabsTrigger>
+              {role === 'manager' && (
+                <TabsTrigger value="vue" className="flex items-center gap-2">
+                  <Eye size={16} />
+                  <span className="hidden sm:inline">Vue</span>
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* Consultants Tab */}
@@ -810,6 +850,101 @@ export default function ParametresPage() {
                 </div>
               </div>
             </TabsContent>
+
+            {/* Vue (Visibility) Tab — Manager only */}
+            {role === 'manager' && (
+              <TabsContent value="vue">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3 pb-2">
+                    <Shield size={20} className="text-indigo-600" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Contrôle de visibilité des données</p>
+                      <p className="text-xs text-gray-500">Définissez ce que chaque rôle peut voir dans le CRM. Les managers voient toujours tout.</p>
+                    </div>
+                  </div>
+
+                  {/* Column headers */}
+                  <div className="grid grid-cols-12 gap-4 items-center px-4 py-2 bg-gray-50 rounded-lg border">
+                    <div className="col-span-6">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Paramètre</span>
+                    </div>
+                    <div className="col-span-3 text-center">
+                      <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Consultants</span>
+                    </div>
+                    <div className="col-span-3 text-center">
+                      <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">Back Office</span>
+                    </div>
+                  </div>
+
+                  {visibilitySections.map(([sectionName, settings]) => (
+                    <div key={sectionName} className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2.5 border-b">
+                        <h3 className="text-sm font-semibold text-gray-700">{sectionName === 'Remunerations' ? 'Rémunérations' : sectionName === 'Parametres' ? 'Paramètres' : sectionName}</h3>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {settings.map((setting: any) => (
+                          <div key={setting.id} className="grid grid-cols-12 gap-4 items-center px-4 py-3 hover:bg-gray-50/50 transition-colors">
+                            <div className="col-span-6">
+                              <p className="text-sm font-medium text-gray-800">{setting.label}</p>
+                              {setting.description && (
+                                <p className="text-xs text-gray-400 mt-0.5">{setting.description}</p>
+                              )}
+                            </div>
+                            <div className="col-span-3 flex justify-center">
+                              <button
+                                onClick={() => handleToggleVisibility(setting.id, 'consultant_visible', setting.consultant_visible)}
+                                disabled={savingVisibility === setting.id + 'consultant_visible'}
+                                className={`
+                                  relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400
+                                  ${setting.consultant_visible ? 'bg-blue-500' : 'bg-gray-300'}
+                                  ${savingVisibility === setting.id + 'consultant_visible' ? 'opacity-50' : 'cursor-pointer'}
+                                `}
+                              >
+                                <span className={`
+                                  inline-flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200
+                                  ${setting.consultant_visible ? 'translate-x-6' : 'translate-x-1'}
+                                `}>
+                                  {setting.consultant_visible
+                                    ? <Unlock size={10} className="text-blue-500" />
+                                    : <Lock size={10} className="text-gray-400" />
+                                  }
+                                </span>
+                              </button>
+                            </div>
+                            <div className="col-span-3 flex justify-center">
+                              <button
+                                onClick={() => handleToggleVisibility(setting.id, 'back_office_visible', setting.back_office_visible)}
+                                disabled={savingVisibility === setting.id + 'back_office_visible'}
+                                className={`
+                                  relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-400
+                                  ${setting.back_office_visible ? 'bg-purple-500' : 'bg-gray-300'}
+                                  ${savingVisibility === setting.id + 'back_office_visible' ? 'opacity-50' : 'cursor-pointer'}
+                                `}
+                              >
+                                <span className={`
+                                  inline-flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200
+                                  ${setting.back_office_visible ? 'translate-x-6' : 'translate-x-1'}
+                                `}>
+                                  {setting.back_office_visible
+                                    ? <Unlock size={10} className="text-purple-500" />
+                                    : <Lock size={10} className="text-gray-400" />
+                                  }
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                    <p className="font-medium">Note</p>
+                    <p className="mt-1">Les managers ont toujours accès à toutes les données. Ces paramètres contrôlent uniquement la visibilité pour les consultants et le back office.</p>
+                  </div>
+                </div>
+              </TabsContent>
+            )}
 
           </Tabs>
         </CardContent>
