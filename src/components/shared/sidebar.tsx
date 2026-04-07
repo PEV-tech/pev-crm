@@ -13,6 +13,7 @@ import {
   Shield,
   Trophy,
   Bell,
+  BarChart3,
   Settings,
   Menu,
   X,
@@ -72,6 +73,11 @@ const navigationItems = [
     href: '/dashboard/relances',
     icon: Bell,
   },
+  {
+    label: 'Reporting',
+    href: '/dashboard/reporting',
+    icon: BarChart3,
+  },
 ]
 
 export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onLogout }: SidebarProps) {
@@ -104,7 +110,7 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
     }
   }
 
-  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances']
+  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Reporting']
   const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
 
   const visibleItems = navigationItems.filter((item) => {

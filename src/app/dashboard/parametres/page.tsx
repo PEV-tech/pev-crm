@@ -7,7 +7,7 @@ import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp } from 'lucide-react'
+import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp, Target } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -44,6 +44,10 @@ export default function ParametresPage() {
   const [compagnies, setCompagnies] = React.useState<any[]>([])
   const [grilles, setGrilles] = React.useState<any[]>([])
   const [grillesEncours, setGrillesEncours] = React.useState<any[]>([])
+  const [challenges, setChallenges] = React.useState<any[]>([])
+  const [editingChallenge, setEditingChallenge] = React.useState<string | null>(null)
+  const [challengeForm, setChallengeForm] = React.useState<Record<string, number>>({})
+  const [savingChallenge, setSavingChallenge] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
 
   // Editing states
@@ -63,12 +67,13 @@ export default function ParametresPage() {
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const [consultantsRes, produitsRes, compagniesRes, grillesRes, grillesEncoursRes] = await Promise.all([
+        const [consultantsRes, produitsRes, compagniesRes, grillesRes, grillesEncoursRes, challengesRes] = await Promise.all([
           supabase.from('consultants').select('*'),
           supabase.from('produits').select('*'),
           supabase.from('compagnies').select('*'),
           supabase.from('taux_produit_compagnie').select('*'),
           supabase.from('grilles_frais').select('*').order('type_frais').order('encours_min'),
+          supabase.from('challenges').select('*').eq('annee', 2026),
         ])
 
         setConsultants(consultantsRes.data || [])
@@ -76,6 +81,7 @@ export default function ParametresPage() {
         setCompagnies(compagniesRes.data || [])
         setGrilles(grillesRes.data || [])
         setGrillesEncours(grillesEncoursRes.data || [])
+        setChallenges(challengesRes.data || [])
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -371,7 +377,7 @@ export default function ParametresPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="consultants" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="consultants" className="flex items-center gap-2">
                 <Users size={16} />
                 <span className="hidden sm:inline">Consultants</span>
@@ -391,6 +397,10 @@ export default function ParametresPage() {
               <TabsTrigger value="encours" className="flex items-center gap-2">
                 <TrendingUp size={16} />
                 <span className="hidden sm:inline">Encours</span>
+              </TabsTrigger>
+              <TabsTrigger value="objectifs" className="flex items-center gap-2">
+                <Target size={16} />
+                <span className="hidden sm:inline">Objectifs</span>
               </TabsTrigger>
             </TabsList>
 
@@ -697,6 +707,110 @@ export default function ParametresPage() {
                 )}
               </div>
             </TabsContent>
+            {/* Objectifs Tab */}
+            <TabsContent value="objectifs">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">
+                    Objectifs de collecte 2026 par consultant (en €)
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-gray-200 bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Consultant</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-700">Rôle</th>
+                        <th className="px-4 py-3 text-right font-semibold text-gray-700">Objectif 2026</th>
+                        <th className="px-4 py-3 text-right font-semibold text-gray-700">Collecte actuelle</th>
+                        <th className="px-4 py-3 text-right font-semibold text-gray-700">% atteint</th>
+                        {isManager && <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {consultants
+                        .filter((c: any) => c.actif && c.role !== 'back_office')
+                        .sort((a: any, b: any) => a.prenom.localeCompare(b.prenom))
+                        .map((c: any) => {
+                          const challenge = challenges.find((ch: any) => ch.consultant_id === c.id)
+                          const objectif = challenge?.objectif || 0
+                          const collecte = challenge?.collecte || 0
+                          const pct = objectif > 0 ? (collecte / objectif) * 100 : 0
+                          const isEditing = editingChallenge === c.id
+
+                          return (
+                            <tr key={c.id} className="border-b border-gray-200 hover:bg-gray-50">
+                              <td className="px-4 py-3 font-medium text-gray-900">{c.prenom} {c.nom}</td>
+                              <td className="px-4 py-3 text-gray-600 capitalize">{c.role}</td>
+                              <td className="px-4 py-3 text-right">
+                                {isEditing ? (
+                                  <Input
+                                    type="number"
+                                    value={challengeForm[c.id] || ''}
+                                    onChange={(e) => setChallengeForm(prev => ({ ...prev, [c.id]: parseFloat(e.target.value) || 0 }))}
+                                    className="w-40 ml-auto text-right"
+                                    step="10000"
+                                  />
+                                ) : (
+                                  <span className={objectif > 0 ? 'font-semibold' : 'text-gray-400'}>
+                                    {objectif > 0 ? formatCurrency(objectif) : 'Non défini'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right font-medium">{formatCurrency(collecte)}</td>
+                              <td className="px-4 py-3 text-right">
+                                {objectif > 0 ? (
+                                  <div className="flex items-center justify-end gap-2">
+                                    <div className="w-20 bg-gray-200 rounded-full h-2">
+                                      <div className={`h-2 rounded-full ${pct >= 100 ? 'bg-green-500' : pct >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                                        style={{ width: `${Math.min(100, pct)}%` }} />
+                                    </div>
+                                    <span className="text-xs font-medium w-12 text-right">{pct.toFixed(0)}%</span>
+                                  </div>
+                                ) : <span className="text-gray-400">—</span>}
+                              </td>
+                              {isManager && (
+                                <td className="px-4 py-3 text-center">
+                                  {isEditing ? (
+                                    <div className="flex justify-center gap-1">
+                                      <Button size="sm" variant="ghost" onClick={async () => {
+                                        setSavingChallenge(true)
+                                        const val = challengeForm[c.id] || 0
+                                        if (challenge) {
+                                          await supabase.from('challenges').update({ objectif: val }).eq('id', challenge.id)
+                                        } else {
+                                          await supabase.from('challenges').insert({ consultant_id: c.id, annee: 2026, objectif: val, collecte: 0 })
+                                        }
+                                        const { data: newCh } = await supabase.from('challenges').select('*').eq('annee', 2026)
+                                        setChallenges(newCh || [])
+                                        setEditingChallenge(null)
+                                        setSavingChallenge(false)
+                                      }} disabled={savingChallenge}>
+                                        <Check size={16} className="text-green-600" />
+                                      </Button>
+                                      <Button size="sm" variant="ghost" onClick={() => setEditingChallenge(null)}>
+                                        <X size={16} className="text-red-600" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <Button size="sm" variant="ghost" onClick={() => {
+                                      setEditingChallenge(c.id)
+                                      setChallengeForm(prev => ({ ...prev, [c.id]: objectif }))
+                                    }}>
+                                      <Edit2 size={16} className="text-gray-500" />
+                                    </Button>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </TabsContent>
+
           </Tabs>
         </CardContent>
       </Card>

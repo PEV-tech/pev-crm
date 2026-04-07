@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Users, TrendingUp, CheckCircle, Plus } from 'lucide-react'
+import { Users, TrendingUp, CheckCircle, Plus, Globe, Package, Building, Download } from 'lucide-react'
 import Link from 'next/link'
+import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -112,6 +113,76 @@ function CommissionTooltip({
   )
 }
 
+// --- Distribution mini-chart component ---
+interface DistributionItem {
+  label: string
+  count: number
+  montant: number
+}
+
+const COLORS = [
+  'bg-indigo-500', 'bg-blue-500', 'bg-green-500', 'bg-amber-500',
+  'bg-rose-500', 'bg-cyan-500', 'bg-purple-500', 'bg-orange-500',
+  'bg-teal-500', 'bg-pink-500',
+]
+
+function DistributionChart({
+  title,
+  icon,
+  items,
+}: {
+  title: string
+  icon: React.ReactNode
+  items: DistributionItem[]
+}) {
+  const total = items.reduce((s, i) => s + i.montant, 0)
+  const top = items.slice(0, 7)
+  const maxMontant = Math.max(...top.map((i) => i.montant), 1)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {top.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>
+        ) : (
+          <div className="space-y-2.5">
+            {top.map((item, i) => {
+              const pct = total > 0 ? ((item.montant / total) * 100).toFixed(0) : '0'
+              const barW = Math.max((item.montant / maxMontant) * 100, 4)
+              return (
+                <div key={item.label} className="group">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-medium text-gray-700 truncate max-w-[60%]">{item.label || 'Non renseigné'}</span>
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <span>{item.count} dossier{item.count > 1 ? 's' : ''}</span>
+                      <span className="font-semibold text-gray-700">{pct}%</span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${COLORS[i % COLORS.length]}`}
+                      style={{ width: `${barW}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+            {items.length > 7 && (
+              <p className="text-xs text-gray-400 text-center pt-1">+ {items.length - 7} autres</p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 interface MaClienteleClientProps {
   initialData: VDossiersComplets[]
   consultant: any
@@ -149,12 +220,57 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
     return data
   }, [data, activeTab])
 
+  // --- Portfolio distributions (finalisés only for real AUM) ---
+  const distributions = React.useMemo(() => {
+    const finalized = data.filter((d) => d.statut === 'client_finalise' || d.statut === 'client_en_cours')
+    const buildDist = (keyFn: (d: VDossiersComplets) => string): DistributionItem[] => {
+      const map = new Map<string, { count: number; montant: number }>()
+      finalized.forEach((d) => {
+        const key = keyFn(d) || 'Non renseigné'
+        const prev = map.get(key) || { count: 0, montant: 0 }
+        map.set(key, { count: prev.count + 1, montant: prev.montant + (d.montant || 0) })
+      })
+      return Array.from(map.entries())
+        .map(([label, v]) => ({ label, ...v }))
+        .sort((a, b) => b.montant - a.montant)
+    }
+    return {
+      byPays: buildDist((d) => d.client_pays || ''),
+      byProduit: buildDist((d) => d.produit_nom || ''),
+      byCompagnie: buildDist((d) => d.compagnie_nom || ''),
+    }
+  }, [data])
+
+  // --- CSV export ---
+  const handleExport = () => {
+    const csvCols = [
+      { key: 'client_prenom', label: 'Prénom' },
+      { key: 'client_nom', label: 'Nom' },
+      { key: 'client_pays', label: 'Pays' },
+      { key: 'produit_nom', label: 'Produit' },
+      { key: 'compagnie_nom', label: 'Compagnie' },
+      { key: 'montant', label: 'Montant', formatter: formatCurrencyForCSV },
+      { key: 'financement', label: 'Financement' },
+      { key: 'date_operation', label: 'Date', formatter: formatDateForCSV },
+      { key: isConsultant ? 'rem_apporteur' : 'commission_brute', label: 'Commission', formatter: formatCurrencyForCSV },
+      { key: 'statut', label: 'Statut' },
+    ]
+    exportCSV(filteredData, csvCols, { filename: getExportFilename('ma-clientele') })
+  }
+
   const columns: ColumnDefinition<VDossiersComplets>[] = [
     {
       key: 'client_nom',
       label: 'Client',
       sortable: true,
-      render: (_, row) => `${row.client_prenom || ''} ${row.client_nom || ''}`.trim(),
+      render: (_, row) => {
+        const name = `${row.client_prenom || ''} ${row.client_nom || ''}`.trim()
+        return row.client_id ? (
+          <Link href={`/dashboard/clients/${row.client_id}`} className="text-indigo-600 hover:underline font-medium" onClick={e => e.stopPropagation()}>
+            {name}
+          </Link>
+        ) : name
+      },
     },
     { key: 'produit_nom', label: 'Produit', sortable: true },
     { key: 'compagnie_nom', label: 'Compagnie', sortable: true },
@@ -204,12 +320,18 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
           <h1 className="text-3xl font-bold text-gray-900">Ma Clientèle</h1>
           <p className="text-gray-600 mt-1">Mes dossiers et clients</p>
         </div>
-        <Link href="/dashboard/dossiers/nouveau">
-          <Button className="gap-2">
-            <Plus size={18} />
-            Nouveau dossier
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="gap-2" onClick={handleExport}>
+            <Download size={18} />
+            Exporter
           </Button>
-        </Link>
+          <Link href="/dashboard/dossiers/nouveau">
+            <Button className="gap-2">
+              <Plus size={18} />
+              Nouveau dossier
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -251,6 +373,25 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
             <p className="text-xs text-gray-600 mt-1">({stats.finalisés} dossier(s))</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Portfolio Distribution */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <DistributionChart
+          title="Par pays"
+          icon={<Globe size={18} className="text-indigo-600" />}
+          items={distributions.byPays}
+        />
+        <DistributionChart
+          title="Par produit"
+          icon={<Package size={18} className="text-orange-600" />}
+          items={distributions.byProduit}
+        />
+        <DistributionChart
+          title="Par compagnie"
+          icon={<Building size={18} className="text-green-600" />}
+          items={distributions.byCompagnie}
+        />
       </div>
 
       <Card>

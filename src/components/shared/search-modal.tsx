@@ -84,15 +84,15 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             }`,
             url: `/dashboard/dossiers/${d.id}`,
           })
-          // Also add as unique client
+          // Also add as unique client — link to client page if client_id available
           if (!seenClients.has(clientKey) && clientKey) {
             seenClients.add(clientKey)
             searchResults.push({
-              id: `client-${d.id}`,
+              id: `client-${d.client_id || d.id}`,
               type: 'client',
               title: clientKey,
               subtitle: `${d.client_pays || ''} · ${d.statut === 'client_finalise' ? 'Finalisé' : d.statut === 'client_en_cours' ? 'En cours' : 'Prospect'}`,
-              url: `/dashboard/dossiers/${d.id}`,
+              url: d.client_id ? `/dashboard/clients/${d.client_id}` : `/dashboard/dossiers/${d.id}`,
             })
           }
         })
