@@ -114,11 +114,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             email: data.client_email || '',
             telephone: data.client_telephone || '',
           })
-          // Initialize taux edit fields with current values
-          if (data.taux_commission !== null && data.taux_commission !== undefined) {
+          // Initialize taux edit fields with current custom values (only if meaningful > 0)
+          if (data.taux_commission && data.taux_commission > 0) {
             setEditTauxEntree((data.taux_commission * 100).toFixed(2))
           }
-          if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
+          if (data.taux_gestion && data.taux_gestion > 0) {
             setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
           }
 
@@ -133,9 +133,17 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               ])
               if (typeof gestionRes.data === 'number' && gestionRes.data > 0) {
                 setTauxGestion(gestionRes.data)
+                // Pre-fill edit field with grille value if no custom taux set
+                if (!data.taux_gestion || data.taux_gestion <= 0) {
+                  setEditTauxGestion((gestionRes.data * 100).toFixed(2))
+                }
               }
               if (typeof entreeRes.data === 'number' && entreeRes.data > 0) {
                 setTauxEntree(entreeRes.data)
+                // Pre-fill edit field with grille value if no custom taux set
+                if (!data.taux_commission || data.taux_commission <= 0) {
+                  setEditTauxEntree((entreeRes.data * 100).toFixed(2))
+                }
               }
             } catch {
               // taux not available, silently ignore
@@ -186,6 +194,24 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       }).eq('id', id)
 
       if (dossierError) { setSaveError(dossierError.message); setSaving(false); return }
+
+      // 1b. Recalculate commissions if montant changed
+      const newMontant = parseFloat(editForm.montant) || 0
+      if (newMontant !== dossier?.montant && newMontant > 0) {
+        const taux = effectiveTauxEntree
+        if (taux && taux > 0) {
+          const commUpdate: Record<string, any> = {
+            commission_brute: newMontant * taux,
+          }
+          if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
+            commUpdate.rem_apporteur = commUpdate.commission_brute * consultantTauxRemuneration
+            commUpdate.part_cabinet = commUpdate.commission_brute - commUpdate.rem_apporteur
+            commUpdate.pct_cabinet = commUpdate.commission_brute > 0
+              ? commUpdate.part_cabinet / commUpdate.commission_brute : 0
+          }
+          await supabase.from('commissions').update(commUpdate).eq('dossier_id', id)
+        }
+      }
 
       // 2. Update client fields (réglementaire + pays — columns on clients table)
       const clientId = dossier?.client_id
@@ -240,13 +266,25 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         updateData.taux_gestion = tauxGestionDecimal
       }
 
-      // Update commissions table
-      const { error } = await supabase
+      // Upsert commissions: update if exists, insert if not
+      const { data: existingCommission } = await supabase
         .from('commissions')
-        .update(updateData)
+        .select('id')
         .eq('dossier_id', dossier.id)
+        .maybeSingle()
 
-      if (error) throw error
+      if (existingCommission) {
+        const { error } = await supabase
+          .from('commissions')
+          .update(updateData)
+          .eq('dossier_id', dossier.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('commissions')
+          .insert({ dossier_id: dossier.id, ...updateData })
+        if (error) throw error
+      }
 
       // Refresh dossier data
       const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).single()
@@ -671,9 +709,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   {isConsultant ? (
                     <div className="bg-indigo-50 rounded-lg p-4">
                       <p className="text-sm text-indigo-700">Votre rémunération</p>
-                      <p className="text-2xl font-bold text-indigo-900 mt-1">{formatCurrency(dossier.rem_apporteur)}</p>
-                      {dossier.taux_commission && (
-                        <p className="text-xs text-indigo-600 mt-1">Taux commission : {formatPct(dossier.taux_commission)}</p>
+                      <p className="text-2xl font-bold text-indigo-900 mt-1">{formatCurrency(partConsultantEntree)}</p>
+                      {effectiveTauxEntree && (
+                        <p className="text-xs text-indigo-600 mt-1">Taux commission : {formatPct(effectiveTauxEntree)}</p>
                       )}
                     </div>
                   ) : (
@@ -812,17 +850,18 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Réglementaire</CardTitle>
                 {!isEditing && (() => {
+                  // PRECO is derived (der AND pi) — count only 5 real fields
                   const fields = [
                     dossier.statut_kyc === 'oui',
-                    !!dossier.der, !!dossier.pi, !!dossier.preco, !!dossier.lm, !!dossier.rm,
+                    !!dossier.der, !!dossier.pi, !!dossier.lm, !!dossier.rm,
                   ]
                   const done = fields.filter(Boolean).length
                   return (
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      done === 6 ? 'bg-green-100 text-green-700' :
-                      done >= 4 ? 'bg-blue-100 text-blue-700' :
+                      done === 5 ? 'bg-green-100 text-green-700' :
+                      done >= 3 ? 'bg-blue-100 text-blue-700' :
                       done >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                    }`}>{done}/6</span>
+                    }`}>{done}/5</span>
                   )
                 })()}
               </div>
@@ -834,7 +873,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   !!dossier.der, !!dossier.pi, !!dossier.preco, !!dossier.lm, !!dossier.rm,
                 ]
                 const done = fields.filter(Boolean).length
-                const pct = (done / 6) * 100
+                const pct = (done / 5) * 100
                 return (
                   <div className="mb-3">
                     <div className="w-full bg-gray-200 rounded-full h-2">
