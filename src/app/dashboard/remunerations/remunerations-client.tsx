@@ -170,9 +170,10 @@ export function RemunerationsClient({
   }, [])
 
   // ==========================================
-  // MANAGER VIEW
+  // MANAGER / BACK_OFFICE VIEW
   // ==========================================
   if (isManager) {
+    const isBackOffice = role === 'back_office'
     const myDossiers = React.useMemo(() => dossiers.filter(d => {
       const name = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
       return name === myName
@@ -210,7 +211,10 @@ export function RemunerationsClient({
 
     const detailColumns: ColumnDefinition<any>[] = [
       { key: 'client_nom', label: 'Client', render: (_, row) => `${row.client_prenom || ''} ${row.client_nom || ''}`.trim() },
-      { key: 'consultant_prenom', label: 'Consultant', sortable: true, render: (_, row) => `${row.consultant_prenom || ''} ${row.consultant_nom || ''}`.trim() },
+      { key: 'consultant_prenom', label: 'Consultant', sortable: true, render: (_, row) => {
+        const name = `${row.consultant_prenom || ''} ${row.consultant_nom || ''}`.trim()
+        return name === 'Pool Pool' ? 'Pool' : name
+      }},
       { key: 'statut', label: 'Statut', render: (value) => <Badge variant={statutVariant(value)}>{statutLabel(value)}</Badge> },
       { key: 'montant', label: 'Montant', sortable: true, render: (value) => formatCurrency(value) },
       { key: 'commission_brute', label: 'Commission brute', sortable: true, render: (value) => formatCurrency(value) },
@@ -227,16 +231,19 @@ export function RemunerationsClient({
     ]
 
     const handleExportCSV = React.useCallback(() => {
-      const exportData = filteredDossiers.map(d => ({
-        client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
-        consultant: `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim(),
-        statut: statutLabel(d.statut), montant: formatCurrencyForCSV(d.montant),
-        commission_brute: formatCurrencyForCSV(d.commission_brute),
-        rem_apporteur: formatCurrencyForCSV(d.rem_apporteur),
-        part_cabinet: formatCurrencyForCSV(d.part_cabinet),
-        facturee: d.facturee ? 'Oui' : 'Non',
-        payee: d.payee === 'oui' ? 'Oui' : d.payee === 'en_cours' ? 'Prévision' : 'Non',
-      }))
+      const exportData = filteredDossiers.map(d => {
+        const consultantName = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+        return {
+          client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
+          consultant: consultantName === 'Pool Pool' ? 'Pool' : consultantName,
+          statut: statutLabel(d.statut), montant: formatCurrencyForCSV(d.montant),
+          commission_brute: formatCurrencyForCSV(d.commission_brute),
+          rem_apporteur: formatCurrencyForCSV(d.rem_apporteur),
+          part_cabinet: formatCurrencyForCSV(d.part_cabinet),
+          facturee: d.facturee ? 'Oui' : 'Non',
+          payee: d.payee === 'oui' ? 'Oui' : d.payee === 'en_cours' ? 'Prévision' : 'Non',
+        }
+      })
       exportCSV(exportData, [
         { key: 'client', label: 'Client' }, { key: 'consultant', label: 'Consultant' },
         { key: 'statut', label: 'Statut' }, { key: 'montant', label: 'Montant (EUR)' },
@@ -260,42 +267,44 @@ export function RemunerationsClient({
           </Button>
         </div>
 
-        {/* CAGNOTTE MANAGER — seulement la sienne */}
-        <div className="max-w-xl">
-          {isMaxine && (
-            <ManagerCagnotteCard
-              label="Maxine"
-              remTotal={remTotals.maxine}
-              cagnotteRow={cagnotteData.maxine}
-              dossiers={maxineDossiers}
-              consultantId={consultant?.id}
-              isCurrentUser={true}
-            />
-          )}
-          {isThelo && (
-            <ManagerCagnotteCard
-              label="Thélo"
-              remTotal={remTotals.thelo}
-              cagnotteRow={cagnotteData.thelo}
-              dossiers={theloDossiers}
-              consultantId={consultant?.id}
-              isCurrentUser={true}
-            />
-          )}
-          {!isMaxine && !isThelo && (
-            <ManagerCagnotteCard
-              label={consultant?.prenom || 'Manager'}
-              remTotal={buildCagnotte(myDossiers).acquis}
-              cagnotteRow={null}
-              dossiers={myDossiers}
-              consultantId={consultant?.id}
-              isCurrentUser={true}
-            />
-          )}
-        </div>
+        {/* CAGNOTTE MANAGER — seulement la sienne, masqué pour back_office */}
+        {!isBackOffice && (
+          <div className="max-w-xl">
+            {isMaxine && (
+              <ManagerCagnotteCard
+                label="Maxine"
+                remTotal={remTotals.maxine}
+                cagnotteRow={cagnotteData.maxine}
+                dossiers={maxineDossiers}
+                consultantId={consultant?.id}
+                isCurrentUser={true}
+              />
+            )}
+            {isThelo && (
+              <ManagerCagnotteCard
+                label="Thélo"
+                remTotal={remTotals.thelo}
+                cagnotteRow={cagnotteData.thelo}
+                dossiers={theloDossiers}
+                consultantId={consultant?.id}
+                isCurrentUser={true}
+              />
+            )}
+            {!isMaxine && !isThelo && (
+              <ManagerCagnotteCard
+                label={consultant?.prenom || 'Manager'}
+                remTotal={buildCagnotte(myDossiers).acquis}
+                cagnotteRow={null}
+                dossiers={myDossiers}
+                consultantId={consultant?.id}
+                isCurrentUser={true}
+              />
+            )}
+          </div>
+        )}
 
-        {/* Facturation for current user */}
-        {consultant?.id && (
+        {/* Facturation for current user — hidden for back_office */}
+        {consultant?.id && !isBackOffice && (
           <FacturationConsultant
             consultantId={consultant.id}
             dossiers={myDossiers.filter(d => d.statut === 'client_finalise')}

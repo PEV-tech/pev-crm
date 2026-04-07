@@ -3,6 +3,10 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { Database } from '@/types/database'
 
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl
+  const publicRoutes = ['/login', '/auth']
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -18,16 +22,35 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options as CookieOptions)
-          )
+          cookiesToSet.forEach(({ name, value, options }) => {
+            // Enforce secure cookie settings
+            const secureOptions: CookieOptions = {
+              ...options,
+              httpOnly: true,
+              secure: true,
+              sameSite: 'lax',
+            }
+            response.cookies.set(name, value, secureOptions)
+          })
         },
       },
     }
   )
 
-  // This refreshes a user's session in case it has expired
-  await supabase.auth.getUser()
+  // Refresh session and validate user
+  const { data: { user }, error } = await supabase.auth.getUser()
+
+  // Redirect unauthenticated users to login (except public routes)
+  if (!isPublicRoute && (!user || error)) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // Redirect authenticated users away from login page
+  if (isPublicRoute && user && pathname === '/login') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
 
   return response
 }

@@ -1,4 +1,4 @@
-import { type NextRequest } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 // Routes that don't require authentication
@@ -12,16 +12,11 @@ export async function middleware(request: NextRequest) {
     return await updateSession(request)
   }
 
-  // For all other routes, update the session (which will validate auth)
+  // For all other routes, validate auth and redirect if not authenticated
   return await updateSession(request)
 }
 
 export const config = {
-  // Matcher for all routes except:
-  // - api (API routes)
-  // - _next/static (static files)
-  // - _next/image (image optimization files)
-  // - favicon.ico (favicon file)
   matcher: [
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],

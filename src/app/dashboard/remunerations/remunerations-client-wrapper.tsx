@@ -19,8 +19,8 @@ export function RemunerationsClientWrapper() {
         const supabase = createClient()
         const isManager = consultant.role === 'manager' || consultant.role === 'back_office'
 
-        // Fetch dossiers
-        let query = supabase.from('v_dossiers_complets').select('*')
+        // Fetch dossiers — use secure view that masks pool member details for non-managers
+        let query = supabase.from('v_dossiers_remunerations').select('*')
         if (!isManager) {
           query = query.eq('consultant_prenom', consultant.prenom)
         }
@@ -28,19 +28,20 @@ export function RemunerationsClientWrapper() {
         setDossiers(dossiersData || [])
 
         // Managers only: fetch encaissements_rem totals and manager_cagnotte
+        // (RLS restricts these tables to manager role only — back_office will get empty results)
         if (isManager) {
           const [remRes, cagnotteRes] = await Promise.all([
             supabase.from('encaissements_rem').select('maxine, thelo'),
             supabase.from('manager_cagnotte').select('*'),
           ])
-          if (remRes.data) {
+          if (remRes.data && remRes.data.length > 0) {
             const totals = remRes.data.reduce(
               (acc: any, e: any) => ({ maxine: acc.maxine + Number(e.maxine || 0), thelo: acc.thelo + Number(e.thelo || 0) }),
               { maxine: 0, thelo: 0 }
             )
             setRemTotals(totals)
           }
-          if (cagnotteRes.data) {
+          if (cagnotteRes.data && cagnotteRes.data.length > 0) {
             const maxineRow = cagnotteRes.data.find((r: any) => r.manager_key === 'maxine')
             const theloRow = cagnotteRes.data.find((r: any) => r.manager_key === 'thelo')
             setCagnotte({ maxine: maxineRow || null, thelo: theloRow || null })
