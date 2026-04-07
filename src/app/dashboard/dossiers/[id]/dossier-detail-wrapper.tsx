@@ -127,7 +127,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             const isLuxPe = ['PE', 'CAPI LUX', 'CAV LUX'].includes(prodNom)
             try {
               const [gestionRes, entreeRes] = await Promise.all([
-                supabase.rpc('get_frais_taux', { p_type: 'gestion', p_encours: data.montant }),
+                isLuxPe ? supabase.rpc('get_frais_taux', { p_type: 'gestion', p_encours: data.montant }) : Promise.resolve({ data: null }),
                 isLuxPe ? supabase.rpc('get_frais_taux', { p_type: 'entree', p_encours: data.montant }) : Promise.resolve({ data: null }),
               ])
               if (typeof gestionRes.data === 'number' && gestionRes.data > 0) {
@@ -337,10 +337,16 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
 
   // Effective taux: prefer custom (saved in commissions) over grille default
   // Use custom only if it's a meaningful positive value (0 means unset)
-  const effectiveTauxEntree = (dossier?.taux_commission && dossier.taux_commission > 0)
-    ? dossier.taux_commission : tauxEntree
-  const effectiveTauxGestion = (dossier?.taux_gestion && dossier.taux_gestion > 0)
-    ? dossier.taux_gestion : tauxGestion
+  const effectiveTauxEntree = React.useMemo(() =>
+    (dossier?.taux_commission && dossier.taux_commission > 0)
+      ? dossier.taux_commission : tauxEntree,
+    [dossier?.taux_commission, tauxEntree]
+  )
+  const effectiveTauxGestion = React.useMemo(() =>
+    (dossier?.taux_gestion && dossier.taux_gestion > 0)
+      ? dossier.taux_gestion : tauxGestion,
+    [dossier?.taux_gestion, tauxGestion]
+  )
 
   // Compute quarterly encours commission for this dossier
   const quarterlyEncoursCommission = React.useMemo(() => {
@@ -363,11 +369,21 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   }, [quarterlyEncoursCommission, consultantTauxRemuneration])
 
   // Entry commission: use effective taux (custom if set, otherwise grille)
-  const commissionBruteCalculee = effectiveTauxEntree && dossier?.montant
-    ? dossier.montant * effectiveTauxEntree
-    : dossier?.commission_brute ?? null
+  const commissionBruteCalculee = React.useMemo(() =>
+    effectiveTauxEntree && dossier?.montant
+      ? dossier.montant * effectiveTauxEntree
+      : dossier?.commission_brute ?? null,
+    [effectiveTauxEntree, dossier?.montant, dossier?.commission_brute]
+  )
+  // Réglementaire: count of validated fields (PRECO excluded — derived from der+pi)
+  const reglementaireFields = React.useMemo(() => [
+    dossier?.statut_kyc === 'oui',
+    !!dossier?.der, !!dossier?.pi, !!dossier?.lm, !!dossier?.rm,
+  ], [dossier?.statut_kyc, dossier?.der, dossier?.pi, dossier?.lm, dossier?.rm])
+  const reglementaireDone = React.useMemo(() => reglementaireFields.filter(Boolean).length, [reglementaireFields])
+
   // Part consultant from entry: use consultantTauxRemuneration directly
-  // IMPORTANT: this useMemo MUST be before early returns to respect React hook rules
+  // IMPORTANT: all useMemo MUST be before early returns to respect React hook rules
   const partConsultantEntree = React.useMemo(() => {
     if (!commissionBruteCalculee) return dossier?.rem_apporteur ?? null
     if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
@@ -850,31 +866,18 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Réglementaire</CardTitle>
-                {!isEditing && (() => {
-                  // PRECO is derived (der AND pi) — count only 5 real fields
-                  const fields = [
-                    dossier.statut_kyc === 'oui',
-                    !!dossier.der, !!dossier.pi, !!dossier.lm, !!dossier.rm,
-                  ]
-                  const done = fields.filter(Boolean).length
-                  return (
+                {!isEditing && (
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      done === 5 ? 'bg-green-100 text-green-700' :
-                      done >= 3 ? 'bg-blue-100 text-blue-700' :
-                      done >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                    }`}>{done}/5</span>
-                  )
-                })()}
+                      reglementaireDone === 5 ? 'bg-green-100 text-green-700' :
+                      reglementaireDone >= 3 ? 'bg-blue-100 text-blue-700' :
+                      reglementaireDone >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                    }`}>{reglementaireDone}/5</span>
+                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
               {!isEditing && (() => {
-                const fields = [
-                  dossier.statut_kyc === 'oui',
-                  !!dossier.der, !!dossier.pi, !!dossier.lm, !!dossier.rm,
-                ]
-                const done = fields.filter(Boolean).length
-                const pct = (done / 5) * 100
+                const pct = (reglementaireDone / 5) * 100
                 return (
                   <div className="mb-3">
                     <div className="w-full bg-gray-200 rounded-full h-2">
