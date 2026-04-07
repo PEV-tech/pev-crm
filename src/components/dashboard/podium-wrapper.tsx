@@ -24,10 +24,13 @@ export function PodiumWrapper() {
         setIsLoading(true)
         const supabase = createClient()
 
-        // Fetch complete dossiers view
+        // Fetch 2026 finalized dossiers only
         const { data: dossiers, error: dossiersError } = await supabase
           .from('v_dossiers_complets')
           .select('consultant_nom, consultant_prenom, montant, statut')
+          .eq('statut', 'client_finalise')
+          .gte('date_operation', '2026-01-01')
+          .lte('date_operation', '2026-12-31')
 
         if (dossiersError) throw dossiersError
 
@@ -39,8 +42,7 @@ export function PodiumWrapper() {
 
         if (dossiers) {
           dossiers.forEach((dossier: VDossiersComplets) => {
-            // Filter: statut = 'client_finalise' AND skip back_office
-            if (dossier.statut !== 'client_finalise') return
+            // Skip back_office (statut already filtered server-side)
             if (!dossier.consultant_nom || dossier.consultant_nom.toLowerCase() === 'back office')
               return
 

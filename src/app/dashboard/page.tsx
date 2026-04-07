@@ -35,11 +35,12 @@ export default function DashboardPage() {
       const supabase = createClient()
       const fullName = consultantInfo?.name || ''
 
-      // Single fetch for dossiers (only needed columns) + challenges + factures in parallel
+      // Single fetch for dossiers 2026 only + challenges + factures in parallel
       const [dossiersRes, challengesRes, facturesRes] = await Promise.all([
         supabase
           .from('v_dossiers_complets')
-          .select('id, statut, montant, commission_brute, date_operation, consultant_prenom, consultant_nom, client_prenom, client_nom, produit_nom, compagnie_nom, statut_kyc, facturee, payee'),
+          .select('id, statut, montant, commission_brute, date_operation, consultant_prenom, consultant_nom, client_prenom, client_nom, produit_nom, compagnie_nom, statut_kyc, facturee, payee')
+          .gte('date_operation', '2026-01-01'),
         supabase
           .from('challenges')
           .select('consultant_id, objectif, collecte')

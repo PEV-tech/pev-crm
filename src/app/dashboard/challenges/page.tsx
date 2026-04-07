@@ -34,24 +34,20 @@ export default function ChallengesPage() {
   useEffect(() => {
     async function loadRanking() {
       const supabase = createClient()
+      // Fetch only 2026 finalized dossiers directly from server
       const { data: dossiers } = await supabase
         .from('v_dossiers_complets')
-        .select('consultant_nom, consultant_prenom, montant, statut, date_operation')
+        .select('consultant_nom, consultant_prenom, montant')
+        .eq('statut', 'client_finalise')
+        .gte('date_operation', '2026-01-01')
+        .lte('date_operation', '2026-12-31')
 
       if (!dossiers) { setLoading(false); return }
 
-      // Aggregate collecte per consultant — only 2026 finalized dossiers
+      // Aggregate collecte per consultant
       const map: Record<string, { nom: string; prenom: string; collecte: number; nbDossiers: number }> = {}
       dossiers.forEach((d: any) => {
-        if (d.statut !== 'client_finalise') return
         if (!d.consultant_nom || d.consultant_nom.toLowerCase() === 'back office') return
-        // Filter: only dossiers with date_operation in 2026
-        if (d.date_operation) {
-          const year = new Date(d.date_operation).getFullYear()
-          if (year !== 2026) return
-        } else {
-          return // skip dossiers without date
-        }
         const key = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
         if (!map[key]) map[key] = { nom: d.consultant_nom, prenom: d.consultant_prenom || '', collecte: 0, nbDossiers: 0 }
         map[key].collecte += d.montant || 0
