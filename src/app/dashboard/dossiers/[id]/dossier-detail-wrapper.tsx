@@ -296,34 +296,43 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     return ['PE', 'CAPI LUX', 'CAV LUX'].includes(nom)
   }, [dossier?.produit_nom])
 
+  // Effective taux: prefer custom (saved in commissions) over grille default
+  const effectiveTauxEntree = dossier?.taux_commission ?? tauxEntree
+  const effectiveTauxGestion = dossier?.taux_gestion ?? tauxGestion
+
   // Compute quarterly encours commission for this dossier
   const quarterlyEncoursCommission = React.useMemo(() => {
     if (!dossierHasEncours) return null
-    if (!dossier?.montant || !tauxGestion) return null
+    const taux = effectiveTauxGestion
+    if (!dossier?.montant || !taux) return null
     const montant = dossier.montant
-    const annual = montant * tauxGestion
-    if (isConsultant) {
-      // Consultant's share: use taux_remuneration directly
-      if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-        return (montant * tauxGestion * consultantTauxRemuneration) / 4
-      }
-      return null
-    }
-    // Manager sees total encours revenue for cabinet
+    const annual = montant * taux
+    // Both manager and consultant see the same quarterly total
     return annual / 4
-  }, [dossier, tauxGestion, isConsultant, consultantTauxRemuneration, dossierHasEncours])
+  }, [dossier, effectiveTauxGestion, dossierHasEncours])
 
-  // For LUX/PE: entry commission from grille, not from taux_produit_compagnie
-  const entreeFromGrille = tauxEntree && dossier?.montant ? dossier.montant * tauxEntree : null
-  // Part consultant from grille entry: use consultantTauxRemuneration directly
+  // Part consultant on encours: consultant's share of the quarterly commission
+  const partConsultantEncours = React.useMemo(() => {
+    if (quarterlyEncoursCommission === null) return null
+    if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
+      return quarterlyEncoursCommission * consultantTauxRemuneration
+    }
+    return null
+  }, [quarterlyEncoursCommission, consultantTauxRemuneration])
+
+  // Entry commission: use effective taux (custom if set, otherwise grille)
+  const commissionBruteCalculee = effectiveTauxEntree && dossier?.montant
+    ? dossier.montant * effectiveTauxEntree
+    : dossier?.commission_brute ?? null
+  // Part consultant from entry: use consultantTauxRemuneration directly
   // IMPORTANT: this useMemo MUST be before early returns to respect React hook rules
   const partConsultantEntree = React.useMemo(() => {
-    if (!entreeFromGrille) return dossier?.rem_apporteur ?? null
+    if (!commissionBruteCalculee) return dossier?.rem_apporteur ?? null
     if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-      return entreeFromGrille * consultantTauxRemuneration
+      return commissionBruteCalculee * consultantTauxRemuneration
     }
     return dossier?.rem_apporteur ?? null
-  }, [entreeFromGrille, consultantTauxRemuneration, dossier?.rem_apporteur])
+  }, [commissionBruteCalculee, consultantTauxRemuneration, dossier?.rem_apporteur])
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   if (notFound || !dossier) {
@@ -601,9 +610,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                           step="0.01"
                           className="w-full"
                         />
-                        {dossier?.taux_commission && (
+                        {tauxEntree && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Grille : {(dossier.taux_commission * 100).toFixed(2)}%
+                            Grille : {(tauxEntree * 100).toFixed(2)}%
                           </p>
                         )}
                       </div>
@@ -621,9 +630,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                             step="0.01"
                             className="w-full"
                           />
-                          {dossier?.taux_gestion && (
+                          {tauxGestion && (
                             <p className="text-xs text-gray-500 mt-1">
-                              Grille : {(dossier.taux_gestion * 100).toFixed(2)}%
+                              Grille : {(tauxGestion * 100).toFixed(2)}%
                             </p>
                           )}
                         </div>
@@ -670,24 +679,17 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                         <div className="bg-gray-50 rounded-lg p-3">
                           <p className="text-sm text-gray-600">Commission brute</p>
                           <p className="text-xl font-bold text-gray-900 mt-1">
-                            {formatCurrency(entreeFromGrille || dossier.commission_brute)}
+                            {formatCurrency(commissionBruteCalculee)}
                           </p>
-                          {tauxEntree ? (
+                          {effectiveTauxEntree ? (
                             <>
                               <p className="text-xs text-gray-500 mt-1">
-                                {dossier.taux_commission && (Math.abs((dossier.taux_commission || 0) - tauxEntree) > 0.00001)
+                                {tauxEntree && dossier.taux_commission && (Math.abs(dossier.taux_commission - tauxEntree) > 0.00001)
                                   ? `Grille : ${formatPct(tauxEntree)} → Appliqué : ${formatPct(dossier.taux_commission)}`
-                                  : `Taux appliqué : ${formatPct(tauxEntree)}`
+                                  : `Taux appliqué : ${formatPct(effectiveTauxEntree)}`
                                 }
                               </p>
-                              <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(tauxEntree)}</p>
-                            </>
-                          ) : dossier.taux_commission ? (
-                            <>
-                              <p className="text-xs text-gray-500 mt-1">Taux appliqué : {formatPct(dossier.taux_commission)}</p>
-                              {dossier.montant && (
-                                <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(dossier.taux_commission)}</p>
-                              )}
+                              <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(effectiveTauxEntree)}</p>
                             </>
                           ) : null}
                         </div>
@@ -697,7 +699,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                             <p className="text-xl font-bold text-indigo-900 mt-1">{formatCurrency(partConsultantEntree)}</p>
                             {consultantTauxRemuneration && (
                               <p className="text-xs text-indigo-500 mt-1">
-                                ({formatPct(consultantTauxRemuneration)} de {formatCurrency(entreeFromGrille || dossier.commission_brute)})
+                                ({formatPct(consultantTauxRemuneration)} de {formatCurrency(commissionBruteCalculee)})
                               </p>
                             )}
                           </div>
@@ -713,55 +715,55 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                 </div>
 
                 {/* Encours trimestriel — uniquement pour PE, CAPI LUX, CAV LUX */}
-                {dossierHasEncours && (tauxGestion || quarterlyEncoursCommission !== null) && (
+                {dossierHasEncours && (effectiveTauxGestion || quarterlyEncoursCommission !== null) && (
                   <div className="border-t border-gray-200 pt-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1">
                       <TrendingUp size={13} />
                       Sur encours (rémunération trimestrielle)
                     </p>
                     {isConsultant ? (
-                      quarterlyEncoursCommission !== null ? (
+                      partConsultantEncours !== null ? (
                         <div className="bg-green-50 rounded-lg p-4">
                           <p className="text-sm text-green-700">Votre part estimée / trimestre</p>
                           <p className="text-2xl font-bold text-green-900 mt-1">
-                            {formatCurrency(quarterlyEncoursCommission)}
+                            {formatCurrency(partConsultantEncours)}
                           </p>
                           <p className="text-xs text-green-600 mt-1">
-                            Taux gestion : {formatPct(tauxGestion)} · Encours : {formatCurrency(dossier.montant)}
+                            Taux gestion : {formatPct(effectiveTauxGestion)} · Encours : {formatCurrency(dossier.montant)}
                           </p>
                         </div>
-                      ) : tauxGestion ? (
+                      ) : effectiveTauxGestion ? (
                         <div className="bg-gray-50 rounded-lg p-4">
                           <p className="text-sm text-gray-600">Frais de gestion annuels (cabinet)</p>
                           <p className="text-xl font-bold text-gray-900 mt-1">
-                            {formatCurrency((dossier.montant || 0) * tauxGestion)}
+                            {formatCurrency((dossier.montant || 0) * effectiveTauxGestion)}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">Taux gestion : {formatPct(tauxGestion)}</p>
+                          <p className="text-xs text-gray-500 mt-1">Taux gestion : {formatPct(effectiveTauxGestion)}</p>
                         </div>
                       ) : null
                     ) : (
-                      tauxGestion && (
+                      effectiveTauxGestion && (
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-gray-50 rounded-lg p-3">
                             <p className="text-sm text-gray-600">Encours annuel</p>
                             <p className="text-xl font-bold text-gray-900 mt-1">
-                              {formatCurrency((dossier.montant || 0) * tauxGestion)}
+                              {formatCurrency((dossier.montant || 0) * effectiveTauxGestion)}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {dossier.taux_gestion && (Math.abs((dossier.taux_gestion || 0) - tauxGestion) > 0.00001)
+                              {tauxGestion && dossier.taux_gestion && (Math.abs(dossier.taux_gestion - tauxGestion) > 0.00001)
                                 ? `Grille : ${formatPct(tauxGestion)} → Appliqué : ${formatPct(dossier.taux_gestion)}`
-                                : `Taux appliqué : ${formatPct(tauxGestion)}`
+                                : `Taux appliqué : ${formatPct(effectiveTauxGestion)}`
                               }
                             </p>
                           </div>
                           <div className="bg-gray-50 rounded-lg p-3">
                             <p className="text-sm text-gray-600">Par trimestre</p>
                             <p className="text-xl font-bold text-gray-900 mt-1">
-                              {formatCurrency(((dossier.montant || 0) * tauxGestion) / 4)}
+                              {formatCurrency(quarterlyEncoursCommission)}
                             </p>
-                            {quarterlyEncoursCommission !== null && (
+                            {partConsultantEncours !== null && (
                               <p className="text-xs text-green-600 mt-0.5">
-                                Part consultant : {formatCurrency(quarterlyEncoursCommission)}
+                                Part consultant : {formatCurrency(partConsultantEncours)}
                               </p>
                             )}
                           </div>
@@ -846,7 +848,6 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     { name: 'statut_kyc', label: 'KYC' },
                     { name: 'der', label: 'DER' },
                     { name: 'pi', label: 'PI' },
-                    { name: 'preco', label: 'PRECO' },
                     { name: 'lm', label: 'LM' },
                     { name: 'rm', label: 'RM' },
                   ].map(({ name, label }) => (
@@ -859,6 +860,13 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                       </Select>
                     </div>
                   ))}
+                  {/* PRECO is computed (der AND pi) — show read-only */}
+                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-sm font-medium text-gray-700">PRECO</span>
+                    <Badge variant={editForm.der === 'oui' && editForm.pi === 'oui' ? 'success' : 'destructive'}>
+                      {editForm.der === 'oui' && editForm.pi === 'oui' ? 'Validé (auto)' : 'Non validé'}
+                    </Badge>
+                  </div>
                 </>
               ) : (
                 <>
