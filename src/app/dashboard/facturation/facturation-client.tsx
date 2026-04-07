@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 import { Loader2, Check, FileText } from 'lucide-react'
 
 interface FacturationClientProps {
@@ -37,12 +37,7 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = React.useState(false)
 
-  const supabase = React.useMemo(() => {
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-  }, [])
+  const supabase = React.useMemo(() => createClient(), [])
 
   // Reset selection when tab changes
   React.useEffect(() => {

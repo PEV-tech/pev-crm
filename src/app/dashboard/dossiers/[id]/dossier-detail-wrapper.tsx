@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
 import { VDossiersComplets } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -53,10 +53,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
 
   const isConsultant = currentUser?.role === 'consultant'
 
-  const supabase = React.useMemo(() => createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  ), [])
+  const supabase = React.useMemo(() => createClient(), [])
 
   React.useEffect(() => {
     const fetchAll = async () => {
