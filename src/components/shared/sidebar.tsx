@@ -74,8 +74,8 @@ const navigationItems = [
     icon: Bell,
   },
   {
-    label: 'Reporting',
-    href: '/dashboard/reporting',
+    label: 'Analyse',
+    href: '/dashboard/analyse',
     icon: BarChart3,
   },
 ]
@@ -110,7 +110,7 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
     }
   }
 
-  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Reporting']
+  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse']
   const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
 
   const visibleItems = navigationItems.filter((item) => {
