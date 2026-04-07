@@ -34,7 +34,7 @@ export default function DashboardLayout({
 
       const { data: consultantData } = await supabase
         .from('consultants')
-        .select('*')
+        .select('id, nom, prenom, role, taux_remuneration, zone, actif, auth_user_id')
         .eq('auth_user_id', authUser.id)
         .single()
 

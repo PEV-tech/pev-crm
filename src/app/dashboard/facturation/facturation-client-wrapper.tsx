@@ -17,7 +17,7 @@ export function FacturationClientWrapper() {
 
         const { data, error } = await supabase
           .from('v_dossiers_complets')
-          .select('*')
+          .select('id, client_nom, client_prenom, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, montant, commission_brute, rem_apporteur, part_cabinet, date_operation, date_facture, facturee, payee')
           .eq('statut', 'client_finalise')
           .order('date_operation', { ascending: false })
 

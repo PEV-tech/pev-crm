@@ -27,7 +27,7 @@ export function MaClienteleClientWrapper() {
         // (All dossiers = page Dossiers, accessible aux managers/BO)
         let query = supabase
           .from('v_dossiers_complets')
-          .select('*')
+          .select('id, client_id, statut, montant, financement, date_operation, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_nom, consultant_prenom, produit_nom, produit_categorie, compagnie_nom, commission_brute, facturee, payee')
           .eq('consultant_prenom', consultant?.prenom)
 
         // Also fetch frais de gestion grilles for quarterly encours computation

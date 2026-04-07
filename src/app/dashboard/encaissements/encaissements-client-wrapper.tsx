@@ -19,7 +19,7 @@ export function EncaissementsClientWrapper() {
           supabase.from('encaissements_rem').select('*').order('mois'),
           supabase
             .from('v_dossiers_complets')
-            .select('*')
+            .select('id, client_nom, client_prenom, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, montant, commission_brute, rem_apporteur, part_cabinet, date_facture, payee')
             .eq('payee', 'oui')
             .order('date_facture', { ascending: false }),
         ])

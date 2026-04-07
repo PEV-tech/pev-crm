@@ -32,7 +32,7 @@ export function RelancesClientWrapper() {
         // Fetch complete dossiers view
         const { data: dossiers, error: dossiersError } = await supabase
           .from('v_dossiers_complets')
-          .select('*')
+          .select('id, statut, date_operation, date_facture, client_nom, consultant_nom, consultant_prenom, produit_nom, statut_kyc, der, pi, preco, lm, rm, facturee, payee')
 
         if (dossiersError) throw dossiersError
 

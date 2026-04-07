@@ -24,7 +24,7 @@ export function DossiersClientWrapper() {
         const supabase = createClient()
 
         const [dossiersRes, grillesRes] = await Promise.all([
-          supabase.from('v_dossiers_complets').select('*').order('date_operation', { ascending: false }),
+          supabase.from('v_dossiers_complets').select('id, client_id, statut, montant, financement, date_operation, apporteur_label, referent, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_nom, consultant_prenom, consultant_zone, produit_nom, produit_categorie, compagnie_nom, commission_brute, facturee, payee').order('date_operation', { ascending: false }),
           supabase
             .from('grilles_frais')
             .select('encours_min, encours_max, taux')

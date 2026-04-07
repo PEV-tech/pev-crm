@@ -33,180 +33,108 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadData() {
       const supabase = createClient()
+      const fullName = consultantInfo?.name || ''
 
-      // Get all dossiers for stats
-      const { data: dossiers } = await supabase
-        .from('v_dossiers_complets')
-        .select('*')
-
-      if (dossiers) {
-        let filteredDossiers = dossiers
-
-        // If consultant, filter by their name
-        if (!isManager && consultantInfo?.name) {
-          const fullName = consultantInfo.name
-          filteredDossiers = dossiers.filter((d: any) => {
-            const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-            return dossierConsultant === fullName
-          })
-        }
-
-        const collecte = filteredDossiers
-          .filter((d: any) => d.statut === 'client_finalise')
-          .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
-
-        const pipelineEnCours = filteredDossiers
-          .filter((d: any) => d.statut === 'client_en_cours')
-          .reduce((sum: number, d: any) => sum + (d.montant || 0), 0)
-
-        const caGenere = filteredDossiers
-          .reduce((sum: number, d: any) => sum + (d.commission_brute || 0), 0)
-
-        const dossiersFinalisés = filteredDossiers.filter((d: any) => d.statut === 'client_finalise').length
-
-        setStats({ collecte, caGenere, pipelineEnCours, dossiersFinalisés })
-
-        // Store all finalized dossiers for the monthly chart
-        setAllFinalisedDossiers(filteredDossiers.filter((d: any) => d.statut === 'client_finalise'))
-
-        // Calculate consultant ranking if not a manager
-        if (!isManager && consultantInfo?.name) {
-          const consultantRankings: Record<string, number> = {}
-
-          dossiers.forEach((d: any) => {
-            const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-            if (d.statut === 'client_finalise' && dossierConsultant) {
-              consultantRankings[dossierConsultant] = (consultantRankings[dossierConsultant] || 0) + (d.montant || 0)
-            }
-          })
-
-          const sortedConsultants = Object.entries(consultantRankings)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name]) => name)
-
-          const sortedEntries = Object.entries(consultantRankings)
-            .sort((a, b) => b[1] - a[1])
-          const rank = sortedEntries.findIndex(([name]) => name === consultantInfo.name) + 1
-          const myCollecte = consultantRankings[consultantInfo.name] || 0
-          const aboveEntry = rank > 1 ? sortedEntries[rank - 2] : null
-          const ecart = aboveEntry ? aboveEntry[1] - myCollecte + 1 : null
-          setConsultantRank({
-            rank,
-            totalConsultants: sortedEntries.length,
-            ecart,
-          })
-        }
-      }
-
-      // Fetch challenges for objectives
-      const { data: challenges } = await supabase
-        .from('challenges')
-        .select('*')
-        .eq('annee', 2026)
-
-      if (challenges && challenges.length > 0) {
-        if (!isManager && consultantInfo?.id) {
-          const myChallenge = challenges.find((c: any) => c.consultant_id === consultantInfo.id)
-          if (myChallenge) {
-            setObjectif({ objectif: myChallenge.objectif, collecte: myChallenge.collecte })
-          }
-        } else if (isManager) {
-          // Aggregate all challenges for manager view
-          const totalObjectif = challenges.reduce((s: number, c: any) => s + (c.objectif || 0), 0)
-          const totalCollecte = challenges.reduce((s: number, c: any) => s + (c.collecte || 0), 0)
-          if (totalObjectif > 0) setObjectif({ objectif: totalObjectif, collecte: totalCollecte })
-        }
-      }
-
-      // Calculate annual projection: (collecte YTD / months elapsed) * 12
-      const now = new Date()
-      const monthsElapsed = now.getMonth() + (now.getDate() / 30) // fractional months into 2026
-      if (monthsElapsed > 0 && stats.collecte > 0) {
-        // Use the collecte we just computed
-        const currentCollecte = dossiers
-          ? (isManager ? dossiers : dossiers.filter((d: any) => {
-              const n = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-              return n === consultantInfo?.name
-            }))
-            .filter((d: any) => d.statut === 'client_finalise')
-            .reduce((s: number, d: any) => s + (d.montant || 0), 0)
-          : 0
-        if (currentCollecte > 0) {
-          setProjection((currentCollecte / monthsElapsed) * 12)
-        }
-      }
-
-      // Count relances for badge
-      if (dossiers) {
-        const nowDate = new Date()
-        let relCount = 0
-        const targetDossiers = isManager ? dossiers : dossiers.filter((d: any) => {
-          const n = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-          return n === consultantInfo?.name
-        })
-        targetDossiers.forEach((d: any) => {
-          if (d.statut === 'client_en_cours' && (d.statut_kyc === 'non' || d.statut_kyc === false)) relCount++
-          if (d.statut === 'client_finalise' && d.facturee === true && (d.payee === 'non' || !d.payee)) relCount++
-          const dateOp = d.date_operation ? new Date(d.date_operation) : null
-          if (d.statut === 'client_en_cours' && dateOp) {
-            const days = Math.floor((nowDate.getTime() - dateOp.getTime()) / (1000 * 60 * 60 * 24))
-            if (days >= 30) relCount++
-          }
-        })
-        setRelancesCount(relCount)
-      }
-
-      // Get recent dossiers
-      let recentQuery = supabase
-        .from('v_dossiers_complets')
-        .select('*')
-        .order('date_operation', { ascending: false })
-        .limit(5)
-
-      // If consultant, filter by their name
-      if (!isManager && consultantInfo?.name) {
-        const fullName = consultantInfo.name
-        const { data: recent } = await supabase
+      // Single fetch for dossiers (only needed columns) + challenges + factures in parallel
+      const [dossiersRes, challengesRes, facturesRes] = await Promise.all([
+        supabase
           .from('v_dossiers_complets')
-          .select('*')
-          .order('date_operation', { ascending: false })
-          .limit(100)
+          .select('id, statut, montant, commission_brute, date_operation, consultant_prenom, consultant_nom, client_prenom, client_nom, produit_nom, compagnie_nom, statut_kyc, facturee, payee'),
+        supabase
+          .from('challenges')
+          .select('consultant_id, objectif, collecte')
+          .eq('annee', 2026),
+        supabase
+          .from('factures')
+          .select('id, dossier_id, facturee, montant')
+          .eq('facturee', false)
+          .limit(20),
+      ])
 
-        const filtered = (recent || []).filter((d: any) => {
-          const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-          return dossierConsultant === fullName
-        }).slice(0, 5)
+      const dossiers = dossiersRes.data || []
+      const challenges = challengesRes.data || []
 
-        setRecentDossiers(filtered)
-      } else {
-        const { data: recent } = await recentQuery
-        setRecentDossiers(recent || [])
+      // Single filter pass for consultant dossiers
+      const filteredDossiers = (!isManager && fullName)
+        ? dossiers.filter((d: any) => `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim() === fullName)
+        : dossiers
+
+      // Single pass through filtered dossiers to compute all stats at once
+      let collecte = 0, pipelineEnCours = 0, caGenere = 0, dossiersFinalisés = 0, relCount = 0
+      const finalised: any[] = []
+      const nowDate = new Date()
+
+      filteredDossiers.forEach((d: any) => {
+        caGenere += d.commission_brute || 0
+
+        if (d.statut === 'client_finalise') {
+          collecte += d.montant || 0
+          dossiersFinalisés++
+          finalised.push(d)
+          if (d.facturee === true && (d.payee === 'non' || !d.payee)) relCount++
+        } else if (d.statut === 'client_en_cours') {
+          pipelineEnCours += d.montant || 0
+          if (d.statut_kyc === 'non' || d.statut_kyc === false) relCount++
+          const dateOp = d.date_operation ? new Date(d.date_operation) : null
+          if (dateOp && Math.floor((nowDate.getTime() - dateOp.getTime()) / 86400000) >= 30) relCount++
+        }
+      })
+
+      setStats({ collecte, caGenere, pipelineEnCours, dossiersFinalisés })
+      setAllFinalisedDossiers(finalised)
+      setRelancesCount(relCount)
+
+      // Projection: (collecte YTD / months elapsed) * 12
+      const monthsElapsed = nowDate.getMonth() + (nowDate.getDate() / 30)
+      if (monthsElapsed > 0 && collecte > 0) {
+        setProjection((collecte / monthsElapsed) * 12)
       }
 
-      // Get pending invoices
-      const { data: factures } = await supabase
-        .from('factures')
-        .select('*')
+      // Consultant ranking (single sort)
+      if (!isManager && fullName) {
+        const rankings: Record<string, number> = {}
+        dossiers.forEach((d: any) => {
+          if (d.statut === 'client_finalise') {
+            const name = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+            if (name) rankings[name] = (rankings[name] || 0) + (d.montant || 0)
+          }
+        })
+        const sorted = Object.entries(rankings).sort((a, b) => b[1] - a[1])
+        const rank = sorted.findIndex(([name]) => name === fullName) + 1
+        const aboveEntry = rank > 1 ? sorted[rank - 2] : null
+        setConsultantRank({
+          rank,
+          totalConsultants: sorted.length,
+          ecart: aboveEntry ? aboveEntry[1] - (rankings[fullName] || 0) + 1 : null,
+        })
+      }
 
-      if (factures && dossiers) {
-        let invoiceDossiers = dossiers
-
-        // If consultant, filter by their name
-        if (!isManager && consultantInfo?.name) {
-          const fullName = consultantInfo.name
-          invoiceDossiers = dossiers.filter((d: any) => {
-            const dossierConsultant = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-            return dossierConsultant === fullName
-          })
+      // Challenges / objectifs
+      if (challenges.length > 0) {
+        if (!isManager && consultantInfo?.id) {
+          const my = challenges.find((c: any) => c.consultant_id === consultantInfo.id)
+          if (my) setObjectif({ objectif: my.objectif, collecte: my.collecte })
+        } else if (isManager) {
+          const totalObj = challenges.reduce((s: number, c: any) => s + (c.objectif || 0), 0)
+          const totalCol = challenges.reduce((s: number, c: any) => s + (c.collecte || 0), 0)
+          if (totalObj > 0) setObjectif({ objectif: totalObj, collecte: totalCol })
         }
+      }
 
+      // Recent dossiers: use already-fetched data, sorted by date (avoid 2nd query)
+      const sorted = [...filteredDossiers]
+        .filter((d: any) => d.date_operation)
+        .sort((a: any, b: any) => new Date(b.date_operation).getTime() - new Date(a.date_operation).getTime())
+        .slice(0, 5)
+      setRecentDossiers(sorted)
+
+      // Pending invoices: use pre-filtered factures (already fetched with facturee=false)
+      const factures = facturesRes.data || []
+      if (factures.length > 0) {
+        const dossierMap = new Map(filteredDossiers.map((d: any) => [d.id, d]))
         const pending = factures
-          .filter((f: any) => !f.facturee)
           .slice(0, 5)
-          .map((f: any) => {
-            const dossier = invoiceDossiers.find((d: any) => d.id === f.dossier_id)
-            return { ...f, dossier }
-          })
+          .map((f: any) => ({ ...f, dossier: dossierMap.get(f.dossier_id) }))
           .filter((f: any) => f.dossier)
         setPendingInvoices(pending)
       }

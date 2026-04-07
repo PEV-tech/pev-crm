@@ -5,15 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { BarChart3, AlertCircle } from 'lucide-react'
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import dynamic from 'next/dynamic'
+
+// Lazy-load Recharts to reduce initial bundle size
+const RechartsBarChart = dynamic(
+  () => import('recharts').then(mod => ({ default: mod.BarChart })),
+  { ssr: false }
+)
+const Bar = dynamic(() => import('recharts').then(mod => ({ default: mod.Bar })), { ssr: false })
+const XAxis = dynamic(() => import('recharts').then(mod => ({ default: mod.XAxis })), { ssr: false })
+const YAxis = dynamic(() => import('recharts').then(mod => ({ default: mod.YAxis })), { ssr: false })
+const CartesianGrid = dynamic(() => import('recharts').then(mod => ({ default: mod.CartesianGrid })), { ssr: false })
+const Tooltip = dynamic(() => import('recharts').then(mod => ({ default: mod.Tooltip })), { ssr: false })
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => ({ default: mod.ResponsiveContainer })), { ssr: false })
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -145,7 +149,7 @@ export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedD
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart
+            <RechartsBarChart
               data={collecteParMois}
               margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
             >
@@ -174,7 +178,7 @@ export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedD
                 fill="#4f46e5"
                 radius={[8, 8, 0, 0]}
               />
-            </BarChart>
+            </RechartsBarChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>

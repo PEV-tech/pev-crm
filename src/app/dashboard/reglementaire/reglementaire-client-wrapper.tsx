@@ -16,7 +16,7 @@ export function ReglementaireClientWrapper() {
 
         const { data, error } = await supabase
           .from('v_dossiers_complets')
-          .select('*')
+          .select('id, client_id, statut, date_operation, client_nom, client_prenom, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, statut_kyc, der, pi, preco, lm, rm')
 
         if (error) {
           console.error('Error fetching dossiers:', error)

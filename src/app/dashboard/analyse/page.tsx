@@ -224,7 +224,7 @@ export default function AnalysePage() {
       setLoading(true)
       try {
         const [dossierRes, consultantRes] = await Promise.all([
-          supabase.from('v_dossiers_complets').select('*').order('date_operation', { ascending: false }),
+          supabase.from('v_dossiers_complets').select('id, statut, montant, financement, date_operation, client_nom, client_prenom, consultant_nom, consultant_prenom, consultant_zone, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, part_cabinet, facturee, payee').order('date_operation', { ascending: false }),
           supabase.from('consultants').select('id, nom, prenom, role').eq('actif', true).order('nom'),
         ])
         setData(dossierRes.data || [])
