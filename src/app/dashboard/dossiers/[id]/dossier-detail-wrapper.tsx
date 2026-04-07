@@ -109,7 +109,6 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             pi: data.pi ? 'oui' : 'non',
             lm: data.lm ? 'oui' : 'non',
             rm: data.rm ? 'oui' : 'non',
-            preco: data.preco ? 'oui' : 'non',
             pays: data.client_pays || '',
             email: data.client_email || '',
             telephone: data.client_telephone || '',
@@ -290,11 +289,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).single()
       if (data) {
         setDossier(data as VDossiersComplets)
-        // Re-initialize taux edit fields with updated values
-        if (data.taux_commission !== null && data.taux_commission !== undefined) {
+        // Re-initialize taux edit fields with updated values (only if meaningful > 0)
+        if (data.taux_commission && data.taux_commission > 0) {
           setEditTauxEntree((data.taux_commission * 100).toFixed(2))
         }
-        if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
+        if (data.taux_gestion && data.taux_gestion > 0) {
           setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
         }
       }
@@ -314,9 +313,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     setDeleting(true)
     try {
       // Delete factures first (FK constraint)
-      await supabase.from('factures').delete().eq('dossier_id', dossier.id)
+      const { error: factError } = await supabase.from('factures').delete().eq('dossier_id', dossier.id)
+      if (factError) throw factError
       // Delete commissions
-      await supabase.from('commissions').delete().eq('dossier_id', dossier.id)
+      const { error: commError } = await supabase.from('commissions').delete().eq('dossier_id', dossier.id)
+      if (commError) throw commError
       // Delete dossier
       const { error } = await supabase.from('dossiers').delete().eq('id', dossier.id)
       if (error) throw error
@@ -389,7 +390,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     ? dossier.payee === 'oui' ? ('payée' as const) : ('émise' as const)
     : ('à émettre' as const)
 
-  const hasCommissionData = !!(dossier.commission_brute || dossier.rem_apporteur || tauxEntree)
+  const hasCommissionData = !!(dossier.commission_brute || dossier.rem_apporteur || tauxEntree || effectiveTauxGestion)
 
   return (
     <div className="space-y-6">
