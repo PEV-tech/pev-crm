@@ -59,13 +59,24 @@ function ManagerCagnotteCard({
 }) {
   const solde2025 = Number(cagnotteRow?.solde_2025 || 0)
   const montantFacture = Number(cagnotteRow?.montant_facture || 0)
-  const acquis = remTotal + solde2025
+  // Use acquis_total from DB if available (source of truth), otherwise compute
+  const acquis = cagnotteRow?.acquis_total ? Number(cagnotteRow.acquis_total) : (remTotal + solde2025)
   const reste = acquis - montantFacture
 
   // Prevision = en cours estimé from dossiers
   const prevision = dossiers
     .filter(d => d.statut === 'client_en_cours' && (d.rem_apporteur || 0) > 0)
     .reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
+
+  // Parse factures_detail from cagnotteRow
+  const facturesDetail: { date: string; montant: number; description: string }[] = React.useMemo(() => {
+    try {
+      const raw = cagnotteRow?.factures_detail
+      if (Array.isArray(raw)) return raw
+      if (typeof raw === 'string') return JSON.parse(raw)
+      return []
+    } catch { return [] }
+  }, [cagnotteRow])
 
   return (
     <Card className={`border-2 ${isCurrentUser ? 'border-indigo-300 bg-indigo-50/40' : 'border-gray-200'}`}>
@@ -76,7 +87,7 @@ function ManagerCagnotteCard({
           {isCurrentUser && <Badge variant="outline" className="text-xs">Vous</Badge>}
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="md:col-span-1">
             <p className="text-xs text-gray-500">Acquis total</p>
@@ -98,6 +109,25 @@ function ManagerCagnotteCard({
             <p className="text-xs text-gray-400 mt-0.5">dossiers en cours</p>
           </div>
         </div>
+
+        {/* Détail des factures émises */}
+        {facturesDetail.length > 0 && (
+          <div className="border-t border-gray-200 pt-3">
+            <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1">
+              <Receipt size={13} /> Détail des factures
+            </p>
+            <div className="space-y-1">
+              {facturesDetail.map((f, i) => (
+                <div key={i} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-1.5">
+                  <span className="text-gray-600">
+                    {new Date(f.date).toLocaleDateString('fr-FR')} — {f.description}
+                  </span>
+                  <span className="font-semibold text-gray-900">{formatCurrency(f.montant)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -271,9 +301,9 @@ export function RemunerationsClient({
             dossiers={myDossiers.filter(d => d.statut === 'client_finalise')}
             resteAFacturer={
               isMaxine
-                ? (remTotals.maxine + Number(cagnotteData.maxine?.solde_2025 || 0)) - Number(cagnotteData.maxine?.montant_facture || 0)
+                ? (cagnotteData.maxine?.acquis_total ? Number(cagnotteData.maxine.acquis_total) : (remTotals.maxine + Number(cagnotteData.maxine?.solde_2025 || 0))) - Number(cagnotteData.maxine?.montant_facture || 0)
                 : isThelo
-                  ? (remTotals.thelo + Number(cagnotteData.thelo?.solde_2025 || 0)) - Number(cagnotteData.thelo?.montant_facture || 0)
+                  ? (cagnotteData.thelo?.acquis_total ? Number(cagnotteData.thelo.acquis_total) : (remTotals.thelo + Number(cagnotteData.thelo?.solde_2025 || 0))) - Number(cagnotteData.thelo?.montant_facture || 0)
                   : buildCagnotte(myDossiers).resteAFacturer
             }
           />

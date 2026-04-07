@@ -85,6 +85,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             commentaire: data.commentaire || '',
             produit_id: produitId,
             compagnie_id: compagnieId,
+            statut_kyc: data.statut_kyc || 'non',
+            der: data.der ? 'oui' : 'non',
+            pi: data.pi ? 'oui' : 'non',
+            pays: data.client_pays || '',
           })
 
           // Fetch frais de gestion taux for encours commission
@@ -117,6 +121,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     setSaving(true)
     setSaveError('')
     try {
+      // Update dossier fields
       const { error } = await supabase.from('dossiers').update({
         statut: editForm.statut,
         montant: parseFloat(editForm.montant) || 0,
@@ -125,7 +130,18 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         commentaire: editForm.commentaire || null,
         produit_id: editForm.produit_id || null,
         compagnie_id: editForm.compagnie_id || null,
+        statut_kyc: editForm.statut_kyc || 'non',
+        der: editForm.der === 'oui',
+        pi: editForm.pi === 'oui',
       }).eq('id', id)
+
+      // Update client pays if changed
+      if (editForm.pays && dossier?.client_pays !== editForm.pays) {
+        const clientId = (dossier as any)?.client_id
+        if (clientId) {
+          await supabase.from('clients').update({ pays: editForm.pays }).eq('id', clientId)
+        }
+      }
       if (error) { setSaveError(error.message) }
       else {
         const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).single()
@@ -217,7 +233,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Pays</p>
-                  <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.client_pays}</p>
+                  {isEditing ? (
+                    <Input name="pays" value={editForm.pays} onChange={handleEditChange} className="mt-1" placeholder="France" />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.client_pays || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Produit</p>
@@ -446,16 +466,49 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           <Card>
             <CardHeader><CardTitle className="text-lg">Réglementaire</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {[
-                { label: 'KYC', value: dossier.statut_kyc === 'oui' },
-                { label: 'DER', value: !!dossier.der },
-                { label: 'PI', value: !!dossier.pi },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                  <span className="text-sm font-medium text-gray-700">{label}</span>
-                  <Badge variant={value ? 'success' : 'destructive'}>{value ? 'Validé' : 'Non validé'}</Badge>
-                </div>
-              ))}
+              {isEditing ? (
+                <>
+                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-sm font-medium text-gray-700">KYC</span>
+                    <Select name="statut_kyc" value={editForm.statut_kyc} onChange={handleEditChange} className="w-32">
+                      <option value="non">Non</option>
+                      <option value="en_cours">En cours</option>
+                      <option value="oui">Oui</option>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-sm font-medium text-gray-700">DER</span>
+                    <Select name="der" value={editForm.der} onChange={handleEditChange} className="w-32">
+                      <option value="non">Non</option>
+                      <option value="en_cours">En cours</option>
+                      <option value="oui">Oui</option>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-sm font-medium text-gray-700">PI</span>
+                    <Select name="pi" value={editForm.pi} onChange={handleEditChange} className="w-32">
+                      <option value="non">Non</option>
+                      <option value="en_cours">En cours</option>
+                      <option value="oui">Oui</option>
+                    </Select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {[
+                    { label: 'KYC', value: dossier.statut_kyc === 'oui', enCours: dossier.statut_kyc === 'en_cours' },
+                    { label: 'DER', value: !!dossier.der },
+                    { label: 'PI', value: !!dossier.pi },
+                  ].map(({ label, value, enCours }) => (
+                    <div key={label} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-sm font-medium text-gray-700">{label}</span>
+                      <Badge variant={value ? 'success' : enCours ? 'warning' : 'destructive'}>
+                        {value ? 'Validé' : enCours ? 'En cours' : 'Non validé'}
+                      </Badge>
+                    </div>
+                  ))}
+                </>
+              )}
             </CardContent>
           </Card>
 

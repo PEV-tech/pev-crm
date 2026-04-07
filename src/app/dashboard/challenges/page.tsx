@@ -117,73 +117,36 @@ export default function ChallengesPage() {
         </Card>
       )}
 
-      {/* Full ranking table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp size={20} />
-            Classement par collecte finalisée
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 w-16">#</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Consultant</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700">Collecte</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700">Dossiers</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700">Écart pour monter</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranked.map((r) => {
-                  const isMe = consultantInfo?.name === r.name
-                  return (
-                    <tr
-                      key={r.name}
-                      className={`border-b border-gray-100 ${isMe ? 'bg-indigo-50 font-semibold' : 'hover:bg-gray-50'}`}
-                    >
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                          r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
-                          r.rank === 2 ? 'bg-gray-100 text-gray-700' :
-                          r.rank === 3 ? 'bg-orange-100 text-orange-800' :
-                          'bg-gray-50 text-gray-500'
-                        }`}>
-                          {r.rank}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {r.name}
-                        {isMe && <span className="ml-2 text-xs text-indigo-600">(vous)</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold">{formatCurrency(r.collecte)}</td>
-                      <td className="px-4 py-3 text-right text-gray-600">{r.nbDossiers}</td>
-                      <td className="px-4 py-3 text-right">
-                        {r.ecart !== null ? (
-                          <span className="text-indigo-600 flex items-center justify-end gap-1">
-                            <ArrowUp size={14} />
-                            {formatCurrency(r.ecart)}
-                          </span>
-                        ) : (
-                          <span className="text-green-600 text-xs">1er</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-                {ranked.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Aucun dossier finalisé</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Manager: overview cards (no full table) */}
+      {isManager && ranked.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp size={20} />
+              Vue d'ensemble
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {ranked.map((r) => (
+                <div key={r.name} className={`p-4 rounded-lg border ${r.rank === 1 ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                      r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                      r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                      r.rank === 3 ? 'bg-orange-100 text-orange-800' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>{r.rank}</span>
+                    <span className="font-semibold text-sm">{r.prenom}</span>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">{formatCurrency(r.collecte)}</p>
+                  <p className="text-xs text-gray-500">{r.nbDossiers} dossier(s)</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
