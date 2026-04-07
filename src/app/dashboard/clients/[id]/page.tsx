@@ -485,10 +485,18 @@ export default function ClientDetailPage() {
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText size={20} className="text-gray-600" />
-                Dossiers ({dossiers.length})
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText size={20} className="text-gray-600" />
+                  Dossiers ({dossiers.length})
+                </CardTitle>
+                <Link href={`/dashboard/dossiers/nouveau?client_id=${client.id}`}>
+                  <Button variant="outline" size="sm" className="gap-1">
+                    <Plus size={16} />
+                    Nouveau dossier
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
               {dossiers.length > 0 ? (

@@ -352,10 +352,12 @@ export type Database = {
           consultant_nom: string | null
           consultant_prenom: string | null
           consultant_zone: string | null
+          taux_remuneration: number | null
           produit_nom: string | null
           produit_categorie: string | null
           compagnie_nom: string | null
           taux_commission: number | null
+          taux_gestion: number | null
           commission_brute: number | null
           rem_apporteur: number | null
           rem_support: number | null

@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,9 +19,20 @@ interface FormData {
   statut: string; commentaire: string; consultantId: string
 }
 
-export default function NewDossierPage() {
+interface ClientInfo {
+  id: string
+  nom: string
+  prenom: string | null
+  pays: string
+  email: string | null
+  telephone: string | null
+}
+
+function NewDossierContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { consultant } = useUser()
+  const clientIdParam = searchParams.get('client_id')
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
   const [produits, setProduits] = React.useState<Produit[]>([])
@@ -30,6 +41,8 @@ export default function NewDossierPage() {
   const [tauxMap, setTauxMap] = React.useState<TauxProduitCompagnie[]>([])
   const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
   const [loadingData, setLoadingData] = React.useState(true)
+  const [existingClient, setExistingClient] = React.useState<ClientInfo | null>(null)
+  const [existingClientId, setExistingClientId] = React.useState<string | null>(null)
   const [formData, setFormData] = React.useState<FormData>({
     nom: '', prenom: '', pays: '', email: '', telephone: '', produitId: '', compagnieId: '',
     montant: '', financement: 'cash',
@@ -53,11 +66,33 @@ export default function NewDossierPage() {
         if (compagniesRes.data) setCompagnies(compagniesRes.data)
         if (consultantsRes.data) setConsultants(consultantsRes.data)
         if (tauxRes.data) setTauxMap(tauxRes.data)
+
+        // Fetch existing client if client_id is in params
+        if (clientIdParam) {
+          const { data: clientData, error: clientError } = await supabase
+            .from('clients')
+            .select('id, nom, prenom, pays, email, telephone')
+            .eq('id', clientIdParam)
+            .single()
+          if (clientData && !clientError) {
+            setExistingClient(clientData as ClientInfo)
+            setExistingClientId(clientData.id)
+            // Pre-fill the form with client data
+            setFormData(prev => ({
+              ...prev,
+              nom: clientData.nom,
+              prenom: clientData.prenom || '',
+              pays: clientData.pays,
+              email: clientData.email || '',
+              telephone: clientData.telephone || '',
+            }))
+          }
+        }
       } catch (err) { console.error('Error:', err) }
       finally { setLoadingData(false) }
     }
     fetchData()
-  }, [supabase])
+  }, [supabase, clientIdParam])
 
   React.useEffect(() => {
     if (consultant?.id) setFormData(prev => ({ ...prev, consultantId: prev.consultantId || consultant.id }))
@@ -95,14 +130,22 @@ export default function NewDossierPage() {
         setLoading(false)
         return
       }
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients').insert({ nom: formData.nom, prenom: formData.prenom || null, pays: formData.pays, email: formData.email || null, telephone: formData.telephone || null })
-        .select().single()
-      if (clientError) throw clientError
+
+      // Determine client_id: use existing if provided, otherwise create new
+      let clientIdForDossier: string
+      if (existingClientId) {
+        clientIdForDossier = existingClientId
+      } else {
+        const { data: clientData, error: clientError } = await supabase
+          .from('clients').insert({ nom: formData.nom, prenom: formData.prenom || null, pays: formData.pays, email: formData.email || null, telephone: formData.telephone || null })
+          .select().single()
+        if (clientError) throw clientError
+        clientIdForDossier = clientData.id
+      }
 
       const { data: dossierData, error: dossierError } = await supabase
         .from('dossiers').insert({
-          client_id: clientData.id,
+          client_id: clientIdForDossier,
           consultant_id: formData.consultantId,
           produit_id: formData.produitId || null,
           compagnie_id: formData.compagnieId || null,
@@ -154,32 +197,71 @@ export default function NewDossierPage() {
 
       <form onSubmit={handleSubmit} className="max-w-2xl">
         <Card>
-          <CardHeader><CardTitle>Informations du client</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>
+              {existingClient ? (
+                <span>Dossier pour: <strong>{formData.prenom} {formData.nom}</strong></span>
+              ) : (
+                'Informations du client'
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
-                <Input name="nom" value={formData.nom} onChange={handleInputChange} placeholder="Dupont" required />
+            {existingClient ? (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nom</label>
+                    <p className="text-sm text-gray-900 font-medium">{formData.nom}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Prénom</label>
+                    <p className="text-sm text-gray-900 font-medium">{formData.prenom || '-'}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Pays</label>
+                  <p className="text-sm text-gray-900 font-medium">{formData.pays}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                    <p className="text-sm text-gray-900 font-medium">{formData.email || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
+                    <p className="text-sm text-gray-900 font-medium">{formData.telephone || '-'}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
-                <Input name="prenom" value={formData.prenom} onChange={handleInputChange} placeholder="Jean" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Pays *</label>
-              <Input name="pays" value={formData.pays} onChange={handleInputChange} placeholder="France" required />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <Input name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="client@email.com" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-                <Input name="telephone" value={formData.telephone} onChange={handleInputChange} placeholder="+33 6 12 34 56 78" />
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
+                    <Input name="nom" value={formData.nom} onChange={handleInputChange} placeholder="Dupont" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                    <Input name="prenom" value={formData.prenom} onChange={handleInputChange} placeholder="Jean" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pays *</label>
+                  <Input name="pays" value={formData.pays} onChange={handleInputChange} placeholder="France" required />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <Input name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="client@email.com" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                    <Input name="telephone" value={formData.telephone} onChange={handleInputChange} placeholder="+33 6 12 34 56 78" />
+                  </div>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -299,5 +381,22 @@ export default function NewDossierPage() {
         </div>
       </form>
     </div>
+  )
+}
+
+import { Suspense } from 'react'
+
+export default function NewDossierPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-navy-600 mx-auto mb-2" />
+          <p className="text-gray-600">Chargement...</p>
+        </div>
+      </div>
+    }>
+      <NewDossierContent />
+    </Suspense>
   )
 }

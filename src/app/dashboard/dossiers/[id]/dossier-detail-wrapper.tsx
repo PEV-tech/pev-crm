@@ -12,7 +12,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2, Pencil } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -61,6 +61,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
+  const [editingTaux, setEditingTaux] = React.useState(false)
+  const [editTauxEntree, setEditTauxEntree] = React.useState<string>('')
+  const [editTauxGestion, setEditTauxGestion] = React.useState<string>('')
+  const [savingTaux, setSavingTaux] = React.useState(false)
+  const [consultantTauxRemuneration, setConsultantTauxRemuneration] = React.useState<number | null>(null)
 
   const isConsultant = currentUser?.role === 'consultant'
 
@@ -84,6 +89,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         if (error || !data) { setNotFound(true) }
         else {
           setDossier(data as VDossiersComplets)
+          // Set consultant's taux_remuneration for calculations
+          if (data.taux_remuneration !== undefined && data.taux_remuneration !== null) {
+            setConsultantTauxRemuneration(data.taux_remuneration)
+          }
           // Find IDs from view data by matching names to lists
           const produitId = produitsRes.data?.find((p) => p.nom === data.produit_nom)?.id || ''
           const compagnieId = compagniesRes.data?.find((c) => c.nom === data.compagnie_nom)?.id || ''
@@ -105,6 +114,13 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             email: data.client_email || '',
             telephone: data.client_telephone || '',
           })
+          // Initialize taux edit fields with current values
+          if (data.taux_commission !== null && data.taux_commission !== undefined) {
+            setEditTauxEntree((data.taux_commission * 100).toFixed(2))
+          }
+          if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
+            setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
+          }
 
           // Fetch grille taux for entry + encours commission (LUX/PE)
           if (data.montant && data.montant > 0) {
@@ -196,6 +212,63 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     finally { setSaving(false) }
   }
 
+  const handleSaveTaux = async () => {
+    if (!dossier?.id) return
+    setSavingTaux(true)
+    try {
+      const updateData: any = {}
+
+      // Parse and convert percentages to decimals
+      if (editTauxEntree.trim()) {
+        const tauxEntreeDecimal = parseFloat(editTauxEntree) / 100
+        updateData.taux_commission = tauxEntreeDecimal
+        // Calculate commission_brute and rem_apporteur
+        if (dossier.montant && dossier.montant > 0) {
+          updateData.commission_brute = dossier.montant * tauxEntreeDecimal
+          if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
+            updateData.rem_apporteur = updateData.commission_brute * consultantTauxRemuneration
+            updateData.part_cabinet = updateData.commission_brute - updateData.rem_apporteur
+            updateData.pct_cabinet = updateData.commission_brute > 0
+              ? updateData.part_cabinet / updateData.commission_brute
+              : 0
+          }
+        }
+      }
+
+      if (editTauxGestion.trim()) {
+        const tauxGestionDecimal = parseFloat(editTauxGestion) / 100
+        updateData.taux_gestion = tauxGestionDecimal
+      }
+
+      // Update commissions table
+      const { error } = await supabase
+        .from('commissions')
+        .update(updateData)
+        .eq('dossier_id', dossier.id)
+
+      if (error) throw error
+
+      // Refresh dossier data
+      const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).single()
+      if (data) {
+        setDossier(data as VDossiersComplets)
+        // Re-initialize taux edit fields with updated values
+        if (data.taux_commission !== null && data.taux_commission !== undefined) {
+          setEditTauxEntree((data.taux_commission * 100).toFixed(2))
+        }
+        if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
+          setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
+        }
+      }
+
+      setEditingTaux(false)
+    } catch (e: any) {
+      setSaveError(e.message || 'Erreur lors de la sauvegarde des taux')
+    } finally {
+      setSavingTaux(false)
+    }
+  }
+
   // Delete handler — only for non-finalized dossiers
   const canDelete = dossier && dossier.statut !== 'client_finalise' && !isConsultant
   const handleDelete = async () => {
@@ -230,29 +303,27 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     const montant = dossier.montant
     const annual = montant * tauxGestion
     if (isConsultant) {
-      // Consultant's share: derived from rem_apporteur / commission_brute ratio
-      if (dossier.rem_apporteur && dossier.commission_brute && dossier.commission_brute > 0) {
-        const consultantPct = dossier.rem_apporteur / dossier.commission_brute
-        return (annual * consultantPct) / 4
+      // Consultant's share: use taux_remuneration directly
+      if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
+        return (montant * tauxGestion * consultantTauxRemuneration) / 4
       }
       return null
     }
     // Manager sees total encours revenue for cabinet
     return annual / 4
-  }, [dossier, tauxGestion, isConsultant])
+  }, [dossier, tauxGestion, isConsultant, consultantTauxRemuneration, dossierHasEncours])
 
   // For LUX/PE: entry commission from grille, not from taux_produit_compagnie
   const entreeFromGrille = tauxEntree && dossier?.montant ? dossier.montant * tauxEntree : null
-  // Part consultant from grille entry: proportional to existing ratio, or use rem_apporteur directly
+  // Part consultant from grille entry: use consultantTauxRemuneration directly
   // IMPORTANT: this useMemo MUST be before early returns to respect React hook rules
   const partConsultantEntree = React.useMemo(() => {
     if (!entreeFromGrille) return dossier?.rem_apporteur ?? null
-    if (dossier?.commission_brute && dossier.commission_brute > 0 && dossier?.rem_apporteur) {
-      const ratio = dossier.rem_apporteur / dossier.commission_brute
-      return entreeFromGrille * ratio
+    if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
+      return entreeFromGrille * consultantTauxRemuneration
     }
     return dossier?.rem_apporteur ?? null
-  }, [entreeFromGrille, dossier?.commission_brute, dossier?.rem_apporteur])
+  }, [entreeFromGrille, consultantTauxRemuneration, dossier?.rem_apporteur])
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   if (notFound || !dossier) {
@@ -483,12 +554,103 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           {hasCommissionData && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Award size={20} className="text-indigo-600" />
-                  {isConsultant ? 'Ma rémunération' : 'Détail de la commission'}
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Award size={20} className="text-indigo-600" />
+                    {isConsultant ? 'Ma rémunération' : 'Détail de la commission'}
+                  </CardTitle>
+                  {!editingTaux && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => setEditingTaux(true)}
+                    >
+                      <Pencil size={16} />
+                      Modifier les taux
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Taux editing section */}
+                {editingTaux && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-amber-900">Modifier les taux de commission</h3>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingTaux(false)}
+                        className="text-gray-500"
+                      >
+                        <X size={16} />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 block mb-1">
+                          Taux d'entrée (%)
+                        </label>
+                        <Input
+                          type="number"
+                          value={editTauxEntree}
+                          onChange={(e) => setEditTauxEntree(e.target.value)}
+                          placeholder="1.25"
+                          step="0.01"
+                          className="w-full"
+                        />
+                        {dossier?.taux_commission && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Grille : {(dossier.taux_commission * 100).toFixed(2)}%
+                          </p>
+                        )}
+                      </div>
+
+                      {dossierHasEncours && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700 block mb-1">
+                            Taux de gestion (%)
+                          </label>
+                          <Input
+                            type="number"
+                            value={editTauxGestion}
+                            onChange={(e) => setEditTauxGestion(e.target.value)}
+                            placeholder="0.50"
+                            step="0.01"
+                            className="w-full"
+                          />
+                          {dossier?.taux_gestion && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Grille : {(dossier.taux_gestion * 100).toFixed(2)}%
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingTaux(false)}
+                      >
+                        Annuler
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-navy-700 hover:bg-navy-800 gap-2"
+                        onClick={handleSaveTaux}
+                        disabled={savingTaux}
+                      >
+                        {savingTaux ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                        Sauvegarder
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Droits d'entrée (souscription) */}
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
@@ -506,18 +668,23 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-sm text-gray-600">Commission brute (grille)</p>
+                          <p className="text-sm text-gray-600">Commission brute</p>
                           <p className="text-xl font-bold text-gray-900 mt-1">
                             {formatCurrency(entreeFromGrille || dossier.commission_brute)}
                           </p>
                           {tauxEntree ? (
                             <>
-                              <p className="text-xs text-gray-500 mt-0.5">Taux grille entrée : {formatPct(tauxEntree)}</p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {dossier.taux_commission && (Math.abs((dossier.taux_commission || 0) - tauxEntree) > 0.00001)
+                                  ? `Grille : ${formatPct(tauxEntree)} → Appliqué : ${formatPct(dossier.taux_commission)}`
+                                  : `Taux appliqué : ${formatPct(tauxEntree)}`
+                                }
+                              </p>
                               <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(tauxEntree)}</p>
                             </>
                           ) : dossier.taux_commission ? (
                             <>
-                              <p className="text-xs text-gray-500 mt-0.5">Taux : {formatPct(dossier.taux_commission)}</p>
+                              <p className="text-xs text-gray-500 mt-1">Taux appliqué : {formatPct(dossier.taux_commission)}</p>
                               {dossier.montant && (
                                 <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(dossier.taux_commission)}</p>
                               )}
@@ -528,6 +695,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                           <div className="bg-indigo-50 rounded-lg p-3">
                             <p className="text-sm text-indigo-600">Part consultant</p>
                             <p className="text-xl font-bold text-indigo-900 mt-1">{formatCurrency(partConsultantEntree)}</p>
+                            {consultantTauxRemuneration && (
+                              <p className="text-xs text-indigo-500 mt-1">
+                                ({formatPct(consultantTauxRemuneration)} de {formatCurrency(entreeFromGrille || dossier.commission_brute)})
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -571,11 +743,16 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                       tauxGestion && (
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-gray-50 rounded-lg p-3">
-                            <p className="text-sm text-gray-600">Encours annuel (grille)</p>
+                            <p className="text-sm text-gray-600">Encours annuel</p>
                             <p className="text-xl font-bold text-gray-900 mt-1">
                               {formatCurrency((dossier.montant || 0) * tauxGestion)}
                             </p>
-                            <p className="text-xs text-gray-500 mt-0.5">Taux : {formatPct(tauxGestion)}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {dossier.taux_gestion && (Math.abs((dossier.taux_gestion || 0) - tauxGestion) > 0.00001)
+                                ? `Grille : ${formatPct(tauxGestion)} → Appliqué : ${formatPct(dossier.taux_gestion)}`
+                                : `Taux appliqué : ${formatPct(tauxGestion)}`
+                              }
+                            </p>
                           </div>
                           <div className="bg-gray-50 rounded-lg p-3">
                             <p className="text-sm text-gray-600">Par trimestre</p>
