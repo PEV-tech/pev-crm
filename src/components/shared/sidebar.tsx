@@ -11,6 +11,7 @@ import {
   Wallet,
   DollarSign,
   Shield,
+  Trophy,
   Bell,
   Settings,
   Menu,
@@ -60,6 +61,11 @@ const navigationItems = [
     label: 'Réglementaire',
     href: '/dashboard/reglementaire',
     icon: Shield,
+  },
+  {
+    label: 'Classement',
+    href: '/dashboard/challenges',
+    icon: Trophy,
   },
   {
     label: 'Relances',

@@ -113,9 +113,19 @@ export function RemunerationsClient({
   const isManager = role === 'manager' || role === 'back_office'
   const myName = consultant ? `${consultant.prenom || ''} ${consultant.nom || ''}`.trim() : ''
 
-  const finalised = React.useMemo(() => dossiers.filter(d => d.statut === 'client_finalise'), [dossiers])
-  const enCours = React.useMemo(() => dossiers.filter(d => d.statut === 'client_en_cours'), [dossiers])
-  const allWithCommission = React.useMemo(() => dossiers.filter(d => (d.commission_brute || 0) > 0), [dossiers])
+  // For managers: filter to show only THEIR dossiers in detail table
+  const isManagerRole = role === 'manager' || role === 'back_office'
+  const myFilteredDossiers = React.useMemo(() => {
+    if (!isManagerRole) return dossiers
+    return dossiers.filter(d => {
+      const name = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+      return name === myName
+    })
+  }, [dossiers, isManagerRole, myName])
+
+  const finalised = React.useMemo(() => myFilteredDossiers.filter(d => d.statut === 'client_finalise'), [myFilteredDossiers])
+  const enCours = React.useMemo(() => myFilteredDossiers.filter(d => d.statut === 'client_en_cours'), [myFilteredDossiers])
+  const allWithCommission = React.useMemo(() => myFilteredDossiers.filter(d => (d.commission_brute || 0) > 0), [myFilteredDossiers])
 
   const buildCagnotte = React.useCallback((consultantDossiers: any[]) => {
     const finDossiers = consultantDossiers.filter(d => d.statut === 'client_finalise')
@@ -269,67 +279,7 @@ export function RemunerationsClient({
           />
         )}
 
-        {/* Global Cabinet Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <DollarSign size={20} className="text-blue-600" />Commissions cabinet
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(globalTotals.commissionBruteTotal)}</p>
-              <p className="text-sm text-gray-500">{globalTotals.nbFinalises} finalisé(s)</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Receipt size={20} className="text-green-600" />Total facturé
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-green-700">{formatCurrency(globalTotals.facture)}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <TrendingUp size={20} className="text-purple-600" />Part cabinet
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(globalTotals.partCabinet)}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Par consultant */}
-        <Card>
-          <CardHeader><CardTitle>Cagnotte par consultant</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {byConsultant.map(c => (
-                <div key={c.name} className={`py-3 border-b border-gray-100 last:border-0 ${c.name === myName ? 'bg-indigo-50 -mx-4 px-4 rounded-lg' : ''}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className={`font-medium ${c.name === myName ? 'text-indigo-700' : 'text-gray-900'}`}>
-                      {c.name}{c.name === myName ? ' (vous)' : ''}
-                    </p>
-                    <p className="text-sm text-gray-500">{c.cagnotte.nbFinalises} finalisé(s) · {c.cagnotte.nbEnCours} en cours</p>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                    <div><span className="text-gray-500">Acquis: </span><span className="font-semibold">{formatCurrency(c.cagnotte.acquis)}</span></div>
-                    <div><span className="text-gray-500">Facturé: </span><span className="font-semibold text-green-700">{formatCurrency(c.cagnotte.facture)}</span></div>
-                    <div><span className="text-gray-500">Cagnotte: </span><span className="font-semibold text-orange-600">{formatCurrency(c.cagnotte.resteAFacturer)}</span></div>
-                    <div><span className="text-gray-500">Prévision: </span><span className="font-semibold text-gray-500">{formatCurrency(c.cagnotte.enCoursEstime)}</span></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Tabs + table */}
+        {/* Tabs + table — uniquement MES dossiers */}
         <div className="flex gap-2 border-b border-gray-200">
           {([
             { key: 'finalise' as const, label: 'Finalisés', count: finalised.length },
