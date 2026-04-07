@@ -46,6 +46,10 @@ export type Database = {
           nom: string
           prenom: string | null
           pays: string
+          email: string | null
+          telephone: string | null
+          numero_compte: string | null
+          conformite: string | null
           statut_kyc: StatutKycType
           der: boolean
           pi: boolean

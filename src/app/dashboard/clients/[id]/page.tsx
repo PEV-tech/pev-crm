@@ -12,6 +12,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, User, FileText, Shield, TrendingUp,
   MapPin, Calendar, DollarSign, CheckCircle,
+  Mail, Phone, CreditCard,
 } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -40,6 +41,10 @@ interface ClientInfo {
   nom: string
   prenom: string | null
   pays: string
+  email: string | null
+  telephone: string | null
+  numero_compte: string | null
+  conformite: string | null
   statut_kyc: string
   der: boolean
   pi: boolean
@@ -136,10 +141,25 @@ export default function ClientDetailPage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{fullName}</h1>
-              <div className="flex items-center gap-3 mt-1">
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="flex items-center gap-1 text-sm text-gray-600">
                   <MapPin size={14} /> {client.pays || 'N/A'}
                 </span>
+                {client.email && (
+                  <a href={`mailto:${client.email}`} className="flex items-center gap-1 text-sm text-indigo-600 hover:underline">
+                    <Mail size={14} /> {client.email}
+                  </a>
+                )}
+                {client.telephone && (
+                  <a href={`tel:${client.telephone}`} className="flex items-center gap-1 text-sm text-indigo-600 hover:underline">
+                    <Phone size={14} /> {client.telephone}
+                  </a>
+                )}
+                {client.numero_compte && (
+                  <span className="flex items-center gap-1 text-sm text-gray-500">
+                    <CreditCard size={14} /> {client.numero_compte}
+                  </span>
+                )}
                 <span className="flex items-center gap-1 text-sm text-gray-500">
                   <Calendar size={14} /> Client depuis {new Date(client.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
                 </span>
@@ -239,8 +259,55 @@ export default function ClientDetailPage() {
           </Card>
         </div>
 
-        {/* Sidebar: Compliance + Info */}
+        {/* Sidebar: Contact + Compliance + Info */}
         <div className="space-y-4">
+          {/* Contact info */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <User size={18} className="text-gray-600" />
+                Coordonnées
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Mail size={16} className="text-gray-400 shrink-0" />
+                {client.email ? (
+                  <a href={`mailto:${client.email}`} className="text-sm text-indigo-600 hover:underline truncate">{client.email}</a>
+                ) : (
+                  <span className="text-sm text-gray-400 italic">Non renseigné</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <Phone size={16} className="text-gray-400 shrink-0" />
+                {client.telephone ? (
+                  <a href={`tel:${client.telephone}`} className="text-sm text-indigo-600 hover:underline">{client.telephone}</a>
+                ) : (
+                  <span className="text-sm text-gray-400 italic">Non renseigné</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <MapPin size={16} className="text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-700">{client.pays || 'Non renseigné'}</span>
+              </div>
+              {client.numero_compte && (
+                <div className="flex items-center gap-3">
+                  <CreditCard size={16} className="text-gray-400 shrink-0" />
+                  <span className="text-sm text-gray-700">{client.numero_compte}</span>
+                </div>
+              )}
+              {client.conformite && (
+                <div className="pt-2 border-t">
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                    client.conformite === 'conforme' ? 'bg-green-100 text-green-700' :
+                    client.conformite === 'non conforme' ? 'bg-red-100 text-red-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>O2S: {client.conformite}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
