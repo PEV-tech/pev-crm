@@ -241,6 +241,19 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     return annual / 4
   }, [dossier, tauxGestion, isConsultant])
 
+  // For LUX/PE: entry commission from grille, not from taux_produit_compagnie
+  const entreeFromGrille = tauxEntree && dossier?.montant ? dossier.montant * tauxEntree : null
+  // Part consultant from grille entry: proportional to existing ratio, or use rem_apporteur directly
+  // IMPORTANT: this useMemo MUST be before early returns to respect React hook rules
+  const partConsultantEntree = React.useMemo(() => {
+    if (!entreeFromGrille) return dossier?.rem_apporteur ?? null
+    if (dossier?.commission_brute && dossier.commission_brute > 0 && dossier?.rem_apporteur) {
+      const ratio = dossier.rem_apporteur / dossier.commission_brute
+      return entreeFromGrille * ratio
+    }
+    return dossier?.rem_apporteur ?? null
+  }, [entreeFromGrille, dossier?.commission_brute, dossier?.rem_apporteur])
+
   if (loading) return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   if (notFound || !dossier) {
     return (
@@ -256,18 +269,6 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     : ('à émettre' as const)
 
   const hasCommissionData = !!(dossier.commission_brute || dossier.rem_apporteur || tauxEntree)
-
-  // For LUX/PE: entry commission from grille, not from taux_produit_compagnie
-  const entreeFromGrille = tauxEntree && dossier.montant ? dossier.montant * tauxEntree : null
-  // Part consultant from grille entry: proportional to existing ratio, or use rem_apporteur directly
-  const partConsultantEntree = React.useMemo(() => {
-    if (!entreeFromGrille) return dossier.rem_apporteur
-    if (dossier.commission_brute && dossier.commission_brute > 0 && dossier.rem_apporteur) {
-      const ratio = dossier.rem_apporteur / dossier.commission_brute
-      return entreeFromGrille * ratio
-    }
-    return dossier.rem_apporteur
-  }, [entreeFromGrille, dossier.commission_brute, dossier.rem_apporteur])
 
   return (
     <div className="space-y-6">
