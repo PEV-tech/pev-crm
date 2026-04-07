@@ -23,10 +23,10 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            // Enforce secure cookie settings
+            // Enforce secure cookie settings (keep httpOnly as set by Supabase —
+            // auth cookies must remain readable by client-side JS)
             const secureOptions: CookieOptions = {
               ...options,
-              httpOnly: true,
               secure: true,
               sameSite: 'lax',
             }
