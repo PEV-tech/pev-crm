@@ -326,6 +326,7 @@ export type Database = {
       v_dossiers_complets: {
         Row: {
           id: string | null
+          client_id: string | null
           statut: StatutDossierType | null
           montant: number | null
           financement: FinancementType | null
@@ -339,6 +340,7 @@ export type Database = {
           statut_kyc: StatutKycType | null
           der: boolean | null
           pi: boolean | null
+          preco: boolean | null
           lm: boolean | null
           rm: boolean | null
           consultant_nom: string | null

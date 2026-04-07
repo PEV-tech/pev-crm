@@ -70,10 +70,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         const { data, error } = dossierRes
         if (error || !data) { setNotFound(true) }
         else {
-          // Fetch client_id from dossiers table
-          const { data: dossierRow } = await supabase.from('dossiers').select('client_id').eq('id', id).single()
-          const enrichedData = { ...data, client_id: dossierRow?.client_id || null }
-          setDossier(enrichedData as any)
+          setDossier(data as VDossiersComplets)
           // Find IDs from view data by matching names to lists
           const produitId = produitsRes.data?.find((p) => p.nom === data.produit_nom)?.id || ''
           const compagnieId = compagniesRes.data?.find((c) => c.nom === data.compagnie_nom)?.id || ''
@@ -90,7 +87,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             pi: data.pi ? 'oui' : 'non',
             lm: data.lm ? 'oui' : 'non',
             rm: data.rm ? 'oui' : 'non',
-            preco: (data as any).preco ? 'oui' : 'non',
+            preco: data.preco ? 'oui' : 'non',
             pays: data.client_pays || '',
           })
 
@@ -138,7 +135,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       if (dossierError) { setSaveError(dossierError.message); setSaving(false); return }
 
       // 2. Update client fields (réglementaire + pays — columns on clients table)
-      const clientId = (dossier as any)?.client_id
+      const clientId = dossier?.client_id
       if (clientId) {
         const clientUpdate: Record<string, any> = {
           statut_kyc: editForm.statut_kyc || 'non',
@@ -154,10 +151,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
 
       // Refresh view data
       const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).single()
-      if (data) {
-        const { data: dossierRow } = await supabase.from('dossiers').select('client_id').eq('id', id).single()
-        setDossier({ ...data, client_id: dossierRow?.client_id || null } as any)
-      }
+      if (data) setDossier(data as VDossiersComplets)
       setIsEditing(false)
     } catch (e: any) { setSaveError(e.message || 'Erreur lors de la sauvegarde') }
     finally { setSaving(false) }
@@ -529,7 +523,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     { label: 'KYC', value: dossier.statut_kyc === 'oui', enCours: dossier.statut_kyc === 'en_cours' },
                     { label: 'DER', value: !!dossier.der },
                     { label: 'PI', value: !!dossier.pi },
-                    { label: 'PRECO', value: !!(dossier as any).preco },
+                    { label: 'PRECO', value: !!dossier.preco },
                     { label: 'LM', value: !!dossier.lm },
                     { label: 'RM', value: !!dossier.rm },
                   ].map(({ label, value, enCours }) => (
