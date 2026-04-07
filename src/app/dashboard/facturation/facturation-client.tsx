@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, Check, FileText } from 'lucide-react'
+import { Loader2, Check, FileText, Search } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 
 interface FacturationClientProps {
   initialData: VDossiersComplets[]
@@ -36,6 +37,7 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
   const [loadingIds, setLoadingIds] = React.useState<Set<string>>(new Set())
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState('')
 
   const supabase = React.useMemo(() => createClient(), [])
 
@@ -44,14 +46,21 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
     setSelectedIds(new Set())
   }, [activeTab])
 
-  // Filter data based on active tab
+  // Filter data based on active tab + search
   const filteredData = React.useMemo(() => {
     let result = data
     if (activeTab === 'a-emettre') result = result.filter((d) => !d.facturee)
     else if (activeTab === 'emises') result = result.filter((d) => d.facturee && d.payee !== 'oui')
     else if (activeTab === 'payees') result = result.filter((d) => d.payee === 'oui')
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((d) => {
+        const text = [d.client_prenom, d.client_nom, d.produit_nom, d.compagnie_nom, d.consultant_prenom, d.consultant_nom].filter(Boolean).join(' ').toLowerCase()
+        return text.includes(q)
+      })
+    }
     return result
-  }, [data, activeTab])
+  }, [data, activeTab, searchQuery])
 
   // Calculate stats
   const stats = React.useMemo(() => {
@@ -157,9 +166,20 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Facturation</h1>
-        <p className="text-gray-600 mt-1">Suivi des factures et des paiements</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Facturation</h1>
+          <p className="text-gray-600 mt-1">Suivi des factures et des paiements</p>
+        </div>
+        <div className="relative w-72">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Rechercher un client, produit..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </div>
 
       {/* Stats Bar */}

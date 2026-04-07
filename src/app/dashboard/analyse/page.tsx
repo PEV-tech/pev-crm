@@ -94,9 +94,11 @@ function MiniDistribution({
 function MonthlyChart({
   months,
   label,
+  onClickMonth,
 }: {
   months: { label: string; value: number }[]
   label: string
+  onClickMonth?: (monthIndex: number) => void
 }) {
   const maxVal = Math.max(...months.map((m) => m.value), 1)
 
@@ -110,10 +112,14 @@ function MonthlyChart({
       </CardHeader>
       <CardContent className="pt-0">
         <div className="flex items-end gap-1 h-32">
-          {months.map((m) => {
+          {months.map((m, idx) => {
             const barH = Math.max((m.value / maxVal) * 100, 2)
             return (
-              <div key={m.label} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+              <div
+                key={m.label}
+                className={`flex-1 flex flex-col items-center justify-end h-full group relative ${onClickMonth ? 'cursor-pointer' : ''}`}
+                onClick={() => onClickMonth && m.value > 0 && onClickMonth(idx)}
+              >
                 <div className="absolute -top-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap z-10">
                   {formatCompact(m.value)}
                 </div>
@@ -199,6 +205,10 @@ export default function AnalysePage() {
   const [data, setData] = React.useState<VDossiersComplets[]>([])
   const [consultants, setConsultants] = React.useState<Consultant[]>([])
   const [loading, setLoading] = React.useState(true)
+
+  // Month detail popup
+  const [selectedMonth, setSelectedMonth] = React.useState<number | null>(null)
+  const FULL_MONTH_LABELS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
   // Filters
   const [periodeDebut, setPeriodeDebut] = React.useState('')
@@ -603,8 +613,8 @@ export default function AnalysePage() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <MonthlyChart months={monthlyCollecte} label="Collecte finalisée par mois" />
-        <MonthlyChart months={monthlyCommissions} label="Commissions par mois" />
+        <MonthlyChart months={monthlyCollecte} label="Collecte finalisée par mois" onClickMonth={(idx) => setSelectedMonth(idx)} />
+        <MonthlyChart months={monthlyCommissions} label="Commissions par mois" onClickMonth={(idx) => setSelectedMonth(idx)} />
         <ConversionFunnel prospects={agg.prospects} enCours={agg.enCours} finalises={agg.finalized} />
       </div>
 
@@ -687,6 +697,78 @@ export default function AnalysePage() {
           <DataTable data={filteredData} columns={columns} pageSize={15} />
         </CardContent>
       </Card>
+      {/* Month detail popup */}
+      {selectedMonth !== null && (() => {
+        const year = periodeDebut ? parseInt(periodeDebut.substring(0, 4)) : new Date().getFullYear()
+        const monthDossiers = filteredData.filter((d) => {
+          if (!d.date_operation) return false
+          const dt = new Date(d.date_operation)
+          return dt.getFullYear() === year && dt.getMonth() === selectedMonth
+        })
+        const monthCollecte = monthDossiers.filter(d => d.statut === 'client_finalise').reduce((s, d) => s + (d.montant || 0), 0)
+        const monthCommission = monthDossiers.reduce((s, d) => s + ((currentUser?.role === 'consultant' ? d.rem_apporteur : d.commission_brute) || 0), 0)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedMonth(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-900">
+                  Détail — {FULL_MONTH_LABELS[selectedMonth]} {year}
+                </h3>
+                <button onClick={() => setSelectedMonth(null)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-130px)]">
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="bg-indigo-50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-gray-500">Dossiers</p>
+                    <p className="text-xl font-bold text-indigo-700">{monthDossiers.length}</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-gray-500">Collecte finalisée</p>
+                    <p className="text-xl font-bold text-green-700">{formatCompact(monthCollecte)}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-gray-500">Commissions</p>
+                    <p className="text-xl font-bold text-blue-700">{formatCompact(monthCommission)}</p>
+                  </div>
+                </div>
+                {monthDossiers.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead className="border-b bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Client</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Produit</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Montant</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Commission</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Statut</th>
+                        {isManager && <th className="px-3 py-2 text-left font-semibold text-gray-700">Consultant</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthDossiers.map((d) => (
+                        <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-3 py-2">{d.client_prenom} {d.client_nom}</td>
+                          <td className="px-3 py-2">{d.produit_nom || '-'}</td>
+                          <td className="px-3 py-2 text-right">{formatCurrency(d.montant)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency(currentUser?.role === 'consultant' ? d.rem_apporteur : d.commission_brute)}</td>
+                          <td className="px-3 py-2"><StatusBadge status={d.statut as any} type="dossier" /></td>
+                          {isManager && <td className="px-3 py-2">{d.consultant_prenom} {d.consultant_nom}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-center text-gray-400 py-8">Aucun dossier ce mois</p>
+                )}
+              </div>
+              <div className="px-6 py-3 border-t bg-gray-50 text-right">
+                <button onClick={() => setSelectedMonth(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

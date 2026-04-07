@@ -27,13 +27,24 @@ function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
   return grille?.taux || 0
 }
 
+// Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
+function hasEncours(compagnieNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
+  const comp = (compagnieNom || '').toUpperCase()
+  const cat = (produitCategorie || '').toUpperCase()
+  if (comp.startsWith('PE-') || comp.startsWith('LUX-') || cat === 'PE' || cat === 'LUX' || cat === 'CAPI LUX' || cat === 'CAV LUX') return true
+  return false
+}
+
 function computeQuarterlyConsultant(
   montant: number | null | undefined,
   remApporteur: number | null | undefined,
   commissionBrute: number | null | undefined,
-  grilles: GrilleGestion[]
+  grilles: GrilleGestion[],
+  compagnieNom?: string | null,
+  produitCategorie?: string | null
 ): number | null {
   if (!montant || grilles.length === 0) return null
+  if (!hasEncours(compagnieNom, produitCategorie)) return null
   const tauxGestion = getGestionTaux(grilles, montant)
   if (!tauxGestion) return null
   if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
@@ -233,7 +244,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
         const entree = value ? formatCurrency(value) : '-'
         if (!isConsultant || gestionGrilles.length === 0) return entree
         const quarterly = computeQuarterlyConsultant(
-          row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles
+          row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.compagnie_nom, row.produit_categorie
         )
         if (quarterly === null) return entree
         return (

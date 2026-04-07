@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Select } from '@/components/ui/select'
 import { Users, TrendingUp, CheckCircle, Plus, Globe, Package, Building, Download } from 'lucide-react'
 import Link from 'next/link'
 import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
@@ -33,13 +34,24 @@ function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
   return grille?.taux || 0
 }
 
+// Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
+function hasEncours(compagnieNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
+  const comp = (compagnieNom || '').toUpperCase()
+  const cat = (produitCategorie || '').toUpperCase()
+  if (comp.startsWith('PE-') || comp.startsWith('LUX-') || cat === 'PE' || cat === 'LUX' || cat === 'CAPI LUX' || cat === 'CAV LUX') return true
+  return false
+}
+
 function computeQuarterlyConsultant(
   montant: number | null | undefined,
   remApporteur: number | null | undefined,
   commissionBrute: number | null | undefined,
-  grilles: GrilleGestion[]
+  grilles: GrilleGestion[],
+  compagnieNom?: string | null,
+  produitCategorie?: string | null
 ): number | null {
   if (!montant || grilles.length === 0) return null
+  if (!hasEncours(compagnieNom, produitCategorie)) return null
   const tauxGestion = getGestionTaux(grilles, montant)
   if (!tauxGestion) return null
   if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
@@ -59,8 +71,8 @@ function CommissionTooltip({
   const [visible, setVisible] = React.useState(false)
   const entree = isConsultant ? row.rem_apporteur : row.commission_brute
   const quarterly = isConsultant
-    ? computeQuarterlyConsultant(row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles)
-    : row.montant && gestionGrilles.length > 0
+    ? computeQuarterlyConsultant(row.montant, row.rem_apporteur, row.commission_brute, gestionGrilles, row.compagnie_nom, row.produit_categorie)
+    : (row.montant && gestionGrilles.length > 0 && hasEncours(row.compagnie_nom, row.produit_categorie))
     ? (row.montant * getGestionTaux(gestionGrilles, row.montant)) / 4
     : null
 
@@ -193,7 +205,19 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
   const router = useRouter()
   const [data] = React.useState(initialData)
   const [activeTab, setActiveTab] = React.useState('tous')
+  const [filterYear, setFilterYear] = React.useState<string>('tous')
   const isConsultant = consultant?.role === 'consultant'
+
+  // Extract available years from data
+  const availableYears = React.useMemo(() => {
+    const years = new Set<string>()
+    data.forEach((d) => {
+      if (d.date_operation) {
+        years.add(d.date_operation.substring(0, 4))
+      }
+    })
+    return Array.from(years).sort((a, b) => b.localeCompare(a))
+  }, [data])
 
   const stats = React.useMemo(() => {
     const totalDossiers = data.length
@@ -213,12 +237,17 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
   }, [data])
 
   const filteredData = React.useMemo(() => {
-    if (activeTab === 'tous') return data
-    if (activeTab === 'prospects') return data.filter((d) => d.statut === 'prospect')
-    if (activeTab === 'en_cours') return data.filter((d) => d.statut === 'client_en_cours')
-    if (activeTab === 'finalises') return data.filter((d) => d.statut === 'client_finalise')
-    return data
-  }, [data, activeTab])
+    let result = data
+    // Year filter
+    if (filterYear !== 'tous') {
+      result = result.filter((d) => d.date_operation && d.date_operation.startsWith(filterYear))
+    }
+    // Status tab filter
+    if (activeTab === 'prospects') result = result.filter((d) => d.statut === 'prospect')
+    else if (activeTab === 'en_cours') result = result.filter((d) => d.statut === 'client_en_cours')
+    else if (activeTab === 'finalises') result = result.filter((d) => d.statut === 'client_finalise')
+    return result
+  }, [data, activeTab, filterYear])
 
   // --- Portfolio distributions (finalisés only for real AUM) ---
   const distributions = React.useMemo(() => {
@@ -400,12 +429,20 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="tous" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="tous">Tous ({stats.totalDossiers})</TabsTrigger>
-              <TabsTrigger value="prospects">Prospects ({stats.prospects})</TabsTrigger>
-              <TabsTrigger value="en_cours">En cours ({stats.enCours})</TabsTrigger>
-              <TabsTrigger value="finalises">Finalisés ({stats.finalisés})</TabsTrigger>
-            </TabsList>
+            <div className="flex items-center justify-between gap-4">
+              <TabsList>
+                <TabsTrigger value="tous">Tous ({stats.totalDossiers})</TabsTrigger>
+                <TabsTrigger value="prospects">Prospects ({stats.prospects})</TabsTrigger>
+                <TabsTrigger value="en_cours">En cours ({stats.enCours})</TabsTrigger>
+                <TabsTrigger value="finalises">Finalisés ({stats.finalisés})</TabsTrigger>
+              </TabsList>
+              <Select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-32">
+                <option value="tous">Toutes années</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </Select>
+            </div>
             {['tous', 'prospects', 'en_cours', 'finalises'].map((tab) => (
               <TabsContent key={tab} value={tab}>
                 <DataTable

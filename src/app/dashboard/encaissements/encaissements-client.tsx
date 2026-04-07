@@ -320,55 +320,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         )
       })}
 
-      {/* Factures encaissées */}
-      {facturesPaid.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp size={18} className="text-green-600" />
-              Factures encaissées ({facturesPaid.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Client</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Produit</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Compagnie</th>
-                    <th className="px-3 py-2 text-right font-semibold text-gray-700">Montant</th>
-                    <th className="px-3 py-2 text-right font-semibold text-gray-700">Commission</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Consultant</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Date facture</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {facturesPaid.map((d: any) => (
-                    <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-3 py-2">{d.client_prenom} {d.client_nom}</td>
-                      <td className="px-3 py-2">{d.produit_nom || '-'}</td>
-                      <td className="px-3 py-2">{d.compagnie_nom || '-'}</td>
-                      <td className="px-3 py-2 text-right">{formatCurrency(d.montant)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-700">{formatCurrency(d.commission_brute)}</td>
-                      <td className="px-3 py-2">{d.consultant_prenom} {d.consultant_nom}</td>
-                      <td className="px-3 py-2">
-                        {d.date_facture ? new Date(d.date_facture).toLocaleDateString('fr-FR') : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
-                    <td className="px-3 py-2" colSpan={3}>Total encaissé</td>
-                    <td className="px-3 py-2 text-right">{formatCurrency(facturesPaid.reduce((s: number, d: any) => s + (d.montant || 0), 0))}</td>
-                    <td className="px-3 py-2 text-right text-green-700">{formatCurrency(facturesPaid.reduce((s: number, d: any) => s + (d.commission_brute || 0), 0))}</td>
-                    <td colSpan={2}></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Section Factures encaissées supprimée — seul le détail mensuel est conservé */}
     </div>
   )
 }

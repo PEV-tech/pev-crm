@@ -13,7 +13,8 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 
 interface FormData {
-  nom: string; prenom: string; pays: string; produitId: string; compagnieId: string
+  nom: string; prenom: string; pays: string; email: string; telephone: string
+  produitId: string; compagnieId: string
   montant: string; financement: string; dateOperation: string; dateEntreeRelation: string
   statut: string; commentaire: string; consultantId: string
 }
@@ -30,7 +31,7 @@ export default function NewDossierPage() {
   const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
   const [loadingData, setLoadingData] = React.useState(true)
   const [formData, setFormData] = React.useState<FormData>({
-    nom: '', prenom: '', pays: '', produitId: '', compagnieId: '',
+    nom: '', prenom: '', pays: '', email: '', telephone: '', produitId: '', compagnieId: '',
     montant: '', financement: 'cash',
     dateOperation: new Date().toISOString().split('T')[0],
     dateEntreeRelation: new Date().toISOString().split('T')[0],
@@ -95,7 +96,7 @@ export default function NewDossierPage() {
         return
       }
       const { data: clientData, error: clientError } = await supabase
-        .from('clients').insert({ nom: formData.nom, prenom: formData.prenom || null, pays: formData.pays })
+        .from('clients').insert({ nom: formData.nom, prenom: formData.prenom || null, pays: formData.pays, email: formData.email || null, telephone: formData.telephone || null })
         .select().single()
       if (clientError) throw clientError
 
@@ -142,7 +143,7 @@ export default function NewDossierPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dossiers"><Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button></Link>
+        <Link href="/dashboard/dossiers"><Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button></Link>
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Créer un dossier</h1>
           <p className="text-gray-600 mt-1">Ajouter un nouveau dossier client</p>
@@ -168,6 +169,16 @@ export default function NewDossierPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pays *</label>
               <Input name="pays" value={formData.pays} onChange={handleInputChange} placeholder="France" required />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <Input name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="client@email.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                <Input name="telephone" value={formData.telephone} onChange={handleInputChange} placeholder="+33 6 12 34 56 78" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -284,7 +295,7 @@ export default function NewDossierPage() {
             {loading && <Loader2 size={18} className="animate-spin" />}
             Créer le dossier
           </Button>
-          <Link href="/dossiers"><Button variant="outline">Annuler</Button></Link>
+          <Link href="/dashboard/dossiers"><Button variant="outline">Annuler</Button></Link>
         </div>
       </form>
     </div>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
-import { DollarSign, TrendingUp, Download, Wallet, Receipt, Clock } from 'lucide-react'
+import { DollarSign, TrendingUp, Download, Wallet, Receipt, Clock, AlertCircle } from 'lucide-react'
 import { RoleType } from '@/types/database'
 import { exportCSV, getExportFilename, formatCurrencyForCSV } from '@/lib/export-csv'
 import { FacturationConsultant } from '@/components/dashboard/facturation-consultant'
@@ -220,12 +220,12 @@ export function RemunerationsClient({
       { key: 'commission_brute', label: 'Commission brute', sortable: true, render: (value) => formatCurrency(value) },
       { key: 'rem_apporteur', label: 'Part Consultant', render: (value) => formatCurrency(value) },
       {
-        key: 'payee', label: 'Payée',
-        render: (value) => {
-          const v = value || 'non'
-          const variant = v === 'oui' ? 'success' : v === 'en_cours' ? 'warning' : 'outline'
-          const label = v === 'oui' ? 'Oui' : v === 'en_cours' ? 'Prévision' : 'Non'
-          return <Badge variant={variant}>{label}</Badge>
+        key: 'facturee', label: 'Facturation',
+        render: (value, row) => {
+          if (row.payee === 'oui') return <Badge variant="success">Payée</Badge>
+          if (value) return <Badge variant="warning">Émise</Badge>
+          if (row.statut === 'client_finalise') return <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300"><Clock size={12} />À venir</Badge>
+          return <Badge variant="secondary">-</Badge>
         },
       },
     ]
@@ -351,15 +351,14 @@ export function RemunerationsClient({
       { key: 'compagnie_nom', label: 'Compagnie' },
       { key: 'statut', label: 'Statut', render: (value) => <Badge variant={statutVariant(value)}>{statutLabel(value)}</Badge> },
       { key: 'montant', label: 'Montant', render: (value) => formatCurrency(value) },
-      { key: 'commission_brute', label: 'Commission brute', render: (value) => formatCurrency(value) },
       { key: 'rem_apporteur', label: 'Ma commission', render: (value) => formatCurrency(value) },
       {
-        key: 'payee', label: 'Payée',
-        render: (value) => {
-          const v = value || 'non'
-          const variant = v === 'oui' ? 'success' : v === 'en_cours' ? 'warning' : 'outline'
-          const label = v === 'oui' ? 'Oui' : v === 'en_cours' ? 'Prévision' : 'Non'
-          return <Badge variant={variant}>{label}</Badge>
+        key: 'facturee', label: 'Facturation',
+        render: (value, row) => {
+          if (row.payee === 'oui') return <Badge variant="success">Payée</Badge>
+          if (value) return <Badge variant="warning">Émise</Badge>
+          if (row.statut === 'client_finalise') return <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300"><Clock size={12} />À venir</Badge>
+          return <Badge variant="secondary">-</Badge>
         },
       },
     ]

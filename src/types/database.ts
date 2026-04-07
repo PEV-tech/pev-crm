@@ -341,6 +341,8 @@ export type Database = {
           client_nom: string | null
           client_prenom: string | null
           client_pays: string | null
+          client_email: string | null
+          client_telephone: string | null
           statut_kyc: StatutKycType | null
           der: boolean | null
           pi: boolean | null

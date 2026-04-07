@@ -11,7 +11,8 @@ import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2 } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -39,6 +40,7 @@ const statutLabel = (s: string | null | undefined) => {
 interface DossierDetailWrapperProps { id: string }
 
 export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
+  const router = useRouter()
   const { consultant: currentUser } = useUser()
   const [dossier, setDossier] = React.useState<VDossiersComplets | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -52,6 +54,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [compagnies, setCompagnies] = React.useState<{ id: string; nom: string }[]>([])
   const [tauxMap, setTauxMap] = React.useState<{ produit_id: string | null; compagnie_id: string | null; taux: number }[]>([])
   const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
+  const [deleting, setDeleting] = React.useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
 
   const isConsultant = currentUser?.role === 'consultant'
 
@@ -93,6 +97,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             rm: data.rm ? 'oui' : 'non',
             preco: data.preco ? 'oui' : 'non',
             pays: data.client_pays || '',
+            email: data.client_email || '',
+            telephone: data.client_telephone || '',
           })
 
           // Fetch frais de gestion taux for encours commission
@@ -166,6 +172,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           rm: editForm.rm === 'oui',
         }
         if (editForm.pays) clientUpdate.pays = editForm.pays
+        clientUpdate.email = editForm.email || null
+        clientUpdate.telephone = editForm.telephone || null
         const { error: clientError } = await supabase.from('clients').update(clientUpdate).eq('id', clientId)
         if (clientError) { setSaveError(clientError.message); setSaving(false); return }
       }
@@ -176,6 +184,27 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       setIsEditing(false)
     } catch (e: any) { setSaveError(e.message || 'Erreur lors de la sauvegarde') }
     finally { setSaving(false) }
+  }
+
+  // Delete handler — only for non-finalized dossiers
+  const canDelete = dossier && dossier.statut !== 'client_finalise' && !isConsultant
+  const handleDelete = async () => {
+    if (!dossier?.id) return
+    setDeleting(true)
+    try {
+      // Delete factures first (FK constraint)
+      await supabase.from('factures').delete().eq('dossier_id', dossier.id)
+      // Delete commissions
+      await supabase.from('commissions').delete().eq('dossier_id', dossier.id)
+      // Delete dossier
+      const { error } = await supabase.from('dossiers').delete().eq('id', dossier.id)
+      if (error) throw error
+      router.push('/dashboard/dossiers')
+    } catch (e: any) {
+      setSaveError(e.message || 'Erreur lors de la suppression')
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
   }
 
   // Compute quarterly encours commission for this dossier
@@ -200,7 +229,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Dossier non trouvé</h1>
-        <Link href="/dossiers"><Button variant="outline">Retour aux dossiers</Button></Link>
+        <Link href="/dashboard/dossiers"><Button variant="outline">Retour aux dossiers</Button></Link>
       </div>
     )
   }
@@ -214,14 +243,43 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/dossiers">
-          <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button>
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dossier #{dossier.id?.slice(0, 8).toUpperCase()}</h1>
-          <p className="text-gray-600 mt-1">{dossier.client_prenom} {dossier.client_nom}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/dossiers">
+            <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dossier #{dossier.id?.slice(0, 8).toUpperCase()}</h1>
+            <p className="text-gray-600 mt-1">
+              {dossier.client_id ? (
+                <Link href={`/dashboard/clients/${dossier.client_id}`} className="text-indigo-600 hover:underline">
+                  {dossier.client_prenom} {dossier.client_nom}
+                </Link>
+              ) : (
+                <span>{dossier.client_prenom} {dossier.client_nom}</span>
+              )}
+            </p>
+          </div>
         </div>
+        {canDelete && (
+          <div>
+            {showDeleteConfirm ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-600">Confirmer ?</span>
+                <Button size="sm" variant="outline" onClick={() => setShowDeleteConfirm(false)}>Annuler</Button>
+                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white gap-2" onClick={handleDelete} disabled={deleting}>
+                  {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  Supprimer
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setShowDeleteConfirm(true)}>
+                <Trash2 size={14} />
+                Supprimer
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {saveError && <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">{saveError}</div>}
@@ -263,6 +321,22 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     <Input name="pays" value={editForm.pays} onChange={handleEditChange} className="mt-1" placeholder="France" />
                   ) : (
                     <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.client_pays || '-'}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Email</p>
+                  {isEditing ? (
+                    <Input name="email" type="email" value={editForm.email} onChange={handleEditChange} className="mt-1" placeholder="client@email.com" />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.client_email || '-'}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Téléphone</p>
+                  {isEditing ? (
+                    <Input name="telephone" value={editForm.telephone} onChange={handleEditChange} className="mt-1" placeholder="+33 6 12 34 56 78" />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.client_telephone || '-'}</p>
                   )}
                 </div>
                 <div>

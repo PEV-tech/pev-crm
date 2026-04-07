@@ -112,10 +112,15 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
 
   const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse']
   const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
+  // Back office: no "Ma Clientèle" (pas de clientèle propre), no "Rémunérations" (suivi seulement)
+  const backOfficeHiddenLabels = ['Ma Clientèle', 'Rémunérations']
 
   const visibleItems = navigationItems.filter((item) => {
     if (managerOnlyLabels.includes(item.label)) {
       return isManagerOrBO
+    }
+    if (backOfficeHiddenLabels.includes(item.label) && userRole === 'back_office') {
+      return false
     }
     return true
   })

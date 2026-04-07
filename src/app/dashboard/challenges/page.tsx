@@ -120,35 +120,30 @@ export default function ChallengesPage() {
         </Card>
       )}
 
-      {/* Manager: overview cards */}
-      {isManager && ranked.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp size={20} />
-              Vue d'ensemble
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {ranked.map((r) => (
-                <div key={r.name} className={`p-4 rounded-lg border ${r.rank === 1 ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                      r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
-                      r.rank === 2 ? 'bg-gray-200 text-gray-700' :
-                      r.rank === 3 ? 'bg-orange-100 text-orange-800' :
-                      'bg-gray-100 text-gray-500'
-                    }`}>{r.rank}</span>
-                    <span className="font-semibold text-sm">{r.prenom}</span>
-                  </div>
-                  <p className="text-lg font-bold text-gray-900">{formatCurrency(r.collecte)}</p>
-                  <p className="text-xs text-gray-500">{r.nbDossiers} dossier(s)</p>
+      {/* Top 3 Podium */}
+      {ranked.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {ranked.slice(0, 3).map((r) => (
+            <Card key={r.name} className={`${
+              r.rank === 1 ? 'border-2 border-yellow-400 bg-yellow-50/50' :
+              r.rank === 2 ? 'border-2 border-gray-300 bg-gray-50/50' :
+              'border-2 border-orange-300 bg-orange-50/50'
+            }`}>
+              <CardContent className="py-6 text-center">
+                <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full text-lg font-bold mb-3 ${
+                  r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                  r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                  'bg-orange-100 text-orange-800'
+                }`}>
+                  {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉'}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <p className="text-lg font-bold text-gray-900">{r.prenom} {r.name.split(' ').slice(1).join(' ')}</p>
+                <p className="text-2xl font-bold text-indigo-700 mt-1">{formatCurrency(r.collecte)}</p>
+                <p className="text-sm text-gray-500 mt-1">{r.nbDossiers} dossier(s)</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
 
       {/* Detail table */}
