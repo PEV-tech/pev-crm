@@ -50,6 +50,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [tauxGestion, setTauxGestion] = React.useState<number | null>(null)
   const [produits, setProduits] = React.useState<{ id: string; nom: string }[]>([])
   const [compagnies, setCompagnies] = React.useState<{ id: string; nom: string }[]>([])
+  const [tauxMap, setTauxMap] = React.useState<{ produit_id: string | null; compagnie_id: string | null; taux: number }[]>([])
+  const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
 
   const isConsultant = currentUser?.role === 'consultant'
 
@@ -58,14 +60,16 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   React.useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [dossierRes, produitsRes, compagniesRes] = await Promise.all([
+        const [dossierRes, produitsRes, compagniesRes, tauxRes] = await Promise.all([
           supabase.from('v_dossiers_complets').select('*').eq('id', id).single(),
           supabase.from('produits').select('id, nom').order('nom'),
           supabase.from('compagnies').select('id, nom').order('nom'),
+          supabase.from('taux_produit_compagnie').select('produit_id, compagnie_id, taux').eq('actif', true),
         ])
 
         if (produitsRes.data) setProduits(produitsRes.data)
         if (compagniesRes.data) setCompagnies(compagniesRes.data)
+        if (tauxRes.data) setTauxMap(tauxRes.data)
 
         const { data, error } = dossierRes
         if (error || !data) { setNotFound(true) }
@@ -111,6 +115,23 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     }
     fetchAll()
   }, [id, supabase])
+
+  // Auto taux lookup when editing produit + compagnie
+  React.useEffect(() => {
+    if (isEditing && editForm.produit_id && editForm.compagnie_id) {
+      const match = tauxMap.find(
+        t => t.produit_id === editForm.produit_id && t.compagnie_id === editForm.compagnie_id
+      )
+      setAutoTaux(match ? match.taux : null)
+    } else {
+      setAutoTaux(null)
+    }
+  }, [isEditing, editForm.produit_id, editForm.compagnie_id, tauxMap])
+
+  const editEstimatedCommission = React.useMemo(() => {
+    if (autoTaux === null || !editForm.montant) return null
+    return parseFloat(editForm.montant) * autoTaux
+  }, [autoTaux, editForm.montant])
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -270,6 +291,25 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.compagnie_nom || '-'}</p>
                   )}
                 </div>
+                {isEditing && autoTaux !== null && (
+                  <div className="col-span-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-indigo-700">
+                        Taux commission : <strong>{(autoTaux * 100).toFixed(2)}%</strong>
+                      </span>
+                      {editEstimatedCommission !== null && editEstimatedCommission > 0 && (
+                        <span className="text-sm font-semibold text-indigo-900">
+                          Commission estimée : {formatCurrency(editEstimatedCommission)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {isEditing && editForm.produit_id && editForm.compagnie_id && autoTaux === null && (
+                  <div className="col-span-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                    <span className="text-xs text-amber-700">Aucun taux configuré pour cette combinaison produit/compagnie</span>
+                  </div>
+                )}
                 <div>
                   <p className="text-sm font-medium text-gray-500">Stade relationnel</p>
                   {isEditing ? (
@@ -495,8 +535,43 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-lg">Réglementaire</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Réglementaire</CardTitle>
+                {!isEditing && (() => {
+                  const fields = [
+                    dossier.statut_kyc === 'oui',
+                    !!dossier.der, !!dossier.pi, !!dossier.preco, !!dossier.lm, !!dossier.rm,
+                  ]
+                  const done = fields.filter(Boolean).length
+                  return (
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                      done === 6 ? 'bg-green-100 text-green-700' :
+                      done >= 4 ? 'bg-blue-100 text-blue-700' :
+                      done >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                    }`}>{done}/6</span>
+                  )
+                })()}
+              </div>
+            </CardHeader>
             <CardContent className="space-y-2">
+              {!isEditing && (() => {
+                const fields = [
+                  dossier.statut_kyc === 'oui',
+                  !!dossier.der, !!dossier.pi, !!dossier.preco, !!dossier.lm, !!dossier.rm,
+                ]
+                const done = fields.filter(Boolean).length
+                const pct = (done / 6) * 100
+                return (
+                  <div className="mb-3">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className={`h-2 rounded-full transition-all ${
+                        pct === 100 ? 'bg-green-500' : pct >= 60 ? 'bg-blue-500' : pct >= 30 ? 'bg-amber-500' : 'bg-red-500'
+                      }`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })()}
               {isEditing ? (
                 <>
                   {[

@@ -12,9 +12,10 @@ interface RelanceRow {
   consultantPrenom: string
   produitNom: string
   dateOperation: string
-  typeRelance: 'kyc' | 'inactivite' | 'paiement'
+  typeRelance: 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging'
   statut: string
   urgency: 'critical' | 'high' | 'medium'
+  detail?: string
 }
 
 export function RelancesClientWrapper() {
@@ -102,17 +103,64 @@ export function RelancesClientWrapper() {
               dossier.facturee === true &&
               (dossier.payee === 'non' || dossier.payee === false || dossier.payee === null)
             ) {
-              relances.push({
-                id: `paiement-${dossier.id}`,
-                clientNom: dossier.client_nom || '',
-                consultantNom: dossier.consultant_nom || '',
-                consultantPrenom: dossier.consultant_prenom || '',
-                produitNom: dossier.produit_nom || 'N/A',
-                dateOperation: dossier.date_operation || '',
-                typeRelance: 'paiement',
-                statut: dossier.statut || '',
-                urgency: 'high',
-              })
+              // Check if facture is aging (30j+ since date_facture)
+              const dateFacture = dossier.date_facture ? new Date(dossier.date_facture) : null
+              const daysSinceFacture = dateFacture
+                ? Math.floor((now.getTime() - dateFacture.getTime()) / (1000 * 60 * 60 * 24))
+                : null
+
+              if (daysSinceFacture !== null && daysSinceFacture >= 30) {
+                relances.push({
+                  id: `facture_aging-${dossier.id}`,
+                  clientNom: dossier.client_nom || '',
+                  consultantNom: dossier.consultant_nom || '',
+                  consultantPrenom: dossier.consultant_prenom || '',
+                  produitNom: dossier.produit_nom || 'N/A',
+                  dateOperation: dossier.date_operation || '',
+                  typeRelance: 'facture_aging',
+                  statut: dossier.statut || '',
+                  urgency: daysSinceFacture >= 60 ? 'critical' : 'high',
+                  detail: `Facture impayée depuis ${daysSinceFacture}j`,
+                })
+              } else {
+                relances.push({
+                  id: `paiement-${dossier.id}`,
+                  clientNom: dossier.client_nom || '',
+                  consultantNom: dossier.consultant_nom || '',
+                  consultantPrenom: dossier.consultant_prenom || '',
+                  produitNom: dossier.produit_nom || 'N/A',
+                  dateOperation: dossier.date_operation || '',
+                  typeRelance: 'paiement',
+                  statut: dossier.statut || '',
+                  urgency: 'high',
+                })
+              }
+            }
+
+            // 4. Réglementaire incomplet: finalized dossiers with missing compliance fields
+            if (dossier.statut === 'client_finalise') {
+              const missingFields: string[] = []
+              if (dossier.statut_kyc !== 'oui' && dossier.statut_kyc !== true) missingFields.push('KYC')
+              if (!dossier.der) missingFields.push('DER')
+              if (!dossier.pi) missingFields.push('PI')
+              if (!dossier.preco) missingFields.push('PRECO')
+              if (!dossier.lm) missingFields.push('LM')
+              if (!dossier.rm) missingFields.push('RM')
+
+              if (missingFields.length > 0) {
+                relances.push({
+                  id: `reglementaire-${dossier.id}`,
+                  clientNom: dossier.client_nom || '',
+                  consultantNom: dossier.consultant_nom || '',
+                  consultantPrenom: dossier.consultant_prenom || '',
+                  produitNom: dossier.produit_nom || 'N/A',
+                  dateOperation: dossier.date_operation || '',
+                  typeRelance: 'reglementaire',
+                  statut: dossier.statut || '',
+                  urgency: missingFields.length >= 4 ? 'critical' : missingFields.length >= 2 ? 'high' : 'medium',
+                  detail: `Manquant : ${missingFields.join(', ')}`,
+                })
+              }
             }
           })
         }

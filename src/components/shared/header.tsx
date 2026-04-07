@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, ChevronDown, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SearchModal } from './search-modal'
 
 interface HeaderProps {
   title?: string
@@ -19,17 +20,24 @@ export function Header({
   onLogout,
 }: HeaderProps) {
   const router = useRouter()
-  const [searchQuery, setSearchQuery] = useState('')
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (searchQuery.trim()) {
-      router.push(`/dashboard/dossiers?q=${encodeURIComponent(searchQuery.trim())}`)
+  // Cmd+K / Ctrl+K shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setShowSearch(true)
+      }
     }
-  }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   return (
+    <>
+    <SearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
     <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
       <div className="flex items-center justify-between px-6 py-4">
         {/* Left section - Title */}
@@ -37,19 +45,21 @@ export function Header({
           <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
         </div>
 
-        {/* Center section - Search */}
-        <form onSubmit={handleSearch} className="flex-1 max-w-md mx-8">
+        {/* Center section - Search trigger */}
+        <button
+          onClick={() => setShowSearch(true)}
+          className="flex-1 max-w-md mx-8"
+        >
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Rechercher un client, dossier..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-colors"
-            />
+            <div className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-500 text-left flex items-center justify-between">
+              <span>Rechercher un client, dossier...</span>
+              <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-xs text-gray-600">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </div>
           </div>
-        </form>
+        </button>
 
         {/* Right section - User Avatar and Menu */}
         <div className="flex items-center gap-4">
@@ -88,5 +98,6 @@ export function Header({
         </div>
       </div>
     </header>
+    </>
   )
 }

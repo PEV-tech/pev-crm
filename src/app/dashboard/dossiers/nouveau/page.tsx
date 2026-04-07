@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Produit, Compagnie, Consultant } from '@/types/database'
+import { Produit, Compagnie, Consultant, TauxProduitCompagnie } from '@/types/database'
 import { useUser } from '@/hooks/use-user'
 import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -26,6 +26,8 @@ export default function NewDossierPage() {
   const [produits, setProduits] = React.useState<Produit[]>([])
   const [compagnies, setCompagnies] = React.useState<Compagnie[]>([])
   const [consultants, setConsultants] = React.useState<Consultant[]>([])
+  const [tauxMap, setTauxMap] = React.useState<TauxProduitCompagnie[]>([])
+  const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
   const [loadingData, setLoadingData] = React.useState(true)
   const [formData, setFormData] = React.useState<FormData>({
     nom: '', prenom: '', pays: '', produitId: '', compagnieId: '',
@@ -40,14 +42,16 @@ export default function NewDossierPage() {
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        const [produitsRes, compagniesRes, consultantsRes] = await Promise.all([
+        const [produitsRes, compagniesRes, consultantsRes, tauxRes] = await Promise.all([
           supabase.from('produits').select('*').order('nom'),
           supabase.from('compagnies').select('*').order('nom'),
           supabase.from('consultants').select('*').eq('actif', true).order('prenom'),
+          supabase.from('taux_produit_compagnie').select('*').eq('actif', true),
         ])
         if (produitsRes.data) setProduits(produitsRes.data)
         if (compagniesRes.data) setCompagnies(compagniesRes.data)
         if (consultantsRes.data) setConsultants(consultantsRes.data)
+        if (tauxRes.data) setTauxMap(tauxRes.data)
       } catch (err) { console.error('Error:', err) }
       finally { setLoadingData(false) }
     }
@@ -57,6 +61,23 @@ export default function NewDossierPage() {
   React.useEffect(() => {
     if (consultant?.id) setFormData(prev => ({ ...prev, consultantId: prev.consultantId || consultant.id }))
   }, [consultant])
+
+  // Auto taux lookup when produit + compagnie change
+  React.useEffect(() => {
+    if (formData.produitId && formData.compagnieId) {
+      const match = tauxMap.find(
+        t => t.produit_id === formData.produitId && t.compagnie_id === formData.compagnieId
+      )
+      setAutoTaux(match ? match.taux : null)
+    } else {
+      setAutoTaux(null)
+    }
+  }, [formData.produitId, formData.compagnieId, tauxMap])
+
+  const estimatedCommission = React.useMemo(() => {
+    if (autoTaux === null || !formData.montant) return null
+    return parseFloat(formData.montant) * autoTaux
+  }, [autoTaux, formData.montant])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -181,6 +202,27 @@ export default function NewDossierPage() {
                 </Select>
               </div>
             </div>
+
+            {/* Auto taux indicator */}
+            {autoTaux !== null && (
+              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-indigo-700">
+                    Taux commission : <strong>{(autoTaux * 100).toFixed(2)}%</strong>
+                  </span>
+                  {estimatedCommission !== null && estimatedCommission > 0 && (
+                    <span className="text-sm font-semibold text-indigo-900">
+                      Commission estimée : {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(estimatedCommission)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {formData.produitId && formData.compagnieId && autoTaux === null && (
+              <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <span className="text-xs text-amber-700">Aucun taux configuré pour cette combinaison produit/compagnie</span>
+              </div>
+            )}
 
             {/* Montant + Financement */}
             <div className="grid grid-cols-2 gap-4">

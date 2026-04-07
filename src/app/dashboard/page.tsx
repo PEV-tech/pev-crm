@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/card'
 import { useRole, useConsultantInfo } from '@/hooks/use-user'
 import { DashboardClient } from './dashboard-client'
-import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy } from 'lucide-react'
+import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy, Target, AlertTriangle } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '0 €'
@@ -25,6 +25,9 @@ export default function DashboardPage() {
   const [recentDossiers, setRecentDossiers] = useState<any[]>([])
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([])
   const [consultantRank, setConsultantRank] = useState<{ rank: number; totalConsultants: number; ecart: number | null } | null>(null)
+  const [objectif, setObjectif] = useState<{ objectif: number; collecte: number } | null>(null)
+  const [projection, setProjection] = useState<number | null>(null)
+  const [relancesCount, setRelancesCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -93,6 +96,64 @@ export default function DashboardPage() {
             ecart,
           })
         }
+      }
+
+      // Fetch challenges for objectives
+      const { data: challenges } = await supabase
+        .from('challenges')
+        .select('*')
+        .eq('annee', 2026)
+
+      if (challenges && challenges.length > 0) {
+        if (!isManager && consultantInfo?.id) {
+          const myChallenge = challenges.find((c: any) => c.consultant_id === consultantInfo.id)
+          if (myChallenge) {
+            setObjectif({ objectif: myChallenge.objectif, collecte: myChallenge.collecte })
+          }
+        } else if (isManager) {
+          // Aggregate all challenges for manager view
+          const totalObjectif = challenges.reduce((s: number, c: any) => s + (c.objectif || 0), 0)
+          const totalCollecte = challenges.reduce((s: number, c: any) => s + (c.collecte || 0), 0)
+          if (totalObjectif > 0) setObjectif({ objectif: totalObjectif, collecte: totalCollecte })
+        }
+      }
+
+      // Calculate annual projection: (collecte YTD / months elapsed) * 12
+      const now = new Date()
+      const monthsElapsed = now.getMonth() + (now.getDate() / 30) // fractional months into 2026
+      if (monthsElapsed > 0 && stats.collecte > 0) {
+        // Use the collecte we just computed
+        const currentCollecte = dossiers
+          ? (isManager ? dossiers : dossiers.filter((d: any) => {
+              const n = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+              return n === consultantInfo?.name
+            }))
+            .filter((d: any) => d.statut === 'client_finalise')
+            .reduce((s: number, d: any) => s + (d.montant || 0), 0)
+          : 0
+        if (currentCollecte > 0) {
+          setProjection((currentCollecte / monthsElapsed) * 12)
+        }
+      }
+
+      // Count relances for badge
+      if (dossiers) {
+        const nowDate = new Date()
+        let relCount = 0
+        const targetDossiers = isManager ? dossiers : dossiers.filter((d: any) => {
+          const n = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+          return n === consultantInfo?.name
+        })
+        targetDossiers.forEach((d: any) => {
+          if (d.statut === 'client_en_cours' && (d.statut_kyc === 'non' || d.statut_kyc === false)) relCount++
+          if (d.statut === 'client_finalise' && d.facturee === true && (d.payee === 'non' || !d.payee)) relCount++
+          const dateOp = d.date_operation ? new Date(d.date_operation) : null
+          if (d.statut === 'client_en_cours' && dateOp) {
+            const days = Math.floor((nowDate.getTime() - dateOp.getTime()) / (1000 * 60 * 60 * 24))
+            if (days >= 30) relCount++
+          }
+        })
+        setRelancesCount(relCount)
       }
 
       // Get recent dossiers
@@ -253,6 +314,83 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {/* Objectives + Projection + Relances row */}
+      {(objectif || projection || relancesCount > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Objectif gauge */}
+          {objectif && objectif.objectif > 0 && (
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="bg-orange-100 p-2 rounded-lg">
+                  <Target className="text-orange-600" size={20} />
+                </div>
+                <p className="text-sm font-medium text-gray-600">Objectif 2026</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Collecte</span>
+                  <span className="font-semibold text-gray-900">{formatCurrency(objectif.collecte)}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className={`h-3 rounded-full transition-all ${
+                      (objectif.collecte / objectif.objectif) >= 1 ? 'bg-green-500' :
+                      (objectif.collecte / objectif.objectif) >= 0.7 ? 'bg-blue-500' :
+                      (objectif.collecte / objectif.objectif) >= 0.4 ? 'bg-orange-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (objectif.collecte / objectif.objectif) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>{((objectif.collecte / objectif.objectif) * 100).toFixed(0)}% atteint</span>
+                  <span>Objectif : {formatCurrency(objectif.objectif)}</span>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Projection annuelle */}
+          {projection && projection > 0 && (
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="bg-cyan-100 p-2 rounded-lg">
+                  <TrendingUp className="text-cyan-600" size={20} />
+                </div>
+                <p className="text-sm font-medium text-gray-600">Projection annuelle</p>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(projection)}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Basée sur le rythme actuel ({new Date().toLocaleDateString('fr-FR', { month: 'long' })})
+              </p>
+              {objectif && objectif.objectif > 0 && (
+                <p className={`text-xs mt-2 font-medium ${projection >= objectif.objectif ? 'text-green-600' : 'text-amber-600'}`}>
+                  {projection >= objectif.objectif
+                    ? `En avance de ${formatCurrency(projection - objectif.objectif)}`
+                    : `Écart prévisionnel : ${formatCurrency(objectif.objectif - projection)}`}
+                </p>
+              )}
+            </Card>
+          )}
+
+          {/* Relances badge */}
+          {relancesCount > 0 && (
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="bg-red-100 p-2 rounded-lg">
+                  <AlertTriangle className="text-red-600" size={20} />
+                </div>
+                <p className="text-sm font-medium text-gray-600">Relances en attente</p>
+              </div>
+              <p className="text-2xl font-bold text-red-600">{relancesCount}</p>
+              <p className="text-xs text-gray-500 mt-1">Actions requises (KYC, paiements, inactivité)</p>
+              <a href="/dashboard/relances" className="text-xs text-indigo-600 hover:underline mt-2 inline-block">
+                Voir les relances →
+              </a>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Content Grid */}
       <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} allFinalisedDossiers={allFinalisedDossiers} />
