@@ -12,7 +12,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, User, FileText, Shield, TrendingUp,
   MapPin, Calendar, DollarSign, CheckCircle,
-  Mail, Phone, CreditCard,
+  Mail, Phone, CreditCard, FolderOpen, ExternalLink, Plus, Send, Clock,
 } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -52,6 +52,89 @@ interface ClientInfo {
   lm: boolean
   rm: boolean
   created_at: string
+}
+
+function GoogleSuiteCard({ clientName, clientEmail }: { clientName: string; clientEmail: string | null }) {
+  const driveSearchUrl = `https://drive.google.com/drive/search?q=${encodeURIComponent(clientName)}`
+  const calendarCreateUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`RDV - ${clientName}`)}&details=${encodeURIComponent(`Rendez-vous client : ${clientName}`)}`
+  const gmailComposeUrl = clientEmail
+    ? `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(clientEmail)}&su=${encodeURIComponent(`PEV - ${clientName}`)}`
+    : null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <ExternalLink size={18} className="text-gray-600" />
+          Google Suite
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Google Drive */}
+        <a
+          href={driveSearchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors group"
+        >
+          <div className="bg-yellow-100 p-1.5 rounded-md">
+            <FolderOpen size={16} className="text-yellow-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-800 group-hover:text-blue-700">Google Drive</p>
+            <p className="text-xs text-gray-500">Rechercher le dossier client</p>
+          </div>
+          <ExternalLink size={14} className="text-gray-400 group-hover:text-blue-500" />
+        </a>
+
+        {/* Google Calendar */}
+        <a
+          href={calendarCreateUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-green-300 hover:bg-green-50/50 transition-colors group"
+        >
+          <div className="bg-green-100 p-1.5 rounded-md">
+            <Calendar size={16} className="text-green-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-800 group-hover:text-green-700">Google Agenda</p>
+            <p className="text-xs text-gray-500">Créer un rendez-vous</p>
+          </div>
+          <Plus size={14} className="text-gray-400 group-hover:text-green-500" />
+        </a>
+
+        {/* Gmail */}
+        {gmailComposeUrl ? (
+          <a
+            href={gmailComposeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50/50 transition-colors group"
+          >
+            <div className="bg-red-100 p-1.5 rounded-md">
+              <Send size={16} className="text-red-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800 group-hover:text-red-700">Envoyer un email</p>
+              <p className="text-xs text-gray-500 truncate">{clientEmail}</p>
+            </div>
+            <ExternalLink size={14} className="text-gray-400 group-hover:text-red-500" />
+          </a>
+        ) : (
+          <div className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 bg-gray-50">
+            <div className="bg-gray-200 p-1.5 rounded-md">
+              <Send size={16} className="text-gray-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-400">Envoyer un email</p>
+              <p className="text-xs text-gray-400 italic">Email non renseigné</p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function ClientDetailPage() {
@@ -307,6 +390,9 @@ export default function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Google Suite Integration */}
+          <GoogleSuiteCard clientName={fullName} clientEmail={client.email} />
 
           <Card>
             <CardHeader>
