@@ -1,6 +1,6 @@
 'use client'
 
-import { useContext, createContext } from 'react'
+import { useContext, createContext, useMemo } from 'react'
 import { Consultant, RoleType } from '@/types/database'
 
 export interface UserContextType {
@@ -35,15 +35,15 @@ export function useIsManager() {
 
 export function useConsultantInfo() {
   const { consultant } = useUser()
-  if (!consultant) {
-    return null
-  }
-  return {
-    id: consultant.id,
-    name: `${consultant.prenom} ${consultant.nom}`,
-    firstName: consultant.prenom,
-    lastName: consultant.nom,
-    role: consultant.role,
-    zone: consultant.zone,
-  }
+  return useMemo(() => {
+    if (!consultant) return null
+    return {
+      id: consultant.id,
+      name: `${consultant.prenom} ${consultant.nom}`,
+      firstName: consultant.prenom,
+      lastName: consultant.nom,
+      role: consultant.role,
+      zone: consultant.zone,
+    }
+  }, [consultant])
 }

@@ -459,8 +459,19 @@ export default function ClientDetailPage() {
       .from('clients')
       .update({ commentaires: editNotesValue || null })
       .eq('id', clientId)
-    if (!error) {
-      setClient({ ...client, commentaires: editNotesValue })
+    if (error) {
+      console.error('Erreur sauvegarde commentaires:', error)
+      alert('Erreur lors de la sauvegarde. Veuillez réessayer.')
+    } else {
+      // Re-fetch to confirm persistence
+      const { data: refreshed } = await supabase
+        .from('clients')
+        .select('commentaires')
+        .eq('id', clientId)
+        .single()
+      const savedValue = refreshed?.commentaires ?? editNotesValue
+      setClient({ ...client, commentaires: savedValue })
+      setEditNotesValue(savedValue || '')
       setEditingNotes(false)
     }
     setSavingNotes(false)

@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2, Pencil, ExternalLink } from 'lucide-react'
+import { DocumentChecklist } from '@/components/shared/document-checklist'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -1089,6 +1090,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               )}
             </CardContent>
           </Card>
+
+          {/* Document Checklist */}
+          <DocumentChecklist dossierId={id} produitNom={dossier.produit_nom} />
 
           <Card>
             <CardHeader>
