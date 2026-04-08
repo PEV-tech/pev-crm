@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2, Pencil, ExternalLink } from 'lucide-react'
 import { DocumentChecklist } from '@/components/shared/document-checklist'
+import { ClientRelances } from '@/components/shared/client-relances'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -1093,6 +1094,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
 
           {/* Document Checklist */}
           <DocumentChecklist dossierId={id} produitNom={dossier.produit_nom} />
+
+          {/* Relances pour ce dossier */}
+          {dossier.client_id && (
+            <ClientRelances clientId={dossier.client_id} dossierId={id} compact />
+          )}
 
           <Card>
             <CardHeader>

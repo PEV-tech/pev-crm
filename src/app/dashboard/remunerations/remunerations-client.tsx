@@ -9,6 +9,7 @@ import { DollarSign, TrendingUp, Download, Wallet, Receipt, Clock, AlertCircle }
 import { RoleType } from '@/types/database'
 import { exportCSV, getExportFilename, formatCurrencyForCSV } from '@/lib/export-csv'
 import { FacturationConsultant } from '@/components/dashboard/facturation-consultant'
+import { CommissionGrille } from '@/components/shared/commission-grille'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -461,6 +462,15 @@ export function RemunerationsClient({
             </div>
           </CardContent>
         </Card>
+
+        {/* Grille de commissionnement progressive */}
+        {consultant && (
+          <CommissionGrille
+            consultantId={consultant.id}
+            consultantNom={`${consultant.prenom || ''} ${consultant.nom || ''}`.trim()}
+            dossiers={dossiers}
+          />
+        )}
 
         {consultant?.id && (
           <FacturationConsultant

@@ -13,7 +13,9 @@ import {
   ArrowLeft, User, FileText, Shield, TrendingUp,
   MapPin, Calendar, DollarSign, CheckCircle,
   Mail, Phone, CreditCard, FolderOpen, ExternalLink, Plus, Send, Clock, Pencil, Save, X,
+  Paperclip, Upload, Trash2,
 } from 'lucide-react'
+import { ClientRelances } from '@/components/shared/client-relances'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -327,6 +329,150 @@ function GoogleSuiteCard({
               <p className="text-xs text-gray-400 italic">Email non renseigné</p>
             </div>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function PiecesJointes({
+  clientId,
+  supabase,
+  currentUserId,
+}: {
+  clientId: string
+  supabase: ReturnType<typeof createClient>
+  currentUserId?: string
+}) {
+  const [pjList, setPjList] = React.useState<{ id: string; nom_fichier: string; storage_path: string; taille_octets: number | null; type_mime: string | null; created_at: string }[]>([])
+  const [uploading, setUploading] = React.useState(false)
+  const [loadingPj, setLoadingPj] = React.useState(true)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    const fetchPj = async () => {
+      const { data } = await supabase
+        .from('client_pj')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+      setPjList(data || [])
+      setLoadingPj(false)
+    }
+    fetchPj()
+  }, [clientId, supabase])
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+
+    const ext = file.name.split('.').pop() || 'bin'
+    const storagePath = `${clientId}/${Date.now()}_${file.name}`
+
+    const { error: uploadErr } = await supabase.storage
+      .from('client-pj')
+      .upload(storagePath, file)
+
+    if (uploadErr) {
+      console.error('Upload error:', uploadErr)
+      alert('Erreur lors de l\'upload. Veuillez réessayer.')
+      setUploading(false)
+      return
+    }
+
+    const { error: insertErr } = await supabase.from('client_pj').insert({
+      client_id: clientId,
+      nom_fichier: file.name,
+      storage_path: storagePath,
+      taille_octets: file.size,
+      type_mime: file.type || null,
+      uploaded_by: currentUserId || null,
+    })
+
+    if (!insertErr) {
+      const { data } = await supabase
+        .from('client_pj')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+      setPjList(data || [])
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDelete = async (pj: { id: string; storage_path: string }) => {
+    await supabase.storage.from('client-pj').remove([pj.storage_path])
+    await supabase.from('client_pj').delete().eq('id', pj.id)
+    setPjList(prev => prev.filter(p => p.id !== pj.id))
+  }
+
+  const handleDownload = async (pj: { storage_path: string; nom_fichier: string }) => {
+    const { data } = await supabase.storage.from('client-pj').createSignedUrl(pj.storage_path, 60)
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, '_blank')
+    }
+  }
+
+  const formatSize = (bytes: number | null) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} o`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Paperclip size={18} className="text-gray-600" />
+            Pièces jointes
+            {pjList.length > 0 && (
+              <Badge variant="secondary" className="text-xs">{pjList.length}</Badge>
+            )}
+          </CardTitle>
+          <label className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer">
+            <Upload size={14} />
+            {uploading ? 'Upload...' : 'Ajouter'}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleUpload}
+              disabled={uploading}
+            />
+          </label>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {loadingPj ? (
+          <p className="text-xs text-gray-400 text-center py-2">Chargement...</p>
+        ) : pjList.length > 0 ? (
+          pjList.map(pj => (
+            <div key={pj.id} className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 group">
+              <Paperclip size={14} className="text-gray-400 shrink-0" />
+              <button
+                onClick={() => handleDownload(pj)}
+                className="flex-1 min-w-0 text-left"
+              >
+                <p className="text-sm text-indigo-600 hover:underline truncate">{pj.nom_fichier}</p>
+                <p className="text-[10px] text-gray-400">
+                  {formatSize(pj.taille_octets)} · {new Date(pj.created_at).toLocaleDateString('fr-FR')}
+                </p>
+              </button>
+              <button
+                onClick={() => handleDelete(pj)}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
+                title="Supprimer"
+              >
+                <Trash2 size={12} className="text-red-400" />
+              </button>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-gray-400 italic text-center py-3">Aucune pièce jointe</p>
         )}
       </CardContent>
     </Card>
@@ -972,6 +1118,15 @@ export default function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Pièces jointes */}
+          <PiecesJointes clientId={clientId} supabase={supabase} currentUserId={currentUser?.id} />
+
+          {/* Relances */}
+          <ClientRelances
+            clientId={clientId}
+            dossiers={dossiers.map(d => ({ id: d.id, produit_nom: d.produit_nom }))}
+          />
 
           <Card>
             <CardHeader>
