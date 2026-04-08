@@ -160,7 +160,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
       { key: 'pays', label: 'Pays' },
       { key: 'consultant', label: 'Consultant' },
       { key: 'statut', label: 'Statut' },
-      { key: 'kyc', label: 'KYC' },
+      { key: 'kyc', label: 'Réglementaire' },
     ]
 
     exportCSV(exportData, columns, {
@@ -301,7 +301,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
     },
     {
       key: 'statut_kyc',
-      label: 'KYC',
+      label: 'Réglementaire',
       sortable: true,
       render: (value) => (
         <StatusBadge status={value as 'non' | 'en_cours' | 'oui'} type="kyc" />
@@ -664,7 +664,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
       { key: 'pays', label: 'Pays' },
       { key: 'consultant', label: 'Consultant' },
       { key: 'statut', label: 'Statut' },
-      { key: 'kyc', label: 'KYC' },
+      { key: 'kyc', label: 'Réglementaire' },
     ]
 
     exportCSV(exportData, columns, {
@@ -804,7 +804,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
     },
     {
       key: 'statut_kyc',
-      label: 'KYC',
+      label: 'Réglementaire',
       sortable: true,
       render: (value) => (
         <StatusBadge status={value as 'non' | 'en_cours' | 'oui'} type="kyc" />

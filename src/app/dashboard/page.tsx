@@ -312,7 +312,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-medium text-gray-600">Relances en attente</p>
               </div>
               <p className="text-2xl font-bold text-red-600">{relancesCount}</p>
-              <p className="text-xs text-gray-500 mt-1">Actions requises (KYC, paiements, inactivité)</p>
+              <p className="text-xs text-gray-500 mt-1">Actions requises (réglementaire, paiements, inactivité)</p>
               <a href="/dashboard/relances" className="text-xs text-indigo-600 hover:underline mt-2 inline-block">
                 Voir les relances →
               </a>

@@ -71,7 +71,7 @@ const getRelanceTypeBadge = (type: string) => {
     facture_aging: 'destructive',
   }
   const labels: Record<string, string> = {
-    kyc: 'KYC manquant',
+    kyc: 'Réglementaire manquant',
     inactivite: 'Inactivité 30j+',
     paiement: 'Paiement en attente',
     reglementaire: 'Réglementaire incomplet',
@@ -153,7 +153,7 @@ export function RelancesClient({ initialData }: RelancesClientProps) {
 
   const tabs: Array<{ id: TabType; label: string; icon: React.ReactNode }> = [
     { id: 'all', label: 'Tous', icon: null },
-    { id: 'kyc', label: 'KYC manquant', icon: <AlertCircle size={16} /> },
+    { id: 'kyc', label: 'Réglementaire manquant', icon: <AlertCircle size={16} /> },
     { id: 'reglementaire', label: 'Réglementaire', icon: <ShieldAlert size={16} /> },
     { id: 'inactivite', label: 'Inactivité 30j+', icon: <Clock size={16} /> },
     { id: 'paiement', label: 'Paiement', icon: <CreditCard size={16} /> },

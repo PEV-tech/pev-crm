@@ -140,7 +140,7 @@ export function RelancesClientWrapper() {
             // 4. Réglementaire incomplet: finalized dossiers with missing compliance fields
             if (dossier.statut === 'client_finalise') {
               const missingFields: string[] = []
-              if (dossier.statut_kyc !== 'oui' && dossier.statut_kyc !== true) missingFields.push('KYC')
+              if (dossier.statut_kyc !== 'oui' && dossier.statut_kyc !== true) missingFields.push('Réglementaire')
               if (!dossier.der) missingFields.push('DER')
               if (!dossier.pi) missingFields.push('PI')
               if (!dossier.preco) missingFields.push('PRECO')

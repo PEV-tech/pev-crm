@@ -919,7 +919,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                 <StatusBadge status={facturationStatus} type="facturation" />
               </div>
               <div>
-                <p className="text-sm text-gray-600 mb-2">KYC</p>
+                <p className="text-sm text-gray-600 mb-2">Réglementaire</p>
                 <StatusBadge status={(dossier.statut_kyc as 'non' | 'en_cours' | 'oui') || 'non'} type="kyc" />
               </div>
             </CardContent>
@@ -954,7 +954,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               {isEditing ? (
                 <>
                   {[
-                    { name: 'statut_kyc', label: 'KYC' },
+                    { name: 'statut_kyc', label: 'Réglementaire' },
                     { name: 'der', label: 'DER' },
                     { name: 'pi', label: 'PI' },
                     { name: 'lm', label: 'LM' },
@@ -980,7 +980,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               ) : (
                 <>
                   {[
-                    { label: 'KYC', value: dossier.statut_kyc === 'oui', enCours: dossier.statut_kyc === 'en_cours' },
+                    { label: 'Réglementaire', value: dossier.statut_kyc === 'oui', enCours: dossier.statut_kyc === 'en_cours' },
                     { label: 'DER', value: !!dossier.der },
                     { label: 'PI', value: !!dossier.pi },
                     { label: 'PRECO', value: !!dossier.preco },

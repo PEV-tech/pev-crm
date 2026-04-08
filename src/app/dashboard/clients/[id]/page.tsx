@@ -396,7 +396,7 @@ export default function ClientDetailPage() {
   // Compliance
   // PRECO is derived (der AND pi) — count only 5 real fields
   const complianceFields = [
-    { label: 'KYC', ok: client.statut_kyc === 'oui' },
+    { label: 'Réglementaire', ok: client.statut_kyc === 'oui' },
     { label: 'DER', ok: !!client.der },
     { label: 'PI', ok: !!client.pi },
     { label: 'LM', ok: !!client.lm },
