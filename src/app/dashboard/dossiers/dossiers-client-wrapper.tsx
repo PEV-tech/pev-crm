@@ -24,8 +24,16 @@ export function DossiersClientWrapper() {
       try {
         const supabase = createClient()
 
+        // P0 fix: consultants must only see their own dossiers
+        const isManager = consultant?.role === 'manager'
+        const isBackOffice = consultant?.role === 'back_office'
+        let dossiersQuery = supabase.from('v_dossiers_complets').select('id, client_id, statut, montant, financement, date_operation, apporteur_label, referent, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_nom, consultant_prenom, consultant_zone, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee').order('date_operation', { ascending: false })
+        if (!isManager && !isBackOffice) {
+          dossiersQuery = dossiersQuery.eq('consultant_prenom', consultant?.prenom)
+        }
+
         const [dossiersRes, gestionRes, entreeRes] = await Promise.all([
-          supabase.from('v_dossiers_complets').select('id, client_id, statut, montant, financement, date_operation, apporteur_label, referent, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_nom, consultant_prenom, consultant_zone, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee').order('date_operation', { ascending: false }),
+          dossiersQuery,
           supabase
             .from('grilles_frais')
             .select('encours_min, encours_max, taux')
@@ -57,8 +65,8 @@ export function DossiersClientWrapper() {
       }
     }
 
-    fetchData()
-  }, [])
+    if (consultant) fetchData()
+  }, [consultant])
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
@@ -72,4 +80,4 @@ export function DossiersClientWrapper() {
       entreeGrilles={entreeGrilles}
     />
   )
-}
+            }
