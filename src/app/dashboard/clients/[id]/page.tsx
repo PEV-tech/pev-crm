@@ -16,6 +16,7 @@ import {
   Paperclip, Upload, Trash2,
 } from 'lucide-react'
 import { ClientRelances } from '@/components/shared/client-relances'
+import { JournalSuivi } from '@/components/shared/journal-suivi'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -335,6 +336,32 @@ function GoogleSuiteCard({
   )
 }
 
+const PJ_TYPES = [
+  { value: 'piece_identite', label: 'Pièce d\'identité' },
+  { value: 'rib', label: 'RIB' },
+  { value: 'justificatif_domicile', label: 'Justificatif domicile' },
+  { value: 'justificatif_origine_fonds', label: 'Justificatif origine des fonds' },
+  { value: 'justificatif_disponibilite_fonds', label: 'Justificatif disponibilité des fonds' },
+  { value: 'nif', label: 'NIF' },
+  { value: 'contrat', label: 'Contrat' },
+  { value: 'bulletin_souscription', label: 'Bulletin de souscription' },
+  { value: 'reglementaire', label: 'Réglementaire' },
+  { value: 'autre', label: 'Autre' },
+]
+
+const PJ_TYPE_COLORS: Record<string, string> = {
+  piece_identite: 'bg-blue-100 text-blue-700',
+  rib: 'bg-green-100 text-green-700',
+  justificatif_domicile: 'bg-amber-100 text-amber-700',
+  justificatif_origine_fonds: 'bg-purple-100 text-purple-700',
+  justificatif_disponibilite_fonds: 'bg-indigo-100 text-indigo-700',
+  nif: 'bg-teal-100 text-teal-700',
+  contrat: 'bg-pink-100 text-pink-700',
+  bulletin_souscription: 'bg-cyan-100 text-cyan-700',
+  reglementaire: 'bg-orange-100 text-orange-700',
+  autre: 'bg-gray-100 text-gray-600',
+}
+
 function PiecesJointes({
   clientId,
   supabase,
@@ -344,10 +371,14 @@ function PiecesJointes({
   supabase: ReturnType<typeof createClient>
   currentUserId?: string
 }) {
-  const [pjList, setPjList] = React.useState<{ id: string; nom_fichier: string; storage_path: string; taille_octets: number | null; type_mime: string | null; created_at: string }[]>([])
+  const [pjList, setPjList] = React.useState<any[]>([])
   const [uploading, setUploading] = React.useState(false)
   const [loadingPj, setLoadingPj] = React.useState(true)
+  const [showUploadForm, setShowUploadForm] = React.useState(false)
+  const [uploadType, setUploadType] = React.useState('autre')
+  const [uploadDate, setUploadDate] = React.useState(new Date().toISOString().split('T')[0])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [pendingFile, setPendingFile] = React.useState<File | null>(null)
 
   React.useEffect(() => {
     const fetchPj = async () => {
@@ -362,17 +393,22 @@ function PiecesJointes({
     fetchPj()
   }, [clientId, supabase])
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setPendingFile(file)
+    setShowUploadForm(true)
+  }
+
+  const handleUpload = async () => {
+    if (!pendingFile) return
     setUploading(true)
 
-    const ext = file.name.split('.').pop() || 'bin'
-    const storagePath = `${clientId}/${Date.now()}_${file.name}`
+    const storagePath = `${clientId}/${Date.now()}_${pendingFile.name}`
 
     const { error: uploadErr } = await supabase.storage
       .from('client-pj')
-      .upload(storagePath, file)
+      .upload(storagePath, pendingFile)
 
     if (uploadErr) {
       console.error('Upload error:', uploadErr)
@@ -383,10 +419,12 @@ function PiecesJointes({
 
     const { error: insertErr } = await supabase.from('client_pj').insert({
       client_id: clientId,
-      nom_fichier: file.name,
+      nom_fichier: pendingFile.name,
       storage_path: storagePath,
-      taille_octets: file.size,
-      type_mime: file.type || null,
+      taille_octets: pendingFile.size,
+      type_mime: pendingFile.type || null,
+      type_document: uploadType,
+      date_document: uploadDate || null,
       uploaded_by: currentUserId || null,
     })
 
@@ -399,6 +437,10 @@ function PiecesJointes({
       setPjList(data || [])
     }
     setUploading(false)
+    setShowUploadForm(false)
+    setPendingFile(null)
+    setUploadType('autre')
+    setUploadDate(new Date().toISOString().split('T')[0])
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -435,44 +477,98 @@ function PiecesJointes({
           </CardTitle>
           <label className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer">
             <Upload size={14} />
-            {uploading ? 'Upload...' : 'Ajouter'}
+            Ajouter
             <input
               ref={fileInputRef}
               type="file"
               className="hidden"
-              onChange={handleUpload}
+              onChange={handleFileSelect}
               disabled={uploading}
             />
           </label>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
+        {/* Upload form with type + date */}
+        {showUploadForm && pendingFile && (
+          <div className="p-3 rounded-lg border border-indigo-200 bg-indigo-50/30 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-indigo-800 truncate">{pendingFile.name}</p>
+              <button onClick={() => { setShowUploadForm(false); setPendingFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }} className="text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-gray-500">Type de document</label>
+              <select
+                value={uploadType}
+                onChange={e => setUploadType(e.target.value)}
+                className="w-full px-2 py-1.5 mt-0.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400"
+              >
+                {PJ_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-gray-500">Date du document</label>
+              <input
+                type="date"
+                value={uploadDate}
+                onChange={e => setUploadDate(e.target.value)}
+                className="w-full px-2 py-1.5 mt-0.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400"
+              />
+            </div>
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className="w-full py-1.5 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {uploading ? 'Upload en cours...' : 'Enregistrer'}
+            </button>
+          </div>
+        )}
+
         {loadingPj ? (
           <p className="text-xs text-gray-400 text-center py-2">Chargement...</p>
         ) : pjList.length > 0 ? (
-          pjList.map(pj => (
-            <div key={pj.id} className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 group">
-              <Paperclip size={14} className="text-gray-400 shrink-0" />
-              <button
-                onClick={() => handleDownload(pj)}
-                className="flex-1 min-w-0 text-left"
-              >
-                <p className="text-sm text-indigo-600 hover:underline truncate">{pj.nom_fichier}</p>
-                <p className="text-[10px] text-gray-400">
-                  {formatSize(pj.taille_octets)} · {new Date(pj.created_at).toLocaleDateString('fr-FR')}
-                </p>
-              </button>
-              <button
-                onClick={() => handleDelete(pj)}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
-                title="Supprimer"
-              >
-                <Trash2 size={12} className="text-red-400" />
-              </button>
-            </div>
-          ))
+          pjList.map(pj => {
+            const typeLabel = PJ_TYPES.find(t => t.value === pj.type_document)?.label || pj.type_document || 'Autre'
+            const typeColor = PJ_TYPE_COLORS[pj.type_document] || PJ_TYPE_COLORS.autre
+            return (
+              <div key={pj.id} className="flex items-start gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 group">
+                <Paperclip size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                <button
+                  onClick={() => handleDownload(pj)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <p className="text-sm text-indigo-600 hover:underline truncate">{pj.nom_fichier}</p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${typeColor}`}>
+                      {typeLabel}
+                    </span>
+                    {pj.date_document && (
+                      <span className="text-[10px] text-gray-500">
+                        {new Date(pj.date_document).toLocaleDateString('fr-FR')}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-400">{formatSize(pj.taille_octets)}</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleDelete(pj)}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded transition-all shrink-0"
+                  title="Supprimer"
+                >
+                  <Trash2 size={12} className="text-red-400" />
+                </button>
+              </div>
+            )
+          })
         ) : (
-          <p className="text-sm text-gray-400 italic text-center py-3">Aucune pièce jointe</p>
+          !showUploadForm && (
+            <p className="text-sm text-gray-400 italic text-center py-3">Aucune pièce jointe</p>
+          )
         )}
       </CardContent>
     </Card>
@@ -493,10 +589,8 @@ export default function ClientDetailPage() {
   // Edit mode states
   const [editingContact, setEditingContact] = React.useState(false)
   const [editingReglementaire, setEditingReglementaire] = React.useState(false)
-  const [editingNotes, setEditingNotes] = React.useState(false)
   const [savingContact, setSavingContact] = React.useState(false)
   const [savingReglementaire, setSavingReglementaire] = React.useState(false)
-  const [savingNotes, setSavingNotes] = React.useState(false)
 
   // Edit form values
   const [editContact, setEditContact] = React.useState({
@@ -512,6 +606,7 @@ export default function ClientDetailPage() {
     lm: false,
     rm: false,
   })
+  // editNotesValue kept for backward compat migration display
   const [editNotesValue, setEditNotesValue] = React.useState('')
 
   const supabase = React.useMemo(() => createClient(), [])
@@ -598,30 +693,7 @@ export default function ClientDetailPage() {
     setSavingReglementaire(false)
   }
 
-  const handleSaveNotes = async () => {
-    if (!client) return
-    setSavingNotes(true)
-    const { error } = await supabase
-      .from('clients')
-      .update({ commentaires: editNotesValue || null })
-      .eq('id', clientId)
-    if (error) {
-      console.error('Erreur sauvegarde commentaires:', error)
-      alert('Erreur lors de la sauvegarde. Veuillez réessayer.')
-    } else {
-      // Re-fetch to confirm persistence
-      const { data: refreshed } = await supabase
-        .from('clients')
-        .select('commentaires')
-        .eq('id', clientId)
-        .single()
-      const savedValue = refreshed?.commentaires ?? editNotesValue
-      setClient({ ...client, commentaires: savedValue })
-      setEditNotesValue(savedValue || '')
-      setEditingNotes(false)
-    }
-    setSavingNotes(false)
-  }
+  // handleSaveNotes removed — replaced by JournalSuivi component
 
   if (loading) return <div className="flex items-center justify-center min-h-[400px] text-gray-500">Chargement...</div>
   if (notFound || !client) {
@@ -1056,68 +1128,13 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Notes & Comptes rendus */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <FileText size={18} className="text-gray-600" />
-                  Notes & Comptes rendus
-                </CardTitle>
-                {!editingNotes && (
-                  <button
-                    onClick={() => setEditingNotes(true)}
-                    className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-                    title="Éditer"
-                  >
-                    <Pencil size={16} className="text-gray-500" />
-                  </button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!editingNotes ? (
-                <>
-                  {editNotesValue ? (
-                    <div className="p-3 bg-gray-50 rounded border border-gray-200 text-sm text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                      {editNotesValue}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400 italic text-center py-4">Aucune note</p>
-                  )}
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <textarea
-                    value={editNotesValue}
-                    onChange={e => setEditNotesValue(e.target.value)}
-                    placeholder="Ajouter une note ou un compte rendu..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 min-h-32"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleSaveNotes}
-                      disabled={savingNotes}
-                      className="flex-1 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Save size={14} />
-                      {savingNotes ? 'Enregistrement...' : 'Enregistrer'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingNotes(false)
-                        setEditNotesValue(client.commentaires || '')
-                      }}
-                      className="flex-1 py-2 border border-gray-300 text-sm font-medium rounded hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <X size={14} />
-                      Annuler
-                    </button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Journal de suivi structuré (CDC §8) */}
+          <JournalSuivi
+            clientId={clientId}
+            currentUserId={currentUser?.id}
+            currentUserNom={currentUser ? `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() : 'Utilisateur'}
+            isManager={currentUser?.role === 'manager' || currentUser?.role === 'back_office'}
+          />
 
           {/* Pièces jointes */}
           <PiecesJointes clientId={clientId} supabase={supabase} currentUserId={currentUser?.id} />
