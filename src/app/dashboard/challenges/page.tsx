@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
 import { useConsultantInfo, useRole } from '@/hooks/use-user'
-import { Trophy, TrendingUp, ArrowUp } from 'lucide-react'
+import { Trophy, TrendingUp, ArrowUp, Target } from 'lucide-react'
 
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('fr-FR', {
@@ -20,7 +21,7 @@ interface RankedConsultant {
   collecte: number
   nbDossiers: number
   rank: number
-  ecart: number | null
+  ecart: number | null // amount to reach the rank above
 }
 
 export default function ChallengesPage() {
@@ -30,18 +31,19 @@ export default function ChallengesPage() {
   const [ranked, setRanked] = useState<RankedConsultant[]>([])
   const [myRank, setMyRank] = useState<RankedConsultant | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
 
   useEffect(() => {
     async function loadRanking() {
+      setLoading(true)
       const supabase = createClient()
-      // Fetch 2026 finalized dossiers AND all consultants to show everyone
       const [dossiersRes, consultantsRes] = await Promise.all([
         supabase
           .from('v_dossiers_complets')
           .select('consultant_nom, consultant_prenom, montant')
           .eq('statut', 'client_finalise')
-          .gte('date_operation', '2026-01-01')
-          .lte('date_operation', '2026-12-31'),
+          .gte('date_operation', `${selectedYear}-01-01`)
+          .lte('date_operation', `${selectedYear}-12-31`),
         supabase
           .from('consultants')
           .select('nom, prenom, role')
@@ -51,7 +53,6 @@ export default function ChallengesPage() {
       const dossiers = dossiersRes.data || []
       const allConsultants = consultantsRes.data || []
 
-      // Seed map with ALL consultants (except back_office)
       const map: Record<string, { nom: string; prenom: string; collecte: number; nbDossiers: number }> = {}
       allConsultants.forEach((c: any) => {
         if (!c.prenom) return
@@ -59,7 +60,6 @@ export default function ChallengesPage() {
         if (!map[key]) map[key] = { nom: c.nom || '', prenom: c.prenom, collecte: 0, nbDossiers: 0 }
       })
 
-      // Aggregate collecte from dossiers
       dossiers.forEach((d: any) => {
         if (!d.consultant_nom || d.consultant_nom.toLowerCase() === 'back office') return
         const key = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
@@ -89,15 +89,48 @@ export default function ChallengesPage() {
       setLoading(false)
     }
     loadRanking()
-  }, [consultantInfo, isManager])
+  }, [consultantInfo, isManager, selectedYear])
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">Chargement...</div>
 
+  // For consultants: anonymized view — only rank numbers and amounts, highlight own position
+  const totalCollecte = ranked.reduce((s, r) => s + r.collecte, 0)
+  const totalDossiers = ranked.reduce((s, r) => s + r.nbDossiers, 0)
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Classement</h1>
-        <p className="text-gray-600 mt-1">Classement des consultants par collecte réalisée depuis début 2026</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Classement</h1>
+          <p className="text-gray-600 mt-1">
+            {isManager ? 'Classement détaillé des consultants' : 'Votre position par rapport à vos pairs'} — {selectedYear}
+          </p>
+        </div>
+        <Select value={String(selectedYear)} onChange={e => setSelectedYear(Number(e.target.value))} className="w-32">
+          {[2024, 2025, 2026].map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </Select>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-sm text-gray-500"><Trophy size={16} className="text-yellow-500" /> Participants</div>
+          <p className="text-2xl font-bold mt-1">{ranked.length}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-sm text-gray-500"><TrendingUp size={16} className="text-blue-500" /> Collecte totale</div>
+          <p className="text-2xl font-bold mt-1">{formatCurrency(totalCollecte)}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-sm text-gray-500"><Target size={16} className="text-green-500" /> Dossiers finalisés</div>
+          <p className="text-2xl font-bold mt-1">{totalDossiers}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-sm text-gray-500"><TrendingUp size={16} className="text-indigo-500" /> Moyenne/consultant</div>
+          <p className="text-2xl font-bold mt-1">{ranked.length > 0 ? formatCurrency(totalCollecte / ranked.length) : '-'}</p>
+        </Card>
       </div>
 
       {/* Mon classement (consultant only) */}
@@ -111,7 +144,7 @@ export default function ChallengesPage() {
                 </div>
                 <div>
                   <p className="text-sm text-indigo-600 font-medium">Ma position</p>
-                  <p className="text-4xl font-bold text-indigo-900">{myRank.rank}/{ranked.length}</p>
+                  <p className="text-4xl font-bold text-indigo-900">{myRank.rank}<span className="text-lg text-gray-400">/{ranked.length}</span></p>
                   <p className="text-sm text-gray-600 mt-1">Collecte : {formatCurrency(myRank.collecte)} · {myRank.nbDossiers} dossier(s)</p>
                 </div>
               </div>
@@ -134,73 +167,132 @@ export default function ChallengesPage() {
         </Card>
       )}
 
-      {/* Top 3 Podium */}
-      {ranked.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {ranked.slice(0, 3).map((r) => (
-            <Card key={r.name} className={`${
-              r.rank === 1 ? 'border-2 border-yellow-400 bg-yellow-50/50' :
-              r.rank === 2 ? 'border-2 border-gray-300 bg-gray-50/50' :
-              'border-2 border-orange-300 bg-orange-50/50'
-            }`}>
-              <CardContent className="py-6 text-center">
-                <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full text-lg font-bold mb-3 ${
-                  r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
-                  r.rank === 2 ? 'bg-gray-200 text-gray-700' :
-                  'bg-orange-100 text-orange-800'
-                }`}>
-                  {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉'}
-                </div>
-                <p className="text-lg font-bold text-gray-900">{r.prenom} {r.name.split(' ').slice(1).join(' ')}</p>
-                <p className="text-2xl font-bold text-indigo-700 mt-1">{formatCurrency(r.collecte)}</p>
-                <p className="text-sm text-gray-500 mt-1">{r.nbDossiers} dossier(s)</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      {/* ═══════ MANAGER VIEW: Full detail ═══════ */}
+      {isManager && ranked.length > 0 && (
+        <>
+          {/* Top 3 Podium */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {ranked.slice(0, 3).map((r) => (
+              <Card key={r.name} className={`${
+                r.rank === 1 ? 'border-2 border-yellow-400 bg-yellow-50/50' :
+                r.rank === 2 ? 'border-2 border-gray-300 bg-gray-50/50' :
+                'border-2 border-orange-300 bg-orange-50/50'
+              }`}>
+                <CardContent className="py-6 text-center">
+                  <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full text-lg font-bold mb-3 ${
+                    r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                    r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                    'bg-orange-100 text-orange-800'
+                  }`}>
+                    {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉'}
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">{r.prenom} {r.name.split(' ').slice(1).join(' ')}</p>
+                  <p className="text-2xl font-bold text-indigo-700 mt-1">{formatCurrency(r.collecte)}</p>
+                  <p className="text-sm text-gray-500 mt-1">{r.nbDossiers} dossier(s)</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Full detail table */}
+          <Card>
+            <CardHeader><CardTitle>Détail du classement</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-gray-200 bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">#</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Consultant</th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-700">Collecte</th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-700">Dossiers</th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-700">Écart rang supérieur</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ranked.map((r) => (
+                      <tr key={r.name} className={`border-b border-gray-200 hover:bg-gray-50 ${r.rank <= 3 ? 'bg-yellow-50/30' : ''}`}>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                            r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                            r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                            r.rank === 3 ? 'bg-orange-100 text-orange-800' :
+                            'bg-gray-100 text-gray-500'
+                          }`}>{r.rank}</span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{r.prenom} {r.name.split(' ').slice(1).join(' ')}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.collecte)}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{r.nbDossiers}</td>
+                        <td className="px-4 py-3 text-right">
+                          {r.ecart !== null ? (
+                            <span className="text-indigo-600 font-medium">+{formatCurrency(r.ecart)}</span>
+                          ) : (
+                            <span className="text-green-600 font-medium">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
-      {/* Detail table */}
-      {ranked.length > 0 && (
+      {/* ═══════ CONSULTANT VIEW: Anonymized ═══════ */}
+      {!isManager && ranked.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Détail du classement</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Classement anonymisé</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b border-gray-200 bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">#</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Consultant</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Rang</th>
                     <th className="px-4 py-3 text-right font-semibold text-gray-700">Collecte</th>
                     <th className="px-4 py-3 text-right font-semibold text-gray-700">Dossiers</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Écart avec le précédent</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Écart rang supérieur</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ranked.map((r) => (
-                    <tr key={r.name} className={`border-b border-gray-200 hover:bg-gray-50 ${r.rank === 1 ? 'bg-yellow-50/50' : ''}`}>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                          r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
-                          r.rank === 2 ? 'bg-gray-200 text-gray-700' :
-                          r.rank === 3 ? 'bg-orange-100 text-orange-800' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>{r.rank}</span>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{r.prenom} {ranked.find(x => x.prenom === r.prenom)?.name.split(' ').slice(1).join(' ') || ''}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.collecte)}</td>
-                      <td className="px-4 py-3 text-right text-gray-600">{r.nbDossiers}</td>
-                      <td className="px-4 py-3 text-right">
-                        {r.ecart !== null ? (
-                          <span className="text-indigo-600 font-medium">+{formatCurrency(r.ecart)}</span>
-                        ) : (
-                          <span className="text-green-600 font-medium">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {ranked.map((r) => {
+                    const isMe = myRank && r.name === myRank.name
+                    return (
+                      <tr
+                        key={r.rank}
+                        className={`border-b border-gray-200 ${
+                          isMe ? 'bg-indigo-50 border-indigo-200 font-semibold' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                              r.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                              r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                              r.rank === 3 ? 'bg-orange-100 text-orange-800' :
+                              isMe ? 'bg-indigo-200 text-indigo-800' :
+                              'bg-gray-100 text-gray-500'
+                            }`}>{r.rank}</span>
+                            {isMe && <span className="text-xs text-indigo-600 font-bold">← Vous</span>}
+                          </div>
+                        </td>
+                        <td className={`px-4 py-3 text-right ${isMe ? 'text-indigo-900 font-bold' : 'text-gray-900'}`}>
+                          {formatCurrency(r.collecte)}
+                        </td>
+                        <td className={`px-4 py-3 text-right ${isMe ? 'text-indigo-700' : 'text-gray-600'}`}>
+                          {r.nbDossiers}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {r.ecart !== null ? (
+                            <span className={`font-medium ${isMe ? 'text-indigo-600' : 'text-gray-500'}`}>+{formatCurrency(r.ecart)}</span>
+                          ) : (
+                            <span className="text-green-600 font-medium">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -211,7 +303,7 @@ export default function ChallengesPage() {
       {ranked.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center text-gray-500">
-            Aucune collecte finalisée en 2026
+            Aucune collecte finalisée en {selectedYear}
           </CardContent>
         </Card>
       )}

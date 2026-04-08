@@ -18,6 +18,8 @@ import {
   Menu,
   X,
   LogOut,
+  Calendar,
+  Package,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -78,6 +80,16 @@ const navigationItems = [
     href: '/dashboard/analyse',
     icon: BarChart3,
   },
+  {
+    label: 'Calendrier',
+    href: '/dashboard/calendrier',
+    icon: Calendar,
+  },
+  {
+    label: 'Produits',
+    href: '/dashboard/produits',
+    icon: Package,
+  },
 ]
 
 export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onLogout }: SidebarProps) {
@@ -110,7 +122,7 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
     }
   }
 
-  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse']
+  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse', 'Calendrier', 'Produits']
   const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
   // Back office: no "Ma Clientèle" (pas de clientèle propre), no "Rémunérations" (suivi seulement)
   const backOfficeHiddenLabels = ['Ma Clientèle', 'Rémunérations']

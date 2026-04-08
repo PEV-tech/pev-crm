@@ -359,6 +359,7 @@ export default function AnalysePage() {
   const distPays = React.useMemo(() => buildDist((d) => d.client_pays || ''), [buildDist])
   const distProduit = React.useMemo(() => buildDist((d) => d.produit_nom || ''), [buildDist])
   const distCompagnie = React.useMemo(() => buildDist((d) => d.compagnie_nom || ''), [buildDist])
+  const distFinancement = React.useMemo(() => buildDist((d) => d.financement || ''), [buildDist])
 
   // ===== TOP CLIENTS =====
   const topClients = React.useMemo(() => {
@@ -525,6 +526,7 @@ export default function AnalysePage() {
                 <option value="prospect">Prospect</option>
                 <option value="client_en_cours">En cours</option>
                 <option value="client_finalise">Finalisé</option>
+                <option value="non_abouti">Non abouti</option>
               </select>
             </div>
             <div>
@@ -623,6 +625,7 @@ export default function AnalysePage() {
         <MiniDistribution title="Par pays" icon={<Globe size={14} className="text-indigo-600" />} items={distPays} />
         <MiniDistribution title="Par produit" icon={<Package size={14} className="text-orange-600" />} items={distProduit} />
         <MiniDistribution title="Par compagnie" icon={<Building size={14} className="text-green-600" />} items={distCompagnie} />
+        <MiniDistribution title="Par financement" icon={<Receipt size={14} className="text-purple-600" />} items={distFinancement} />
       </div>
 
       {/* Top clients + Consultant ranking */}
