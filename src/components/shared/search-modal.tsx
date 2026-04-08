@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useUser } from '@/hooks/use-user'
 import { Search, X, User, FileText, Building, Package, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -20,6 +21,7 @@ interface SearchModalProps {
 
 export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const router = useRouter()
+  const { consultant } = useUser()
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
@@ -48,12 +50,20 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       const supabase = createClient()
       const searchTerm = `%${q.toLowerCase()}%`
 
+      // P0 fix: consultants must only search their own dossiers
+      const isManager = consultant?.role === 'manager'
+      const isBackOffice = consultant?.role === 'back_office'
+      let dossiersQuery = supabase
+        .from('v_dossiers_complets')
+        .select('id, client_nom, client_prenom, client_pays, produit_nom, compagnie_nom, statut, montant')
+        .or(`client_nom.ilike.${searchTerm},client_prenom.ilike.${searchTerm},produit_nom.ilike.${searchTerm},compagnie_nom.ilike.${searchTerm}`)
+        .limit(8)
+      if (!isManager && !isBackOffice) {
+        dossiersQuery = dossiersQuery.eq('consultant_prenom', consultant?.prenom)
+      }
+
       const [dossiersRes, compagniesRes, produitsRes] = await Promise.all([
-        supabase
-          .from('v_dossiers_complets')
-          .select('id, client_nom, client_prenom, client_pays, produit_nom, compagnie_nom, statut, montant')
-          .or(`client_nom.ilike.${searchTerm},client_prenom.ilike.${searchTerm},produit_nom.ilike.${searchTerm},compagnie_nom.ilike.${searchTerm}`)
-          .limit(8),
+        dossiersQuery,
         supabase
           .from('compagnies')
           .select('id, nom')
@@ -79,19 +89,19 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             id: `dossier-${d.id}`,
             type: 'dossier',
             title: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
-            subtitle: `${d.produit_nom || 'Pas de produit'} · ${d.compagnie_nom || ''} · ${
+            subtitle: `${d.produit_nom || 'Pas de produit'} Â· ${d.compagnie_nom || ''} Â· ${
               new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(d.montant || 0)
             }`,
             url: `/dashboard/dossiers/${d.id}`,
           })
-          // Also add as unique client — link to client page if client_id available
+          // Also add as unique client â link to client page if client_id available
           if (!seenClients.has(clientKey) && clientKey) {
             seenClients.add(clientKey)
             searchResults.push({
               id: `client-${d.client_id || d.id}`,
               type: 'client',
               title: clientKey,
-              subtitle: `${d.client_pays || ''} · ${d.statut === 'client_finalise' ? 'Finalisé' : d.statut === 'client_en_cours' ? 'En cours' : 'Prospect'}`,
+              subtitle: `${d.client_pays || ''} Â· ${d.statut === 'client_finalise' ? 'FinalisÃ©' : d.statut === 'client_en_cours' ? 'En cours' : 'Prospect'}`,
               url: d.client_id ? `/dashboard/clients/${d.client_id}` : `/dashboard/dossiers/${d.id}`,
             })
           }
@@ -234,11 +244,11 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             </div>
           ) : query.length >= 2 && !loading ? (
             <div className="py-8 text-center text-gray-500 text-sm">
-              Aucun résultat pour &laquo; {query} &raquo;
+              Aucun rÃ©sultat pour &laquo; {query} &raquo;
             </div>
           ) : query.length < 2 ? (
             <div className="py-8 text-center text-gray-400 text-sm">
-              Tapez au moins 2 caractères pour rechercher
+              Tapez au moins 2 caractÃ¨res pour rechercher
             </div>
           ) : null}
         </div>
@@ -246,8 +256,8 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         {/* Footer hint */}
         <div className="px-4 py-2 border-t border-gray-100 bg-gray-50 flex items-center justify-between text-xs text-gray-400">
           <div className="flex gap-3">
-            <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">↑↓</kbd> naviguer</span>
-            <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">↵</kbd> ouvrir</span>
+            <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">ââ</kbd> naviguer</span>
+            <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">âµ</kbd> ouvrir</span>
             <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">esc</kbd> fermer</span>
           </div>
         </div>
