@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Users, Download, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { TrendingUp, Download, ChevronDown, ChevronUp, X } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined || value === 0) return '-'
@@ -23,6 +23,8 @@ const MONTH_LABELS: Record<string, string> = {
   MAI: 'Mai', JUIN: 'Juin', JUILLET: 'Juillet', AOUT: 'Août',
   SEPTEMBRE: 'Septembre', OCTOBRE: 'Octobre', NOVEMBRE: 'Novembre', DECEMBRE: 'Décembre',
 }
+
+// ───── Types ─────
 
 interface RemEntry {
   id: string
@@ -73,7 +75,62 @@ const sumEntries = (entries: RemEntry[]): Totals =>
 const pool = (t: Totals) => t.pool_plus + t.thelo + t.maxine
 const consultantTotal = (t: Totals) => t.consultant + t.mathias
 
-// Column key type for drill-down
+// ───── Compute breakdown from a facture (paid dossier) ─────
+
+function isStephane(consultantNom: string | null): boolean {
+  if (!consultantNom) return false
+  const n = consultantNom.toLowerCase().trim()
+  return n.includes('stéphane') || n.includes('stephane') || n.includes('steph')
+}
+
+function isFrance(clientPays: string | null): boolean {
+  if (!clientPays) return true // default to FR if unknown
+  const p = clientPays.toUpperCase().trim()
+  return p === 'FRANCE' || p === 'FR'
+}
+
+function factureToRemEntry(f: any): RemEntry {
+  const commBrute = Number(f.commission_brute || 0)
+  const remApporteur = Number(f.rem_apporteur || 0)
+  const partCabinet = Number(f.part_cabinet || 0)
+
+  // POOL = what's left after consultant + cabinet
+  const poolTotal = Math.max(0, commBrute - remApporteur - partCabinet)
+  const poolThird = poolTotal / 3
+
+  // Determine month from date_facture
+  let mois = 'INCONNU'
+  if (f.date_facture) {
+    const d = new Date(f.date_facture)
+    const monthNames = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE']
+    mois = monthNames[d.getMonth()] || 'INCONNU'
+  }
+
+  const label = `${f.client_prenom || ''} ${f.client_nom || ''}`.trim() +
+    (f.produit_nom ? ` — ${f.produit_nom}` : '')
+
+  // Determine who gets rem_apporteur
+  const stephane = isStephane(f.consultant_nom)
+  const france = isFrance(f.client_pays)
+
+  return {
+    id: f.id || `f-${Math.random()}`,
+    mois,
+    label,
+    net_cabinet: commBrute,
+    pool_plus: poolThird,
+    thelo: poolThird,
+    maxine: poolThird,
+    steph_fr: stephane && france ? remApporteur : 0,
+    steph_asie: stephane && !france ? remApporteur : 0,
+    consultant: !stephane ? remApporteur : 0,
+    mathias: 0,
+    part_cabinet: partCabinet,
+  }
+}
+
+// ───── Drill-down types ─────
+
 type ColKey = 'maxine' | 'thelo' | 'pool_plus' | 'pool' | 'steph_fr' | 'steph_asie' | 'consultant' | 'part_cabinet' | 'net_cabinet'
 
 const COL_LABELS: Record<ColKey, string> = {
@@ -100,6 +157,8 @@ interface DrillDownInfo {
   total: number
 }
 
+// ───── Component ─────
+
 interface EncaissementsClientProps {
   initialData: RemEntry[]
   role?: string
@@ -109,13 +168,18 @@ interface EncaissementsClientProps {
 export function EncaissementsClient({ initialData, role = 'manager', facturesPaid = [] }: EncaissementsClientProps) {
   const isBackOffice = role === 'back_office'
   const isManager = !isBackOffice
-  const [data] = React.useState(initialData)
   const [expandedMonths, setExpandedMonths] = React.useState<Record<string, boolean>>({})
   const [drillDown, setDrillDown] = React.useState<DrillDownInfo | null>(null)
 
   const toggleMonth = (mois: string) => {
     setExpandedMonths(prev => ({ ...prev, [mois]: !prev[mois] }))
   }
+
+  // Use encaissements_rem if available, otherwise compute from facturesPaid
+  const data: RemEntry[] = React.useMemo(() => {
+    if (initialData.length > 0) return initialData
+    return facturesPaid.map(factureToRemEntry)
+  }, [initialData, facturesPaid])
 
   // Drill-down: show dossiers for a given column, optionally filtered by month
   const openDrillDown = (col: ColKey, mois?: string) => {
@@ -139,22 +203,16 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       .sort(([a], [b]) => (MONTH_ORDER[a] || 99) - (MONTH_ORDER[b] || 99))
   }, [data])
 
-  const totals = React.useMemo(() => {
-    if (data.length > 0) return sumEntries(data)
-    const totalCommission = facturesPaid.reduce((s: number, f: any) => s + (f.commission_brute || 0), 0)
-    const totalConsultant = facturesPaid.reduce((s: number, f: any) => s + (f.rem_apporteur || 0), 0)
-    const totalCabinet = facturesPaid.reduce((s: number, f: any) => s + (f.part_cabinet || 0), 0)
-    return { ...ZERO_TOTALS, net_cabinet: totalCommission, consultant: totalConsultant, part_cabinet: totalCabinet }
-  }, [data, facturesPaid])
+  const totals = React.useMemo(() => sumEntries(data), [data])
 
   // CSV — adapté au rôle
   const handleExportCSV = React.useCallback(() => {
     let header: string
     let rows: string[]
     if (isBackOffice) {
-      header = 'Mois;Label;Net Cabinet;POOL;Stéphane SG;Stéphane FR;Consultant;Cabinet'
+      header = 'Mois;Label;Net Cabinet;POOL;Stéphane FR;Stéphane SG;Consultant;Cabinet'
       rows = data.map(e =>
-        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${Number(e.pool_plus || 0) + Number(e.thelo || 0) + Number(e.maxine || 0)};${e.steph_asie};${e.steph_fr};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
+        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${Number(e.pool_plus || 0) + Number(e.thelo || 0) + Number(e.maxine || 0)};${e.steph_fr};${e.steph_asie};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
       )
     } else {
       header = 'Mois;Label;Net Cabinet;Maxine;Thélo;POOL+;Stéphane FR;Stéphane SG;Consultant;Cabinet'
@@ -190,25 +248,23 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
   // ───── Ligne du tableau mensuel ─────
   const MonthRow = ({ entry, isTotalRow, label, mois }: { entry: Totals & { label?: string }; isTotalRow?: boolean; label?: string; mois: string }) => {
     const cls = isTotalRow ? 'bg-gray-100 font-bold' : 'border-b border-gray-100 hover:bg-gray-50'
-    // For individual rows, mois is used for drill-down; for total rows, also mois
-    const drillMois = mois
     return (
       <tr className={cls}>
         <td className="py-2 pr-4 font-medium text-gray-900">{label || (entry as any).label}</td>
-        <ClickableCell value={entry.net_cabinet} col="net_cabinet" mois={drillMois} className="font-semibold" />
+        <ClickableCell value={entry.net_cabinet} col="net_cabinet" mois={mois} className="font-semibold" />
         {isManager ? (
           <>
-            <ClickableCell value={entry.maxine} col="maxine" mois={drillMois} className="text-purple-700 font-medium" />
-            <ClickableCell value={entry.thelo} col="thelo" mois={drillMois} className="text-blue-700 font-medium" />
-            <ClickableCell value={entry.pool_plus} col="pool_plus" mois={drillMois} className="text-gray-600" />
+            <ClickableCell value={entry.maxine} col="maxine" mois={mois} className="text-purple-700 font-medium" />
+            <ClickableCell value={entry.thelo} col="thelo" mois={mois} className="text-blue-700 font-medium" />
+            <ClickableCell value={entry.pool_plus} col="pool_plus" mois={mois} className="text-gray-600" />
           </>
         ) : (
-          <ClickableCell value={entry.pool_plus + entry.thelo + entry.maxine} col="pool" mois={drillMois} className="text-indigo-700 font-medium" />
+          <ClickableCell value={entry.pool_plus + entry.thelo + entry.maxine} col="pool" mois={mois} className="text-indigo-700 font-medium" />
         )}
-        <ClickableCell value={entry.steph_fr} col="steph_fr" mois={drillMois} className="text-gray-600" />
-        <ClickableCell value={entry.steph_asie} col="steph_asie" mois={drillMois} className="text-gray-600" />
-        <ClickableCell value={entry.consultant + entry.mathias} col="consultant" mois={drillMois} className="text-gray-600" />
-        <ClickableCell value={entry.part_cabinet} col="part_cabinet" mois={drillMois} className="text-gray-600" />
+        <ClickableCell value={entry.steph_fr} col="steph_fr" mois={mois} className="text-gray-600" />
+        <ClickableCell value={entry.steph_asie} col="steph_asie" mois={mois} className="text-gray-600" />
+        <ClickableCell value={entry.consultant + entry.mathias} col="consultant" mois={mois} className="text-gray-600" />
+        <ClickableCell value={entry.part_cabinet} col="part_cabinet" mois={mois} className="text-gray-600" />
       </tr>
     )
   }
@@ -220,7 +276,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Encaissements</h1>
           <p className="text-gray-600 mt-1">
-            Commissions reçues et répartition — {data.length > 0 ? `${data.length} entrée(s) sur ${byMonth.length} mois` : `${facturesPaid.length} facture(s) encaissée(s)`}
+            Commissions reçues et répartition — {data.length} entrée(s) sur {byMonth.length} mois
           </p>
         </div>
         <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
@@ -229,8 +285,8 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Button>
       </div>
 
-      {/* ───── Barre récapitulative (seul résumé) ───── */}
-      <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-8' : 'md:grid-cols-6'} gap-3`}>
+      {/* ───── Barre récapitulative ───── */}
+      <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-8' : 'md:grid-cols-7'} gap-3`}>
         <div
           className="bg-blue-50 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100 transition-colors"
           onClick={() => openDrillDown('net_cabinet')}
@@ -355,56 +411,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </div>
       )}
 
-      {/* ───── Fallback: factures encaissées ───── */}
-      {data.length === 0 && facturesPaid.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp size={20} className="text-green-600" />
-              Factures encaissées
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-gray-500">
-                    <th className="py-2 pr-4 font-medium">Client</th>
-                    <th className="py-2 px-2 font-medium">Consultant</th>
-                    <th className="py-2 px-2 font-medium">Produit</th>
-                    <th className="py-2 px-2 font-medium text-right">Montant</th>
-                    <th className="py-2 px-2 font-medium text-right">Commission</th>
-                    <th className="py-2 px-2 font-medium text-right">Part consultant</th>
-                    <th className="py-2 px-2 font-medium text-right">Date facture</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {facturesPaid.map((f: any, i: number) => (
-                    <tr key={f.id || i} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-2 pr-4 font-medium text-gray-900">{f.client_prenom} {f.client_nom}</td>
-                      <td className="py-2 px-2 text-gray-600">{f.consultant_prenom} {f.consultant_nom}</td>
-                      <td className="py-2 px-2 text-gray-600">{f.produit_nom || '-'}</td>
-                      <td className="py-2 px-2 text-right">{formatCurrency(f.montant)}</td>
-                      <td className="py-2 px-2 text-right font-semibold">{formatCurrency(f.commission_brute)}</td>
-                      <td className="py-2 px-2 text-right text-indigo-700">{formatCurrency(f.rem_apporteur)}</td>
-                      <td className="py-2 px-2 text-right text-gray-600">{f.date_facture ? new Date(f.date_facture).toLocaleDateString('fr-FR') : '-'}</td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-100 font-bold">
-                    <td className="py-2 pr-4" colSpan={3}>Total</td>
-                    <td className="py-2 px-2 text-right">{formatCurrency(facturesPaid.reduce((s: number, f: any) => s + (f.montant || 0), 0))}</td>
-                    <td className="py-2 px-2 text-right">{formatCurrency(facturesPaid.reduce((s: number, f: any) => s + (f.commission_brute || 0), 0))}</td>
-                    <td className="py-2 px-2 text-right text-indigo-700">{formatCurrency(facturesPaid.reduce((s: number, f: any) => s + (f.rem_apporteur || 0), 0))}</td>
-                    <td className="py-2 px-2"></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {data.length === 0 && facturesPaid.length === 0 && (
+      {data.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center text-gray-500">
             Aucun encaissement enregistré
