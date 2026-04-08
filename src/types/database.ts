@@ -46,6 +46,7 @@ export type Database = {
           nom: string
           prenom: string | null
           pays: string
+          ville: string | null
           email: string | null
           telephone: string | null
           numero_compte: string | null
@@ -63,6 +64,7 @@ export type Database = {
           nom: string
           prenom?: string | null
           pays: string
+          ville?: string | null
           statut_kyc?: StatutKycType
           der?: boolean
           pi?: boolean
@@ -73,6 +75,7 @@ export type Database = {
           nom?: string
           prenom?: string | null
           pays?: string
+          ville?: string | null
           statut_kyc?: StatutKycType
           der?: boolean
           pi?: boolean
@@ -177,6 +180,9 @@ export type Database = {
           statut: StatutDossierType
           commentaire: string | null
           date_operation: string
+          date_entree_en_relation: string | null
+          date_signature: string | null
+          mode_detention: ModeDetentionType | null
           apporteur_id: string | null
           apporteur_label: string | null
           referent: string | null
@@ -195,6 +201,9 @@ export type Database = {
           statut?: StatutDossierType
           commentaire?: string | null
           date_operation?: string
+          date_entree_en_relation?: string | null
+          date_signature?: string | null
+          mode_detention?: ModeDetentionType | null
           apporteur_id?: string | null
           apporteur_label?: string | null
           referent?: string | null
@@ -210,6 +219,9 @@ export type Database = {
           statut?: StatutDossierType
           commentaire?: string | null
           date_operation?: string
+          date_entree_en_relation?: string | null
+          date_signature?: string | null
+          mode_detention?: ModeDetentionType | null
           apporteur_id?: string | null
           apporteur_label?: string | null
           referent?: string | null
@@ -336,11 +348,15 @@ export type Database = {
           financement: FinancementType | null
           commentaire: string | null
           date_operation: string | null
+          date_entree_en_relation: string | null
+          date_signature: string | null
+          mode_detention: ModeDetentionType | null
           apporteur_label: string | null
           referent: string | null
           client_nom: string | null
           client_prenom: string | null
           client_pays: string | null
+          client_ville: string | null
           client_email: string | null
           client_telephone: string | null
           statut_kyc: StatutKycType | null
@@ -426,6 +442,7 @@ export type Database = {
       statut_dossier_type: StatutDossierType
       paiement_type: PaiementType
       type_frais: TypeFraisType
+      mode_detention_type: ModeDetentionType
     }
   }
 }
@@ -434,7 +451,8 @@ export type Database = {
 export type RoleType = 'manager' | 'consultant' | 'back_office'
 export type StatutKycType = 'non' | 'en_cours' | 'oui'
 export type FinancementType = 'cash' | 'credit' | 'lombard' | 'remploi'
-export type StatutDossierType = 'prospect' | 'client_en_cours' | 'client_finalise'
+export type StatutDossierType = 'prospect' | 'client_en_cours' | 'client_finalise' | 'non_abouti'
+export type ModeDetentionType = 'PP' | 'NP' | 'US'
 export type PaiementType = 'non' | 'en_cours' | 'oui'
 export type TypeFraisType = 'entree' | 'gestion'
 
