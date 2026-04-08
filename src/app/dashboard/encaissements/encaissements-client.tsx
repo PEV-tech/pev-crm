@@ -69,6 +69,10 @@ const sumEntries = (entries: RemEntry[]): Totals =>
     { ...ZERO_TOTALS }
   )
 
+// Helpers
+const pool = (t: Totals) => t.pool_plus + t.thelo + t.maxine
+const consultantTotal = (t: Totals) => t.consultant + t.mathias
+
 interface EncaissementsClientProps {
   initialData: RemEntry[]
   role?: string
@@ -85,7 +89,6 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     setExpandedMonths(prev => ({ ...prev, [mois]: !prev[mois] }))
   }
 
-  // Group by month
   const byMonth = React.useMemo(() => {
     const grouped: Record<string, RemEntry[]> = {}
     data.forEach(entry => {
@@ -96,33 +99,27 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       .sort(([a], [b]) => (MONTH_ORDER[a] || 99) - (MONTH_ORDER[b] || 99))
   }, [data])
 
-  // Grand totals
   const totals = React.useMemo(() => {
     if (data.length > 0) return sumEntries(data)
-    // Fallback from paid factures
     const totalCommission = facturesPaid.reduce((s: number, f: any) => s + (f.commission_brute || 0), 0)
     const totalConsultant = facturesPaid.reduce((s: number, f: any) => s + (f.rem_apporteur || 0), 0)
     const totalCabinet = facturesPaid.reduce((s: number, f: any) => s + (f.part_cabinet || 0), 0)
     return { ...ZERO_TOTALS, net_cabinet: totalCommission, consultant: totalConsultant, part_cabinet: totalCabinet }
   }, [data, facturesPaid])
 
-  // Back office: POOL = pool_plus + thélo + maxine
-  const poolTotal = totals.pool_plus + totals.thelo + totals.maxine
-  const poolForMonth = (mt: Totals) => mt.pool_plus + mt.thelo + mt.maxine
-
-  // CSV export — adapté au rôle
+  // CSV — adapté au rôle
   const handleExportCSV = React.useCallback(() => {
     let header: string
     let rows: string[]
     if (isBackOffice) {
-      header = 'Mois;Label;Net Cabinet;POOL;Stéph Asie;Stéph FR;Consultant;Mathias;Cabinet'
+      header = 'Mois;Label;Net Cabinet;POOL;Stéphane SG;Stéphane FR;Consultant;Cabinet'
       rows = data.map(e =>
-        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${Number(e.pool_plus || 0) + Number(e.thelo || 0) + Number(e.maxine || 0)};${e.steph_asie};${e.steph_fr};${e.consultant};${e.mathias};${e.part_cabinet}`
+        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${Number(e.pool_plus || 0) + Number(e.thelo || 0) + Number(e.maxine || 0)};${e.steph_asie};${e.steph_fr};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
       )
     } else {
-      header = 'Mois;Label;Net Cabinet;POOL+;Thélo;Maxine;Stéph Asie;Stéph FR;Consultant;Mathias;Cabinet'
+      header = 'Mois;Label;Net Cabinet;Maxine;Thélo;POOL+;Stéphane FR;Stéphane SG;Consultant;Cabinet'
       rows = data.map(e =>
-        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${e.pool_plus};${e.thelo};${e.maxine};${e.steph_asie};${e.steph_fr};${e.consultant};${e.mathias};${e.part_cabinet}`
+        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${e.maxine};${e.thelo};${e.pool_plus};${e.steph_fr};${e.steph_asie};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
       )
     }
     const csv = [header, ...rows].join('\n')
@@ -135,7 +132,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     URL.revokeObjectURL(url)
   }, [data, isBackOffice])
 
-  // ───── Composant pour une ligne de la table mensuelle ─────
+  // ───── Ligne du tableau mensuel ─────
   const MonthRow = ({ entry, isTotalRow, label }: { entry: Totals & { label?: string }; isTotalRow?: boolean; label?: string }) => {
     const cls = isTotalRow ? 'bg-gray-100 font-bold' : 'border-b border-gray-100 hover:bg-gray-50'
     return (
@@ -144,19 +141,18 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         <td className="py-2 px-2 text-right font-semibold">{formatCurrency(entry.net_cabinet)}</td>
         {isManager ? (
           <>
-            <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.pool_plus)}</td>
-            <td className="py-2 px-2 text-right text-blue-700 font-medium">{formatCurrency(entry.thelo)}</td>
             <td className="py-2 px-2 text-right text-purple-700 font-medium">{formatCurrency(entry.maxine)}</td>
+            <td className="py-2 px-2 text-right text-blue-700 font-medium">{formatCurrency(entry.thelo)}</td>
+            <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.pool_plus)}</td>
           </>
         ) : (
           <td className="py-2 px-2 text-right text-indigo-700 font-medium">
             {formatCurrency(entry.pool_plus + entry.thelo + entry.maxine)}
           </td>
         )}
-        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.steph_asie)}</td>
         <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.steph_fr)}</td>
-        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.consultant)}</td>
-        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.mathias)}</td>
+        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.steph_asie)}</td>
+        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.consultant + entry.mathias)}</td>
         <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.part_cabinet)}</td>
       </tr>
     )
@@ -178,7 +174,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Button>
       </div>
 
-      {/* ───── Summary Cards — même structure 4 cards pour les deux rôles ───── */}
+      {/* ───── Summary Cards — 4 cards, même structure ───── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -224,15 +220,15 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-indigo-700">{formatCurrency(poolTotal)}</p>
+                <p className="text-2xl font-bold text-indigo-700">{formatCurrency(pool(totals))}</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500">Consultants</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-500">Consultant</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-gray-700">{formatCurrency(totals.consultant + totals.steph_fr + totals.steph_asie + totals.mathias)}</p>
+                <p className="text-2xl font-bold text-gray-700">{formatCurrency(consultantTotal(totals) + totals.steph_fr + totals.steph_asie)}</p>
               </CardContent>
             </Card>
           </>
@@ -248,39 +244,40 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Card>
       </div>
 
-      {/* ───── Detailed breakdown — adapté au rôle ───── */}
-      <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
-        {isManager && (
-          <div className="bg-gray-50 rounded-lg p-3 text-center">
-            <p className="text-xs text-gray-500">POOL+</p>
-            <p className="text-sm font-semibold">{formatCurrency(totals.pool_plus)}</p>
-          </div>
-        )}
-        {isBackOffice && (
+      {/* ───── Detailed breakdown ───── */}
+      <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-7' : 'md:grid-cols-6'} gap-3`}>
+        {isManager ? (
+          <>
+            <div className="bg-purple-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-purple-500">Maxine</p>
+              <p className="text-sm font-semibold text-purple-700">{formatCurrency(totals.maxine)}</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-blue-500">Thélo</p>
+              <p className="text-sm font-semibold text-blue-700">{formatCurrency(totals.thelo)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500">POOL+</p>
+              <p className="text-sm font-semibold">{formatCurrency(totals.pool_plus)}</p>
+            </div>
+          </>
+        ) : (
           <div className="bg-indigo-50 rounded-lg p-3 text-center">
             <p className="text-xs text-indigo-500">POOL</p>
-            <p className="text-sm font-semibold text-indigo-700">{formatCurrency(poolTotal)}</p>
+            <p className="text-sm font-semibold text-indigo-700">{formatCurrency(pool(totals))}</p>
           </div>
         )}
         <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">Stéph Asie</p>
-          <p className="text-sm font-semibold">{formatCurrency(totals.steph_asie)}</p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">Stéph FR</p>
+          <p className="text-xs text-gray-500">Stéphane FR</p>
           <p className="text-sm font-semibold">{formatCurrency(totals.steph_fr)}</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3 text-center">
+          <p className="text-xs text-gray-500">Stéphane SG</p>
+          <p className="text-sm font-semibold">{formatCurrency(totals.steph_asie)}</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p className="text-xs text-gray-500">Consultant</p>
-          <p className="text-sm font-semibold">{formatCurrency(totals.consultant)}</p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">Mathias</p>
-          <p className="text-sm font-semibold">{formatCurrency(totals.mathias)}</p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">Cabinet</p>
-          <p className="text-sm font-semibold">{formatCurrency(totals.part_cabinet)}</p>
+          <p className="text-sm font-semibold">{formatCurrency(consultantTotal(totals))}</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p className="text-xs text-gray-500">Entrées</p>
@@ -288,7 +285,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </div>
       </div>
 
-      {/* ───── Fallback: factures encaissées quand encaissements_rem est vide ───── */}
+      {/* ───── Fallback: factures encaissées ───── */}
       {data.length === 0 && facturesPaid.length > 0 && (
         <Card>
           <CardHeader>
@@ -345,7 +342,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Card>
       )}
 
-      {/* ───── Monthly sections — même structure, seule la colonne POOL diffère ───── */}
+      {/* ───── Sections mensuelles ───── */}
       {byMonth.map(([mois, entries]) => {
         const mt = sumEntries(entries)
         const isExpanded = expandedMonths[mois] !== false
@@ -368,7 +365,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                       <span className="text-blue-600">Thélo: {formatCurrency(mt.thelo)}</span>
                     </>
                   ) : (
-                    <span className="text-indigo-600">POOL: {formatCurrency(poolForMonth(mt))}</span>
+                    <span className="text-indigo-600">POOL: {formatCurrency(pool(mt))}</span>
                   )}
                   <span className="text-gray-600">Cab: {formatCurrency(mt.part_cabinet)}</span>
                   {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -385,17 +382,16 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                         <th className="py-2 px-2 font-medium text-right">Net cabinet</th>
                         {isManager ? (
                           <>
-                            <th className="py-2 px-2 font-medium text-right">POOL+</th>
-                            <th className="py-2 px-2 font-medium text-right text-blue-600">Thélo</th>
                             <th className="py-2 px-2 font-medium text-right text-purple-600">Maxine</th>
+                            <th className="py-2 px-2 font-medium text-right text-blue-600">Thélo</th>
+                            <th className="py-2 px-2 font-medium text-right">POOL+</th>
                           </>
                         ) : (
                           <th className="py-2 px-2 font-medium text-right text-indigo-600">POOL</th>
                         )}
-                        <th className="py-2 px-2 font-medium text-right">Stéph Asie</th>
-                        <th className="py-2 px-2 font-medium text-right">Stéph FR</th>
+                        <th className="py-2 px-2 font-medium text-right">Stéphane FR</th>
+                        <th className="py-2 px-2 font-medium text-right">Stéphane SG</th>
                         <th className="py-2 px-2 font-medium text-right">Consultant</th>
-                        <th className="py-2 px-2 font-medium text-right">Mathias</th>
                         <th className="py-2 px-2 font-medium text-right">Cabinet</th>
                       </tr>
                     </thead>
