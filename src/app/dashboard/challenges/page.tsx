@@ -16,8 +16,9 @@ const formatCurrency = (value: number): string => {
 }
 
 interface RankedConsultant {
-  name: string
+  name: string // full "prenom nom" key
   prenom: string
+  nom: string
   collecte: number
   nbDossiers: number
   rank: number
@@ -73,6 +74,7 @@ export default function ChallengesPage() {
         .map(([name, data], index, arr) => ({
           name,
           prenom: data.prenom,
+          nom: data.nom,
           collecte: data.collecte,
           nbDossiers: data.nbDossiers,
           rank: index + 1,
@@ -186,7 +188,7 @@ export default function ChallengesPage() {
                   }`}>
                     {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉'}
                   </div>
-                  <p className="text-lg font-bold text-gray-900">{r.prenom} {r.name.split(' ').slice(1).join(' ')}</p>
+                  <p className="text-lg font-bold text-gray-900">{r.prenom} {r.nom}</p>
                   <p className="text-2xl font-bold text-indigo-700 mt-1">{formatCurrency(r.collecte)}</p>
                   <p className="text-sm text-gray-500 mt-1">{r.nbDossiers} dossier(s)</p>
                 </CardContent>
@@ -220,7 +222,7 @@ export default function ChallengesPage() {
                             'bg-gray-100 text-gray-500'
                           }`}>{r.rank}</span>
                         </td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{r.prenom} {r.name.split(' ').slice(1).join(' ')}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{r.prenom} {r.nom}</td>
                         <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.collecte)}</td>
                         <td className="px-4 py-3 text-right text-gray-600">{r.nbDossiers}</td>
                         <td className="px-4 py-3 text-right">
