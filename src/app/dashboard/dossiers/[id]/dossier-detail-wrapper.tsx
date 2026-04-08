@@ -128,10 +128,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           setEditDateSignature(data.date_signature || '')
           setEditModeDetention(data.mode_detention || '')
           // Initialize taux edit fields with current custom values (only if meaningful > 0)
-          if (data.taux_commission && data.taux_commission > 0) {
+          // Init taux edit fields: use custom if set (including 0%), otherwise leave blank for grille fallback
+          if (data.taux_commission !== null && data.taux_commission !== undefined) {
             setEditTauxEntree((data.taux_commission * 100).toFixed(2))
           }
-          if (data.taux_gestion && data.taux_gestion > 0) {
+          if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
             setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
           }
 
@@ -146,15 +147,15 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               ])
               if (typeof gestionRes.data === 'number' && gestionRes.data > 0) {
                 setTauxGestion(gestionRes.data)
-                // Pre-fill edit field with grille value if no custom taux set
-                if (!data.taux_gestion || data.taux_gestion <= 0) {
+                // Pre-fill edit field with grille value only if no custom taux set (null = not set)
+                if (data.taux_gestion === null || data.taux_gestion === undefined) {
                   setEditTauxGestion((gestionRes.data * 100).toFixed(2))
                 }
               }
               if (typeof entreeRes.data === 'number' && entreeRes.data > 0) {
                 setTauxEntree(entreeRes.data)
-                // Pre-fill edit field with grille value if no custom taux set
-                if (!data.taux_commission || data.taux_commission <= 0) {
+                // Pre-fill edit field with grille value only if no custom taux set (null = not set)
+                if (data.taux_commission === null || data.taux_commission === undefined) {
                   setEditTauxEntree((entreeRes.data * 100).toFixed(2))
                 }
               }
@@ -307,11 +308,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).single()
       if (data) {
         setDossier(data as VDossiersComplets)
-        // Re-initialize taux edit fields with updated values (only if meaningful > 0)
-        if (data.taux_commission && data.taux_commission > 0) {
+        // Re-initialize taux edit fields with updated values (null = not set)
+        if (data.taux_commission !== null && data.taux_commission !== undefined) {
           setEditTauxEntree((data.taux_commission * 100).toFixed(2))
         }
-        if (data.taux_gestion && data.taux_gestion > 0) {
+        if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
           setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
         }
       }
@@ -354,14 +355,14 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   }, [dossier?.produit_nom])
 
   // Effective taux: prefer custom (saved in commissions) over grille default
-  // Use custom only if it's a meaningful positive value (0 means unset)
+  // NULL = not set (use grille), 0 = explicitly 0% (no commission), >0 = custom taux
   const effectiveTauxEntree = React.useMemo(() =>
-    (dossier?.taux_commission && dossier.taux_commission > 0)
+    (dossier?.taux_commission !== null && dossier?.taux_commission !== undefined)
       ? dossier.taux_commission : tauxEntree,
     [dossier?.taux_commission, tauxEntree]
   )
   const effectiveTauxGestion = React.useMemo(() =>
-    (dossier?.taux_gestion && dossier.taux_gestion > 0)
+    (dossier?.taux_gestion !== null && dossier?.taux_gestion !== undefined)
       ? dossier.taux_gestion : tauxGestion,
     [dossier?.taux_gestion, tauxGestion]
   )

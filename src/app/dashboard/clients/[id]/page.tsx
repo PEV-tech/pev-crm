@@ -394,16 +394,16 @@ export default function ClientDetailPage() {
   const enCoursCount = dossiers.filter(d => d.statut === 'client_en_cours').length
 
   // Compliance
+  // PRECO is derived (der AND pi) — count only 5 real fields
   const complianceFields = [
     { label: 'KYC', ok: client.statut_kyc === 'oui' },
     { label: 'DER', ok: !!client.der },
     { label: 'PI', ok: !!client.pi },
-    { label: 'PRECO', ok: !!client.preco },
     { label: 'LM', ok: !!client.lm },
     { label: 'RM', ok: !!client.rm },
   ]
   const complianceDone = complianceFields.filter(f => f.ok).length
-  const compliancePct = (complianceDone / 6) * 100
+  const compliancePct = (complianceDone / 5) * 100
 
   return (
     <div className="space-y-6">
@@ -470,7 +470,7 @@ export default function ClientDetailPage() {
           <p className="text-xs font-medium text-gray-500">Conformité</p>
           <div className="flex items-center gap-2 mt-1">
             <p className={`text-2xl font-bold ${compliancePct === 100 ? 'text-green-700' : compliancePct >= 50 ? 'text-amber-700' : 'text-red-700'}`}>
-              {complianceDone}/6
+              {complianceDone}/5
             </p>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
@@ -608,7 +608,7 @@ export default function ClientDetailPage() {
                   complianceDone === 6 ? 'bg-green-100 text-green-700' :
                   complianceDone >= 4 ? 'bg-blue-100 text-blue-700' :
                   complianceDone >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                }`}>{complianceDone}/6</span>
+                }`}>{complianceDone}/5</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
