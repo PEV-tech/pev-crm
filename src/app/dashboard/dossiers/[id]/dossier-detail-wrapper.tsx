@@ -67,6 +67,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [editTauxGestion, setEditTauxGestion] = React.useState<string>('')
   const [savingTaux, setSavingTaux] = React.useState(false)
   const [consultantTauxRemuneration, setConsultantTauxRemuneration] = React.useState<number | null>(null)
+  const [editApporteurExt, setEditApporteurExt] = React.useState(false)
+  const [editApporteurExtNom, setEditApporteurExtNom] = React.useState('')
+  const [editApporteurExtTaux, setEditApporteurExtTaux] = React.useState('')
   const [editVille, setEditVille] = React.useState<string>('')
   const [editDateEntreeRelation, setEditDateEntreeRelation] = React.useState<string>('')
   const [editDateSignature, setEditDateSignature] = React.useState<string>('')
@@ -135,6 +138,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
             setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
           }
+
+          // Initialize apporteur ext fields
+          setEditApporteurExt(!!data.has_apporteur_ext)
+          setEditApporteurExtNom(data.apporteur_ext_nom || '')
+          setEditApporteurExtTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
 
           // Fetch grille taux for entry + encours commission (LUX/PE)
           if (data.montant && data.montant > 0) {
@@ -220,9 +228,19 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           const commUpdate: Record<string, any> = {
             commission_brute: newMontant * taux,
           }
+
+          // Deduct apporteur ext share
+          let commissionNette = commUpdate.commission_brute
+          if (dossier?.has_apporteur_ext && dossier?.taux_apporteur_ext) {
+            commUpdate.rem_apporteur_ext = commUpdate.commission_brute * dossier.taux_apporteur_ext
+            commissionNette = commUpdate.commission_brute - commUpdate.rem_apporteur_ext
+          } else {
+            commUpdate.rem_apporteur_ext = 0
+          }
+
           if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-            commUpdate.rem_apporteur = commUpdate.commission_brute * consultantTauxRemuneration
-            commUpdate.part_cabinet = commUpdate.commission_brute - commUpdate.rem_apporteur
+            commUpdate.rem_apporteur = commissionNette * consultantTauxRemuneration
+            commUpdate.part_cabinet = commissionNette - commUpdate.rem_apporteur
             commUpdate.pct_cabinet = commUpdate.commission_brute > 0
               ? commUpdate.part_cabinet / commUpdate.commission_brute : 0
           }
@@ -269,9 +287,20 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         // Calculate commission_brute and rem_apporteur
         if (dossier.montant && dossier.montant > 0) {
           updateData.commission_brute = dossier.montant * tauxEntreeDecimal
+
+          // Deduct apporteur ext share
+          let commissionNette = updateData.commission_brute
+          if (editApporteurExt && editApporteurExtTaux) {
+            const tauxApporteur = parseFloat(editApporteurExtTaux) / 100
+            updateData.rem_apporteur_ext = updateData.commission_brute * tauxApporteur
+            commissionNette = updateData.commission_brute - updateData.rem_apporteur_ext
+          } else {
+            updateData.rem_apporteur_ext = 0
+          }
+
           if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-            updateData.rem_apporteur = updateData.commission_brute * consultantTauxRemuneration
-            updateData.part_cabinet = updateData.commission_brute - updateData.rem_apporteur
+            updateData.rem_apporteur = commissionNette * consultantTauxRemuneration
+            updateData.part_cabinet = commissionNette - updateData.rem_apporteur
             updateData.pct_cabinet = updateData.commission_brute > 0
               ? updateData.part_cabinet / updateData.commission_brute
               : 0
@@ -283,6 +312,14 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         const tauxGestionDecimal = parseFloat(editTauxGestion) / 100
         updateData.taux_gestion = tauxGestionDecimal
       }
+
+      // Save apporteur externe to dossiers table
+      const apporteurUpdate: Record<string, any> = {
+        has_apporteur_ext: editApporteurExt,
+        apporteur_ext_nom: editApporteurExt ? editApporteurExtNom || null : null,
+        taux_apporteur_ext: editApporteurExt && editApporteurExtTaux ? parseFloat(editApporteurExtTaux) / 100 : 0,
+      }
+      await supabase.from('dossiers').update(apporteurUpdate).eq('id', dossier.id)
 
       // Upsert commissions: update if exists, insert if not
       const { data: existingCommission } = await supabase
@@ -315,6 +352,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         if (data.taux_gestion !== null && data.taux_gestion !== undefined) {
           setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
         }
+        // Re-initialize apporteur ext fields with updated values
+        setEditApporteurExt(!!data.has_apporteur_ext)
+        setEditApporteurExtNom(data.apporteur_ext_nom || '')
+        setEditApporteurExtTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
       }
 
       setEditingTaux(false)
@@ -758,6 +799,45 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                           )}
                         </div>
                       )}
+
+                      {/* Apporteur externe */}
+                      <div className="border-t border-amber-200 pt-3 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <label className="text-sm font-medium text-gray-700">Apporteur externe</label>
+                          <button
+                            type="button"
+                            onClick={() => setEditApporteurExt(!editApporteurExt)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editApporteurExt ? 'bg-indigo-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${editApporteurExt ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                          </button>
+                        </div>
+                        {editApporteurExt && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-sm font-medium text-gray-700 block mb-1">Nom de l'apporteur</label>
+                              <Input
+                                type="text"
+                                value={editApporteurExtNom}
+                                onChange={(e) => setEditApporteurExtNom(e.target.value)}
+                                placeholder="Nom de l'apporteur"
+                                className="w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700 block mb-1">Taux apporteur (%)</label>
+                              <Input
+                                type="number"
+                                value={editApporteurExtTaux}
+                                onChange={(e) => setEditApporteurExtTaux(e.target.value)}
+                                placeholder="30"
+                                step="0.01"
+                                className="w-full"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex gap-2 pt-2">
@@ -796,7 +876,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className={`grid ${dossier.has_apporteur_ext && dossier.taux_apporteur_ext > 0 ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'} gap-3`}>
                         <div className="bg-gray-50 rounded-lg p-3">
                           <p className="text-sm text-gray-600">Commission brute</p>
                           <p className="text-xl font-bold text-gray-900 mt-1">
@@ -814,6 +894,17 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                             </>
                           ) : null}
                         </div>
+                        {dossier.has_apporteur_ext && dossier.taux_apporteur_ext > 0 && (
+                          <div className="bg-orange-50 rounded-lg p-3">
+                            <p className="text-sm text-orange-600">Part apporteur ({dossier.apporteur_ext_nom || 'Externe'})</p>
+                            <p className="text-xl font-bold text-orange-900 mt-1">
+                              {formatCurrency(dossier.rem_apporteur_ext)}
+                            </p>
+                            <p className="text-xs text-orange-500 mt-1">
+                              {formatPct(dossier.taux_apporteur_ext)} de {formatCurrency(commissionBruteCalculee)}
+                            </p>
+                          </div>
+                        )}
                         {(partConsultantEntree !== null && partConsultantEntree !== undefined) && (
                           <div className="bg-indigo-50 rounded-lg p-3">
                             <p className="text-sm text-indigo-600">Part consultant</p>
