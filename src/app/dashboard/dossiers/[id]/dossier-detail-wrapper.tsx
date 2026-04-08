@@ -12,7 +12,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2, Pencil } from 'lucide-react'
+import { ArrowLeft, Edit, Save, X, Loader2, TrendingUp, Award, Trash2, Pencil, ExternalLink } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -1000,7 +1000,12 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-lg">Facturation</CardTitle></CardHeader>
+            <CardHeader>
+              <Link href="/dashboard/facturation" className="group flex items-center gap-1">
+                <CardTitle className="text-lg group-hover:text-indigo-600 transition-colors">Facturation</CardTitle>
+                <ExternalLink size={14} className="text-gray-400 group-hover:text-indigo-600 transition-colors" />
+              </Link>
+            </CardHeader>
             <CardContent className="space-y-3">
               <div>
                 <p className="text-sm text-gray-600">Facturée</p>

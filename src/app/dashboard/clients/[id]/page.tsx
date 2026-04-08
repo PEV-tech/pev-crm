@@ -12,7 +12,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, User, FileText, Shield, TrendingUp,
   MapPin, Calendar, DollarSign, CheckCircle,
-  Mail, Phone, CreditCard, FolderOpen, ExternalLink, Plus, Send, Clock,
+  Mail, Phone, CreditCard, FolderOpen, ExternalLink, Plus, Send, Clock, Pencil, Save, X,
 } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -52,6 +52,7 @@ interface ClientInfo {
   lm: boolean
   rm: boolean
   created_at: string
+  commentaires?: string | null
 }
 
 interface RendezVous {
@@ -343,6 +344,30 @@ export default function ClientDetailPage() {
   const [loading, setLoading] = React.useState(true)
   const [notFound, setNotFound] = React.useState(false)
 
+  // Edit mode states
+  const [editingContact, setEditingContact] = React.useState(false)
+  const [editingReglementaire, setEditingReglementaire] = React.useState(false)
+  const [editingNotes, setEditingNotes] = React.useState(false)
+  const [savingContact, setSavingContact] = React.useState(false)
+  const [savingReglementaire, setSavingReglementaire] = React.useState(false)
+  const [savingNotes, setSavingNotes] = React.useState(false)
+
+  // Edit form values
+  const [editContact, setEditContact] = React.useState({
+    email: '',
+    telephone: '',
+    pays: '',
+    numero_compte: '',
+  })
+  const [editReg, setEditReg] = React.useState({
+    statut_kyc: 'non',
+    der: false,
+    pi: false,
+    lm: false,
+    rm: false,
+  })
+  const [editNotesValue, setEditNotesValue] = React.useState('')
+
   const supabase = React.useMemo(() => createClient(), [])
 
   React.useEffect(() => {
@@ -358,6 +383,22 @@ export default function ClientDetailPage() {
         if (clientErr || !clientData) { setNotFound(true); return }
         setClient(clientData as ClientInfo)
 
+        // Initialize edit forms with client data
+        setEditContact({
+          email: clientData.email || '',
+          telephone: clientData.telephone || '',
+          pays: clientData.pays || '',
+          numero_compte: clientData.numero_compte || '',
+        })
+        setEditReg({
+          statut_kyc: clientData.statut_kyc || 'non',
+          der: clientData.der || false,
+          pi: clientData.pi || false,
+          lm: clientData.lm || false,
+          rm: clientData.rm || false,
+        })
+        setEditNotesValue(clientData.commentaires || '')
+
         // Fetch all dossiers for this client via view
         const { data: dossierData } = await supabase
           .from('v_dossiers_complets')
@@ -371,6 +412,59 @@ export default function ClientDetailPage() {
     }
     fetchData()
   }, [clientId, supabase])
+
+  const handleSaveContact = async () => {
+    if (!client) return
+    setSavingContact(true)
+    const { error } = await supabase
+      .from('clients')
+      .update({
+        email: editContact.email || null,
+        telephone: editContact.telephone || null,
+        pays: editContact.pays || null,
+        numero_compte: editContact.numero_compte || null,
+      })
+      .eq('id', clientId)
+    if (!error) {
+      setClient({ ...client, ...editContact })
+      setEditingContact(false)
+    }
+    setSavingContact(false)
+  }
+
+  const handleSaveReglementaire = async () => {
+    if (!client) return
+    setSavingReglementaire(true)
+    const { error } = await supabase
+      .from('clients')
+      .update({
+        statut_kyc: editReg.statut_kyc,
+        der: editReg.der,
+        pi: editReg.pi,
+        lm: editReg.lm,
+        rm: editReg.rm,
+      })
+      .eq('id', clientId)
+    if (!error) {
+      setClient({ ...client, ...editReg })
+      setEditingReglementaire(false)
+    }
+    setSavingReglementaire(false)
+  }
+
+  const handleSaveNotes = async () => {
+    if (!client) return
+    setSavingNotes(true)
+    const { error } = await supabase
+      .from('clients')
+      .update({ commentaires: editNotesValue || null })
+      .eq('id', clientId)
+    if (!error) {
+      setClient({ ...client, commentaires: editNotesValue })
+      setEditingNotes(false)
+    }
+    setSavingNotes(false)
+  }
 
   if (loading) return <div className="flex items-center justify-center min-h-[400px] text-gray-500">Chargement...</div>
   if (notFound || !client) {
@@ -550,45 +644,124 @@ export default function ClientDetailPage() {
           {/* Contact info */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <User size={18} className="text-gray-600" />
-                Coordonnées
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <User size={18} className="text-gray-600" />
+                  Coordonnées
+                </CardTitle>
+                {!editingContact && (
+                  <button
+                    onClick={() => setEditingContact(true)}
+                    className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                    title="Éditer"
+                  >
+                    <Pencil size={16} className="text-gray-500" />
+                  </button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Mail size={16} className="text-gray-400 shrink-0" />
-                {client.email ? (
-                  <a href={`mailto:${client.email}`} className="text-sm text-indigo-600 hover:underline truncate">{client.email}</a>
-                ) : (
-                  <span className="text-sm text-gray-400 italic">Non renseigné</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <Phone size={16} className="text-gray-400 shrink-0" />
-                {client.telephone ? (
-                  <a href={`tel:${client.telephone}`} className="text-sm text-indigo-600 hover:underline">{client.telephone}</a>
-                ) : (
-                  <span className="text-sm text-gray-400 italic">Non renseigné</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <MapPin size={16} className="text-gray-400 shrink-0" />
-                <span className="text-sm text-gray-700">{client.pays || 'Non renseigné'}</span>
-              </div>
-              {client.numero_compte && (
-                <div className="flex items-center gap-3">
-                  <CreditCard size={16} className="text-gray-400 shrink-0" />
-                  <span className="text-sm text-gray-700">{client.numero_compte}</span>
-                </div>
-              )}
-              {client.conformite && (
-                <div className="pt-2 border-t">
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                    client.conformite === 'conforme' ? 'bg-green-100 text-green-700' :
-                    client.conformite === 'non conforme' ? 'bg-red-100 text-red-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>O2S: {client.conformite}</span>
+              {!editingContact ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <Mail size={16} className="text-gray-400 shrink-0" />
+                    {client.email ? (
+                      <a href={`mailto:${client.email}`} className="text-sm text-indigo-600 hover:underline truncate">{client.email}</a>
+                    ) : (
+                      <span className="text-sm text-gray-400 italic">Non renseigné</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Phone size={16} className="text-gray-400 shrink-0" />
+                    {client.telephone ? (
+                      <a href={`tel:${client.telephone}`} className="text-sm text-indigo-600 hover:underline">{client.telephone}</a>
+                    ) : (
+                      <span className="text-sm text-gray-400 italic">Non renseigné</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <MapPin size={16} className="text-gray-400 shrink-0" />
+                    <span className="text-sm text-gray-700">{client.pays || 'Non renseigné'}</span>
+                  </div>
+                  {client.numero_compte && (
+                    <div className="flex items-center gap-3">
+                      <CreditCard size={16} className="text-gray-400 shrink-0" />
+                      <span className="text-sm text-gray-700">{client.numero_compte}</span>
+                    </div>
+                  )}
+                  {client.conformite && (
+                    <div className="pt-2 border-t">
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                        client.conformite === 'conforme' ? 'bg-green-100 text-green-700' :
+                        client.conformite === 'non conforme' ? 'bg-red-100 text-red-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>O2S: {client.conformite}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600">Email</label>
+                    <input
+                      type="email"
+                      value={editContact.email}
+                      onChange={e => setEditContact({ ...editContact, email: e.target.value })}
+                      className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600">Téléphone</label>
+                    <input
+                      type="tel"
+                      value={editContact.telephone}
+                      onChange={e => setEditContact({ ...editContact, telephone: e.target.value })}
+                      className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600">Pays</label>
+                    <input
+                      type="text"
+                      value={editContact.pays}
+                      onChange={e => setEditContact({ ...editContact, pays: e.target.value })}
+                      className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600">Numéro de compte</label>
+                    <input
+                      type="text"
+                      value={editContact.numero_compte}
+                      onChange={e => setEditContact({ ...editContact, numero_compte: e.target.value })}
+                      className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handleSaveContact}
+                      disabled={savingContact}
+                      className="flex-1 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Save size={14} />
+                      {savingContact ? 'Enregistrement...' : 'Enregistrer'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingContact(false)
+                        setEditContact({
+                          email: client.email || '',
+                          telephone: client.telephone || '',
+                          pays: client.pays || '',
+                          numero_compte: client.numero_compte || '',
+                        })
+                      }}
+                      className="flex-1 py-2 border border-gray-300 text-sm font-medium rounded hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <X size={14} />
+                      Annuler
+                    </button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -604,27 +777,188 @@ export default function ClientDetailPage() {
                   <Shield size={18} className="text-gray-600" />
                   Réglementaire
                 </CardTitle>
-                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                  complianceDone === 6 ? 'bg-green-100 text-green-700' :
-                  complianceDone >= 4 ? 'bg-blue-100 text-blue-700' :
-                  complianceDone >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                }`}>{complianceDone}/5</span>
+                <div className="flex items-center gap-2">
+                  {!editingReglementaire && (
+                    <button
+                      onClick={() => setEditingReglementaire(true)}
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                      title="Éditer"
+                    >
+                      <Pencil size={16} className="text-gray-500" />
+                    </button>
+                  )}
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                    complianceDone === 6 ? 'bg-green-100 text-green-700' :
+                    complianceDone >= 4 ? 'bg-blue-100 text-blue-700' :
+                    complianceDone >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                  }`}>{complianceDone}/5</span>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                <div className={`h-2 rounded-full transition-all ${
-                  compliancePct === 100 ? 'bg-green-500' : compliancePct >= 60 ? 'bg-blue-500' : compliancePct >= 30 ? 'bg-amber-500' : 'bg-red-500'
-                }`} style={{ width: `${compliancePct}%` }} />
-              </div>
-              {complianceFields.map(f => (
-                <div key={f.label} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                  <span className="text-sm font-medium text-gray-700">{f.label}</span>
-                  <Badge variant={f.ok ? 'success' : 'destructive'}>
-                    {f.ok ? 'Validé' : 'Non validé'}
-                  </Badge>
+              {!editingReglementaire ? (
+                <>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                    <div className={`h-2 rounded-full transition-all ${
+                      compliancePct === 100 ? 'bg-green-500' : compliancePct >= 60 ? 'bg-blue-500' : compliancePct >= 30 ? 'bg-amber-500' : 'bg-red-500'
+                    }`} style={{ width: `${compliancePct}%` }} />
+                  </div>
+                  {complianceFields.map(f => (
+                    <div key={f.label} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-sm font-medium text-gray-700">{f.label}</span>
+                      <Badge variant={f.ok ? 'success' : 'destructive'}>
+                        {f.ok ? 'Validé' : 'Non validé'}
+                      </Badge>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600">Statut KYC</label>
+                    <select
+                      value={editReg.statut_kyc}
+                      onChange={e => setEditReg({ ...editReg, statut_kyc: e.target.value })}
+                      className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    >
+                      <option value="non">Non</option>
+                      <option value="en_cours">En cours</option>
+                      <option value="oui">Oui</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
+                        id="der"
+                        checked={editReg.der}
+                        onChange={e => setEditReg({ ...editReg, der: e.target.checked })}
+                        className="rounded"
+                      />
+                      <label htmlFor="der" className="text-sm font-medium text-gray-700 cursor-pointer">DER</label>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
+                        id="pi"
+                        checked={editReg.pi}
+                        onChange={e => setEditReg({ ...editReg, pi: e.target.checked })}
+                        className="rounded"
+                      />
+                      <label htmlFor="pi" className="text-sm font-medium text-gray-700 cursor-pointer">PI</label>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
+                        id="lm"
+                        checked={editReg.lm}
+                        onChange={e => setEditReg({ ...editReg, lm: e.target.checked })}
+                        className="rounded"
+                      />
+                      <label htmlFor="lm" className="text-sm font-medium text-gray-700 cursor-pointer">LM</label>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
+                        id="rm"
+                        checked={editReg.rm}
+                        onChange={e => setEditReg({ ...editReg, rm: e.target.checked })}
+                        className="rounded"
+                      />
+                      <label htmlFor="rm" className="text-sm font-medium text-gray-700 cursor-pointer">RM</label>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handleSaveReglementaire}
+                      disabled={savingReglementaire}
+                      className="flex-1 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Save size={14} />
+                      {savingReglementaire ? 'Enregistrement...' : 'Enregistrer'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingReglementaire(false)
+                        setEditReg({
+                          statut_kyc: client.statut_kyc || 'non',
+                          der: client.der || false,
+                          pi: client.pi || false,
+                          lm: client.lm || false,
+                          rm: client.rm || false,
+                        })
+                      }}
+                      className="flex-1 py-2 border border-gray-300 text-sm font-medium rounded hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <X size={14} />
+                      Annuler
+                    </button>
+                  </div>
                 </div>
-              ))}
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Notes & Comptes rendus */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <FileText size={18} className="text-gray-600" />
+                  Notes & Comptes rendus
+                </CardTitle>
+                {!editingNotes && (
+                  <button
+                    onClick={() => setEditingNotes(true)}
+                    className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                    title="Éditer"
+                  >
+                    <Pencil size={16} className="text-gray-500" />
+                  </button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!editingNotes ? (
+                <>
+                  {editNotesValue ? (
+                    <div className="p-3 bg-gray-50 rounded border border-gray-200 text-sm text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                      {editNotesValue}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic text-center py-4">Aucune note</p>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <textarea
+                    value={editNotesValue}
+                    onChange={e => setEditNotesValue(e.target.value)}
+                    placeholder="Ajouter une note ou un compte rendu..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 min-h-32"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSaveNotes}
+                      disabled={savingNotes}
+                      className="flex-1 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Save size={14} />
+                      {savingNotes ? 'Enregistrement...' : 'Enregistrer'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingNotes(false)
+                        setEditNotesValue(client.commentaires || '')
+                      }}
+                      className="flex-1 py-2 border border-gray-300 text-sm font-medium rounded hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <X size={14} />
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

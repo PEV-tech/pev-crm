@@ -210,9 +210,13 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
       label: 'Client',
       sortable: true,
       render: (_, row) => (
-        <div className="text-sm">
+        <Link
+          href={`/dashboard/clients/${row.client_id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
+        >
           {row.client_prenom} {row.client_nom}
-        </div>
+        </Link>
       ),
     },
     {
@@ -713,9 +717,13 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
       label: 'Client',
       sortable: true,
       render: (_, row) => (
-        <div className="text-sm">
+        <Link
+          href={`/dashboard/clients/${row.client_id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
+        >
           {row.client_prenom} {row.client_nom}
-        </div>
+        </Link>
       ),
     },
     {
