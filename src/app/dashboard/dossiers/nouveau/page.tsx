@@ -13,10 +13,10 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 
 interface FormData {
-  nom: string; prenom: string; pays: string; email: string; telephone: string
+  nom: string; prenom: string; pays: string; ville: string; email: string; telephone: string
   produitId: string; compagnieId: string
-  montant: string; financement: string; dateOperation: string; dateEntreeRelation: string
-  statut: string; commentaire: string; consultantId: string
+  montant: string; financement: string; dateOperation: string; dateEntreeRelation: string; dateSignature: string
+  statut: string; modeDetention: string; commentaire: string; consultantId: string
 }
 
 interface ClientInfo {
@@ -24,6 +24,7 @@ interface ClientInfo {
   nom: string
   prenom: string | null
   pays: string
+  ville?: string | null
   email: string | null
   telephone: string | null
 }
@@ -44,11 +45,12 @@ function NewDossierContent() {
   const [existingClient, setExistingClient] = React.useState<ClientInfo | null>(null)
   const [existingClientId, setExistingClientId] = React.useState<string | null>(null)
   const [formData, setFormData] = React.useState<FormData>({
-    nom: '', prenom: '', pays: '', email: '', telephone: '', produitId: '', compagnieId: '',
+    nom: '', prenom: '', pays: '', ville: '', email: '', telephone: '', produitId: '', compagnieId: '',
     montant: '', financement: 'cash',
     dateOperation: new Date().toISOString().split('T')[0],
     dateEntreeRelation: new Date().toISOString().split('T')[0],
-    statut: 'prospect', commentaire: '', consultantId: '',
+    dateSignature: new Date().toISOString().split('T')[0],
+    statut: 'prospect', modeDetention: '', commentaire: '', consultantId: '',
   })
 
   const supabase = React.useMemo(() => createClient(), [])
@@ -71,7 +73,7 @@ function NewDossierContent() {
         if (clientIdParam) {
           const { data: clientData, error: clientError } = await supabase
             .from('clients')
-            .select('id, nom, prenom, pays, email, telephone')
+            .select('id, nom, prenom, pays, ville, email, telephone')
             .eq('id', clientIdParam)
             .single()
           if (clientData && !clientError) {
@@ -83,6 +85,7 @@ function NewDossierContent() {
               nom: clientData.nom,
               prenom: clientData.prenom || '',
               pays: clientData.pays,
+              ville: (clientData as any).ville || '',
               email: clientData.email || '',
               telephone: clientData.telephone || '',
             }))
@@ -137,7 +140,7 @@ function NewDossierContent() {
         clientIdForDossier = existingClientId
       } else {
         const { data: clientData, error: clientError } = await supabase
-          .from('clients').insert({ nom: formData.nom, prenom: formData.prenom || null, pays: formData.pays, email: formData.email || null, telephone: formData.telephone || null })
+          .from('clients').insert({ nom: formData.nom, prenom: formData.prenom || null, pays: formData.pays, ville: formData.ville || null, email: formData.email || null, telephone: formData.telephone || null })
           .select().single()
         if (clientError) throw clientError
         clientIdForDossier = clientData.id
@@ -152,6 +155,8 @@ function NewDossierContent() {
           montant: parseFloat(formData.montant),
           financement: (formData.financement as any) || null,
           date_operation: formData.dateOperation,
+          date_signature: formData.dateSignature || null,
+          mode_detention: (formData.modeDetention || null) as any,
           statut: formData.statut as any,
           commentaire: formData.commentaire || null,
         }).select().single()
@@ -223,6 +228,10 @@ function NewDossierContent() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">Pays</label>
                   <p className="text-sm text-gray-900 font-medium">{formData.pays}</p>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Ville</label>
+                  <p className="text-sm text-gray-900 font-medium">{formData.ville || '-'}</p>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
@@ -250,6 +259,10 @@ function NewDossierContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Pays *</label>
                   <Input name="pays" value={formData.pays} onChange={handleInputChange} placeholder="France" required />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ville</label>
+                  <Input name="ville" value={formData.ville} onChange={handleInputChange} placeholder="Paris" />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -275,6 +288,7 @@ function NewDossierContent() {
                 <option value="prospect">Prospect</option>
                 <option value="client_en_cours">Client en cours</option>
                 <option value="client_finalise">Client finalisé</option>
+                <option value="non_abouti">Non abouti</option>
               </Select>
             </div>
 
@@ -334,8 +348,19 @@ function NewDossierContent() {
               </div>
             </div>
 
+            {/* Mode de détention */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mode de détention</label>
+              <Select name="modeDetention" value={formData.modeDetention} onChange={handleInputChange}>
+                <option value="">Non défini</option>
+                <option value="PP">Pleine Propriété</option>
+                <option value="NP">Nue-Propriété</option>
+                <option value="US">Usufruit</option>
+              </Select>
+            </div>
+
             {/* Dates */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date d'entrée en relation</label>
                 <Input name="dateEntreeRelation" type="date" value={formData.dateEntreeRelation} onChange={handleInputChange} />
@@ -343,6 +368,10 @@ function NewDossierContent() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date opération</label>
                 <Input name="dateOperation" type="date" value={formData.dateOperation} onChange={handleInputChange} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date de signature</label>
+                <Input name="dateSignature" type="date" value={formData.dateSignature} onChange={handleInputChange} />
               </div>
             </div>
 
