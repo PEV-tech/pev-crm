@@ -33,6 +33,7 @@ const statutLabel = (s: string | null | undefined) => {
     case 'prospect': return 'Prospect'
     case 'client_en_cours': return 'Client en cours'
     case 'client_finalise': return 'Client finalisé'
+    case 'non_abouti': return 'Non abouti'
     default: return s || '-'
   }
 }
@@ -66,6 +67,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [editTauxGestion, setEditTauxGestion] = React.useState<string>('')
   const [savingTaux, setSavingTaux] = React.useState(false)
   const [consultantTauxRemuneration, setConsultantTauxRemuneration] = React.useState<number | null>(null)
+  const [editVille, setEditVille] = React.useState<string>('')
+  const [editDateEntreeRelation, setEditDateEntreeRelation] = React.useState<string>('')
+  const [editDateSignature, setEditDateSignature] = React.useState<string>('')
+  const [editModeDetention, setEditModeDetention] = React.useState<string>('')
 
   const isConsultant = currentUser?.role === 'consultant'
 
@@ -112,7 +117,16 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             pays: data.client_pays || '',
             email: data.client_email || '',
             telephone: data.client_telephone || '',
+            ville: data.client_ville || '',
+            date_entree_en_relation: data.date_entree_en_relation || '',
+            date_signature: data.date_signature || '',
+            mode_detention: data.mode_detention || '',
           })
+          // Initialize edit state variables for new fields
+          setEditVille(data.client_ville || '')
+          setEditDateEntreeRelation(data.date_entree_en_relation || '')
+          setEditDateSignature(data.date_signature || '')
+          setEditModeDetention(data.mode_detention || '')
           // Initialize taux edit fields with current custom values (only if meaningful > 0)
           if (data.taux_commission && data.taux_commission > 0) {
             setEditTauxEntree((data.taux_commission * 100).toFixed(2))
@@ -190,6 +204,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         commentaire: editForm.commentaire || null,
         produit_id: editForm.produit_id || null,
         compagnie_id: editForm.compagnie_id || null,
+        date_entree_en_relation: editForm.date_entree_en_relation || null,
+        date_signature: editForm.date_signature || null,
+        mode_detention: editForm.mode_detention || null,
       }).eq('id', id)
 
       if (dossierError) { setSaveError(dossierError.message); setSaving(false); return }
@@ -223,6 +240,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           rm: editForm.rm === 'oui',
         }
         if (editForm.pays) clientUpdate.pays = editForm.pays
+        if (editForm.ville) clientUpdate.ville = editForm.ville
         clientUpdate.email = editForm.email || null
         clientUpdate.telephone = editForm.telephone || null
         const { error: clientError } = await supabase.from('clients').update(clientUpdate).eq('id', clientId)
@@ -492,6 +510,14 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   )}
                 </div>
                 <div>
+                  <p className="text-sm font-medium text-gray-500">Ville</p>
+                  {isEditing ? (
+                    <Input name="ville" value={editForm.ville} onChange={handleEditChange} className="mt-1" placeholder="Paris" />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.client_ville || '-'}</p>
+                  )}
+                </div>
+                <div>
                   <p className="text-sm font-medium text-gray-500">Email</p>
                   {isEditing ? (
                     <Input name="email" type="email" value={editForm.email} onChange={handleEditChange} className="mt-1" placeholder="client@email.com" />
@@ -559,6 +585,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                       <option value="prospect">Prospect</option>
                       <option value="client_en_cours">Client en cours</option>
                       <option value="client_finalise">Client finalisé</option>
+                      <option value="non_abouti">Non abouti</option>
                     </Select>
                   ) : (
                     <p className="text-lg font-semibold text-gray-900 mt-1">{statutLabel(dossier.statut)}</p>
@@ -592,6 +619,41 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   ) : (
                     <p className="text-lg font-semibold text-gray-900 mt-1">
                       {dossier.date_operation ? new Date(dossier.date_operation).toLocaleDateString('fr-FR') : '-'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Date entrée en relation</p>
+                  {isEditing ? (
+                    <Input name="date_entree_en_relation" type="date" value={editForm.date_entree_en_relation} onChange={handleEditChange} className="mt-1" />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">
+                      {dossier.date_entree_en_relation ? new Date(dossier.date_entree_en_relation).toLocaleDateString('fr-FR') : '-'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Date signature</p>
+                  {isEditing ? (
+                    <Input name="date_signature" type="date" value={editForm.date_signature} onChange={handleEditChange} className="mt-1" />
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">
+                      {dossier.date_signature ? new Date(dossier.date_signature).toLocaleDateString('fr-FR') : '-'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Mode de détention</p>
+                  {isEditing ? (
+                    <Select name="mode_detention" value={editForm.mode_detention} onChange={handleEditChange} className="mt-1">
+                      <option value="">— Aucun —</option>
+                      <option value="PP">Pleine Propriété</option>
+                      <option value="NP">Nue-Propriété</option>
+                      <option value="US">Usufruit</option>
+                    </Select>
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">
+                      {dossier.mode_detention === 'PP' ? 'Pleine Propriété' : dossier.mode_detention === 'NP' ? 'Nue-Propriété' : dossier.mode_detention === 'US' ? 'Usufruit' : dossier.mode_detention || '-'}
                     </p>
                   )}
                 </div>
