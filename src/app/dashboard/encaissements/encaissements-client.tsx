@@ -39,6 +39,36 @@ interface RemEntry {
   part_cabinet: number
 }
 
+interface Totals {
+  net_cabinet: number
+  pool_plus: number
+  thelo: number
+  maxine: number
+  steph_asie: number
+  steph_fr: number
+  consultant: number
+  mathias: number
+  part_cabinet: number
+}
+
+const ZERO_TOTALS: Totals = { net_cabinet: 0, pool_plus: 0, thelo: 0, maxine: 0, steph_asie: 0, steph_fr: 0, consultant: 0, mathias: 0, part_cabinet: 0 }
+
+const sumEntries = (entries: RemEntry[]): Totals =>
+  entries.reduce(
+    (acc, e) => ({
+      net_cabinet: acc.net_cabinet + Number(e.net_cabinet || 0),
+      pool_plus: acc.pool_plus + Number(e.pool_plus || 0),
+      thelo: acc.thelo + Number(e.thelo || 0),
+      maxine: acc.maxine + Number(e.maxine || 0),
+      steph_asie: acc.steph_asie + Number(e.steph_asie || 0),
+      steph_fr: acc.steph_fr + Number(e.steph_fr || 0),
+      consultant: acc.consultant + Number(e.consultant || 0),
+      mathias: acc.mathias + Number(e.mathias || 0),
+      part_cabinet: acc.part_cabinet + Number(e.part_cabinet || 0),
+    }),
+    { ...ZERO_TOTALS }
+  )
+
 interface EncaissementsClientProps {
   initialData: RemEntry[]
   role?: string
@@ -46,8 +76,8 @@ interface EncaissementsClientProps {
 }
 
 export function EncaissementsClient({ initialData, role = 'manager', facturesPaid = [] }: EncaissementsClientProps) {
-  // Back office sees POOL (thelo+maxine+pool_plus) instead of individual split
   const isBackOffice = role === 'back_office'
+  const isManager = !isBackOffice
   const [data] = React.useState(initialData)
   const [expandedMonths, setExpandedMonths] = React.useState<Record<string, boolean>>({})
 
@@ -66,60 +96,35 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       .sort(([a], [b]) => (MONTH_ORDER[a] || 99) - (MONTH_ORDER[b] || 99))
   }, [data])
 
-  // Grand totals — from encaissements_rem, or fallback to facturesPaid
+  // Grand totals
   const totals = React.useMemo(() => {
-    if (data.length > 0) {
-      return data.reduce(
-        (acc, e) => ({
-          net_cabinet: acc.net_cabinet + Number(e.net_cabinet || 0),
-          pool_plus: acc.pool_plus + Number(e.pool_plus || 0),
-          thelo: acc.thelo + Number(e.thelo || 0),
-          maxine: acc.maxine + Number(e.maxine || 0),
-          steph_asie: acc.steph_asie + Number(e.steph_asie || 0),
-          steph_fr: acc.steph_fr + Number(e.steph_fr || 0),
-          consultant: acc.consultant + Number(e.consultant || 0),
-          mathias: acc.mathias + Number(e.mathias || 0),
-          part_cabinet: acc.part_cabinet + Number(e.part_cabinet || 0),
-        }),
-        { net_cabinet: 0, pool_plus: 0, thelo: 0, maxine: 0, steph_asie: 0, steph_fr: 0, consultant: 0, mathias: 0, part_cabinet: 0 }
-      )
-    }
-    // Fallback: compute from paid factures
+    if (data.length > 0) return sumEntries(data)
+    // Fallback from paid factures
     const totalCommission = facturesPaid.reduce((s: number, f: any) => s + (f.commission_brute || 0), 0)
     const totalConsultant = facturesPaid.reduce((s: number, f: any) => s + (f.rem_apporteur || 0), 0)
     const totalCabinet = facturesPaid.reduce((s: number, f: any) => s + (f.part_cabinet || 0), 0)
-    return {
-      net_cabinet: totalCommission,
-      pool_plus: 0, thelo: 0, maxine: 0,
-      steph_asie: 0, steph_fr: 0,
-      consultant: totalConsultant,
-      mathias: 0,
-      part_cabinet: totalCabinet,
-    }
+    return { ...ZERO_TOTALS, net_cabinet: totalCommission, consultant: totalConsultant, part_cabinet: totalCabinet }
   }, [data, facturesPaid])
 
-  const monthTotals = React.useCallback((entries: RemEntry[]) => {
-    return entries.reduce(
-      (acc, e) => ({
-        net_cabinet: acc.net_cabinet + Number(e.net_cabinet || 0),
-        pool_plus: acc.pool_plus + Number(e.pool_plus || 0),
-        thelo: acc.thelo + Number(e.thelo || 0),
-        maxine: acc.maxine + Number(e.maxine || 0),
-        steph_asie: acc.steph_asie + Number(e.steph_asie || 0),
-        steph_fr: acc.steph_fr + Number(e.steph_fr || 0),
-        consultant: acc.consultant + Number(e.consultant || 0),
-        mathias: acc.mathias + Number(e.mathias || 0),
-        part_cabinet: acc.part_cabinet + Number(e.part_cabinet || 0),
-      }),
-      { net_cabinet: 0, pool_plus: 0, thelo: 0, maxine: 0, steph_asie: 0, steph_fr: 0, consultant: 0, mathias: 0, part_cabinet: 0 }
-    )
-  }, [])
+  // Back office: POOL = pool_plus + thélo + maxine
+  const poolTotal = totals.pool_plus + totals.thelo + totals.maxine
+  const poolForMonth = (mt: Totals) => mt.pool_plus + mt.thelo + mt.maxine
 
+  // CSV export — adapté au rôle
   const handleExportCSV = React.useCallback(() => {
-    const header = 'Mois;Label;Net Cabinet;POOL+;Thélo;Maxine;Stéph Asie;Stéph FR;Consultant;Mathias;Cabinet'
-    const rows = data.map(e =>
-      `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${e.pool_plus};${e.thelo};${e.maxine};${e.steph_asie};${e.steph_fr};${e.consultant};${e.mathias};${e.part_cabinet}`
-    )
+    let header: string
+    let rows: string[]
+    if (isBackOffice) {
+      header = 'Mois;Label;Net Cabinet;POOL;Stéph Asie;Stéph FR;Consultant;Mathias;Cabinet'
+      rows = data.map(e =>
+        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${Number(e.pool_plus || 0) + Number(e.thelo || 0) + Number(e.maxine || 0)};${e.steph_asie};${e.steph_fr};${e.consultant};${e.mathias};${e.part_cabinet}`
+      )
+    } else {
+      header = 'Mois;Label;Net Cabinet;POOL+;Thélo;Maxine;Stéph Asie;Stéph FR;Consultant;Mathias;Cabinet'
+      rows = data.map(e =>
+        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${e.pool_plus};${e.thelo};${e.maxine};${e.steph_asie};${e.steph_fr};${e.consultant};${e.mathias};${e.part_cabinet}`
+      )
+    }
     const csv = [header, ...rows].join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -128,7 +133,34 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     a.download = `encaissements_rem_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
-  }, [data])
+  }, [data, isBackOffice])
+
+  // ───── Composant pour une ligne de la table mensuelle ─────
+  const MonthRow = ({ entry, isTotalRow, label }: { entry: Totals & { label?: string }; isTotalRow?: boolean; label?: string }) => {
+    const cls = isTotalRow ? 'bg-gray-100 font-bold' : 'border-b border-gray-100 hover:bg-gray-50'
+    return (
+      <tr className={cls}>
+        <td className="py-2 pr-4 font-medium text-gray-900">{label || (entry as any).label}</td>
+        <td className="py-2 px-2 text-right font-semibold">{formatCurrency(entry.net_cabinet)}</td>
+        {isManager ? (
+          <>
+            <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.pool_plus)}</td>
+            <td className="py-2 px-2 text-right text-blue-700 font-medium">{formatCurrency(entry.thelo)}</td>
+            <td className="py-2 px-2 text-right text-purple-700 font-medium">{formatCurrency(entry.maxine)}</td>
+          </>
+        ) : (
+          <td className="py-2 px-2 text-right text-indigo-700 font-medium">
+            {formatCurrency(entry.pool_plus + entry.thelo + entry.maxine)}
+          </td>
+        )}
+        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.steph_asie)}</td>
+        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.steph_fr)}</td>
+        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.consultant)}</td>
+        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.mathias)}</td>
+        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.part_cabinet)}</td>
+      </tr>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -146,7 +178,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Button>
       </div>
 
-      {/* Summary Cards */}
+      {/* ───── Summary Cards — même structure 4 cards pour les deux rôles ───── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -159,19 +191,8 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
             <p className="text-2xl font-bold">{formatCurrency(totals.net_cabinet)}</p>
           </CardContent>
         </Card>
-        {isBackOffice ? (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                <Users size={16} className="text-indigo-600" />
-                POOL
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-indigo-700">{formatCurrency(totals.thelo + totals.maxine + totals.pool_plus)}</p>
-            </CardContent>
-          </Card>
-        ) : (
+
+        {isManager ? (
           <>
             <Card>
               <CardHeader className="pb-2">
@@ -193,7 +214,30 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
               </CardContent>
             </Card>
           </>
+        ) : (
+          <>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                  <Users size={16} className="text-indigo-600" />
+                  POOL
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-indigo-700">{formatCurrency(poolTotal)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">Consultants</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-gray-700">{formatCurrency(totals.consultant + totals.steph_fr + totals.steph_asie + totals.mathias)}</p>
+              </CardContent>
+            </Card>
+          </>
         )}
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Cabinet</CardTitle>
@@ -204,21 +248,27 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Card>
       </div>
 
-      {/* Detailed breakdown cards */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-        {!isBackOffice && (
+      {/* ───── Detailed breakdown — adapté au rôle ───── */}
+      <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
+        {isManager && (
           <div className="bg-gray-50 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">POOL+</p>
             <p className="text-sm font-semibold">{formatCurrency(totals.pool_plus)}</p>
           </div>
         )}
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">Stéph FR</p>
-          <p className="text-sm font-semibold">{formatCurrency(totals.steph_fr)}</p>
-        </div>
+        {isBackOffice && (
+          <div className="bg-indigo-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-indigo-500">POOL</p>
+            <p className="text-sm font-semibold text-indigo-700">{formatCurrency(poolTotal)}</p>
+          </div>
+        )}
         <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p className="text-xs text-gray-500">Stéph Asie</p>
           <p className="text-sm font-semibold">{formatCurrency(totals.steph_asie)}</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3 text-center">
+          <p className="text-xs text-gray-500">Stéph FR</p>
+          <p className="text-sm font-semibold">{formatCurrency(totals.steph_fr)}</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p className="text-xs text-gray-500">Consultant</p>
@@ -229,12 +279,16 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
           <p className="text-sm font-semibold">{formatCurrency(totals.mathias)}</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3 text-center">
+          <p className="text-xs text-gray-500">Cabinet</p>
+          <p className="text-sm font-semibold">{formatCurrency(totals.part_cabinet)}</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3 text-center">
           <p className="text-xs text-gray-500">Entrées</p>
           <p className="text-sm font-semibold">{data.length}</p>
         </div>
       </div>
 
-      {/* Factures encaissées (payées) — affiché quand encaissements_rem est vide ou en complément */}
+      {/* ───── Fallback: factures encaissées quand encaissements_rem est vide ───── */}
       {data.length === 0 && facturesPaid.length > 0 && (
         <Card>
           <CardHeader>
@@ -291,10 +345,10 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Card>
       )}
 
-      {/* Monthly sections (encaissements_rem) */}
+      {/* ───── Monthly sections — même structure, seule la colonne POOL diffère ───── */}
       {byMonth.map(([mois, entries]) => {
-        const mt = monthTotals(entries)
-        const isExpanded = expandedMonths[mois] !== false // default expanded
+        const mt = sumEntries(entries)
+        const isExpanded = expandedMonths[mois] !== false
         return (
           <Card key={mois}>
             <CardHeader
@@ -308,13 +362,13 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                   <span className="text-lg font-bold text-blue-700">{formatCurrency(mt.net_cabinet)}</span>
                 </div>
                 <div className="flex items-center gap-6 text-sm">
-                  {isBackOffice ? (
-                    <span className="text-indigo-600">POOL: {formatCurrency(mt.maxine + mt.thelo + mt.pool_plus)}</span>
-                  ) : (
+                  {isManager ? (
                     <>
                       <span className="text-purple-600">Max: {formatCurrency(mt.maxine)}</span>
                       <span className="text-blue-600">Thélo: {formatCurrency(mt.thelo)}</span>
                     </>
+                  ) : (
+                    <span className="text-indigo-600">POOL: {formatCurrency(poolForMonth(mt))}</span>
                   )}
                   <span className="text-gray-600">Cab: {formatCurrency(mt.part_cabinet)}</span>
                   {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -329,15 +383,16 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                       <tr className="border-b text-left text-gray-500">
                         <th className="py-2 pr-4 font-medium">Dossier</th>
                         <th className="py-2 px-2 font-medium text-right">Net cabinet</th>
-                        {isBackOffice ? (
-                          <th className="py-2 px-2 font-medium text-right text-indigo-600">POOL</th>
-                        ) : (
+                        {isManager ? (
                           <>
                             <th className="py-2 px-2 font-medium text-right">POOL+</th>
                             <th className="py-2 px-2 font-medium text-right text-blue-600">Thélo</th>
                             <th className="py-2 px-2 font-medium text-right text-purple-600">Maxine</th>
                           </>
+                        ) : (
+                          <th className="py-2 px-2 font-medium text-right text-indigo-600">POOL</th>
                         )}
+                        <th className="py-2 px-2 font-medium text-right">Stéph Asie</th>
                         <th className="py-2 px-2 font-medium text-right">Stéph FR</th>
                         <th className="py-2 px-2 font-medium text-right">Consultant</th>
                         <th className="py-2 px-2 font-medium text-right">Mathias</th>
@@ -346,42 +401,13 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                     </thead>
                     <tbody>
                       {entries.map((entry) => (
-                        <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-2 pr-4 font-medium text-gray-900">{entry.label}</td>
-                          <td className="py-2 px-2 text-right font-semibold">{formatCurrency(Number(entry.net_cabinet))}</td>
-                          {isBackOffice ? (
-                            <td className="py-2 px-2 text-right text-indigo-700 font-medium">{formatCurrency(Number(entry.thelo) + Number(entry.maxine) + Number(entry.pool_plus))}</td>
-                          ) : (
-                            <>
-                              <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.pool_plus))}</td>
-                              <td className="py-2 px-2 text-right text-blue-700 font-medium">{formatCurrency(Number(entry.thelo))}</td>
-                              <td className="py-2 px-2 text-right text-purple-700 font-medium">{formatCurrency(Number(entry.maxine))}</td>
-                            </>
-                          )}
-                          <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.steph_fr))}</td>
-                          <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.consultant))}</td>
-                          <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.mathias))}</td>
-                          <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(Number(entry.part_cabinet))}</td>
-                        </tr>
+                        <MonthRow key={entry.id} entry={entry as any} />
                       ))}
-                      {/* Month total row */}
-                      <tr className="bg-gray-100 font-bold">
-                        <td className="py-2 pr-4">Total {MONTH_LABELS[mois]}</td>
-                        <td className="py-2 px-2 text-right">{formatCurrency(mt.net_cabinet)}</td>
-                        {isBackOffice ? (
-                          <td className="py-2 px-2 text-right text-indigo-700">{formatCurrency(mt.thelo + mt.maxine + mt.pool_plus)}</td>
-                        ) : (
-                          <>
-                            <td className="py-2 px-2 text-right">{formatCurrency(mt.pool_plus)}</td>
-                            <td className="py-2 px-2 text-right text-blue-700">{formatCurrency(mt.thelo)}</td>
-                            <td className="py-2 px-2 text-right text-purple-700">{formatCurrency(mt.maxine)}</td>
-                          </>
-                        )}
-                        <td className="py-2 px-2 text-right">{formatCurrency(mt.steph_fr)}</td>
-                        <td className="py-2 px-2 text-right">{formatCurrency(mt.consultant)}</td>
-                        <td className="py-2 px-2 text-right">{formatCurrency(mt.mathias)}</td>
-                        <td className="py-2 px-2 text-right">{formatCurrency(mt.part_cabinet)}</td>
-                      </tr>
+                      <MonthRow
+                        entry={mt}
+                        isTotalRow
+                        label={`Total ${MONTH_LABELS[mois] || mois}`}
+                      />
                     </tbody>
                   </table>
                 </div>
@@ -390,8 +416,6 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
           </Card>
         )
       })}
-
-      {/* Section Factures encaissées supprimée — seul le détail mensuel est conservé */}
     </div>
   )
 }

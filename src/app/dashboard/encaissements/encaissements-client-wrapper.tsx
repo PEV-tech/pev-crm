@@ -11,14 +11,19 @@ export function EncaissementsClientWrapper() {
   const [facturesPaid, setFacturesPaid] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
 
+  const role = consultant?.role || 'manager'
+  const isBackOffice = role === 'back_office'
+
   React.useEffect(() => {
     const fetchData = async () => {
       try {
         const supabase = createClient()
+        // Back office uses v_dossiers_remunerations (masks POOL member names)
+        const facturesView = isBackOffice ? 'v_dossiers_remunerations' : 'v_dossiers_complets'
         const [remRes, facturesRes] = await Promise.all([
           supabase.from('encaissements_rem').select('*').order('mois'),
           supabase
-            .from('v_dossiers_complets')
+            .from(facturesView)
             .select('id, client_nom, client_prenom, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, montant, commission_brute, rem_apporteur, part_cabinet, date_facture, payee')
             .eq('payee', 'oui')
             .order('date_facture', { ascending: false }),
@@ -31,10 +36,9 @@ export function EncaissementsClientWrapper() {
       finally { setLoading(false) }
     }
     fetchData()
-  }, [])
+  }, [isBackOffice])
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
 
-  const role = consultant?.role || 'manager'
   return <EncaissementsClient initialData={data} role={role} facturesPaid={facturesPaid} />
 }
