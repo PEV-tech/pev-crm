@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Users, Download, ChevronDown, ChevronUp } from 'lucide-react'
+import { TrendingUp, Users, Download, ChevronDown, ChevronUp, X } from 'lucide-react'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined || value === 0) return '-'
@@ -73,6 +73,33 @@ const sumEntries = (entries: RemEntry[]): Totals =>
 const pool = (t: Totals) => t.pool_plus + t.thelo + t.maxine
 const consultantTotal = (t: Totals) => t.consultant + t.mathias
 
+// Column key type for drill-down
+type ColKey = 'maxine' | 'thelo' | 'pool_plus' | 'pool' | 'steph_fr' | 'steph_asie' | 'consultant' | 'part_cabinet' | 'net_cabinet'
+
+const COL_LABELS: Record<ColKey, string> = {
+  maxine: 'Maxine',
+  thelo: 'Thélo',
+  pool_plus: 'POOL+',
+  pool: 'POOL',
+  steph_fr: 'Stéphane FR',
+  steph_asie: 'Stéphane SG',
+  consultant: 'Consultant',
+  part_cabinet: 'Cabinet',
+  net_cabinet: 'Net cabinet',
+}
+
+function getEntryValue(entry: RemEntry, col: ColKey): number {
+  if (col === 'pool') return Number(entry.pool_plus || 0) + Number(entry.thelo || 0) + Number(entry.maxine || 0)
+  if (col === 'consultant') return Number(entry.consultant || 0) + Number(entry.mathias || 0)
+  return Number((entry as any)[col] || 0)
+}
+
+interface DrillDownInfo {
+  title: string
+  entries: { label: string; mois: string; amount: number }[]
+  total: number
+}
+
 interface EncaissementsClientProps {
   initialData: RemEntry[]
   role?: string
@@ -84,9 +111,22 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
   const isManager = !isBackOffice
   const [data] = React.useState(initialData)
   const [expandedMonths, setExpandedMonths] = React.useState<Record<string, boolean>>({})
+  const [drillDown, setDrillDown] = React.useState<DrillDownInfo | null>(null)
 
   const toggleMonth = (mois: string) => {
     setExpandedMonths(prev => ({ ...prev, [mois]: !prev[mois] }))
+  }
+
+  // Drill-down: show dossiers for a given column, optionally filtered by month
+  const openDrillDown = (col: ColKey, mois?: string) => {
+    const source = mois ? data.filter(e => e.mois === mois) : data
+    const entries = source
+      .map(e => ({ label: e.label, mois: e.mois, amount: getEntryValue(e, col) }))
+      .filter(e => e.amount !== 0)
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    const total = entries.reduce((s, e) => s + e.amount, 0)
+    const monthLabel = mois ? (MONTH_LABELS[mois] || mois) + ' — ' : ''
+    setDrillDown({ title: `${monthLabel}${COL_LABELS[col]}`, entries, total })
   }
 
   const byMonth = React.useMemo(() => {
@@ -132,28 +172,43 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     URL.revokeObjectURL(url)
   }, [data, isBackOffice])
 
+  // ───── Cellule cliquable ─────
+  const ClickableCell = ({ value, col, mois, className = '' }: { value: number; col: ColKey; mois?: string; className?: string }) => {
+    const display = formatCurrency(value)
+    if (display === '-') return <td className={`py-2 px-2 text-right ${className}`}>-</td>
+    return (
+      <td
+        className={`py-2 px-2 text-right cursor-pointer hover:bg-indigo-50 hover:underline rounded transition-colors ${className}`}
+        onClick={(e) => { e.stopPropagation(); openDrillDown(col, mois) }}
+        title={`Voir le détail ${COL_LABELS[col]}`}
+      >
+        {display}
+      </td>
+    )
+  }
+
   // ───── Ligne du tableau mensuel ─────
-  const MonthRow = ({ entry, isTotalRow, label }: { entry: Totals & { label?: string }; isTotalRow?: boolean; label?: string }) => {
+  const MonthRow = ({ entry, isTotalRow, label, mois }: { entry: Totals & { label?: string }; isTotalRow?: boolean; label?: string; mois: string }) => {
     const cls = isTotalRow ? 'bg-gray-100 font-bold' : 'border-b border-gray-100 hover:bg-gray-50'
+    // For individual rows, mois is used for drill-down; for total rows, also mois
+    const drillMois = mois
     return (
       <tr className={cls}>
         <td className="py-2 pr-4 font-medium text-gray-900">{label || (entry as any).label}</td>
-        <td className="py-2 px-2 text-right font-semibold">{formatCurrency(entry.net_cabinet)}</td>
+        <ClickableCell value={entry.net_cabinet} col="net_cabinet" mois={drillMois} className="font-semibold" />
         {isManager ? (
           <>
-            <td className="py-2 px-2 text-right text-purple-700 font-medium">{formatCurrency(entry.maxine)}</td>
-            <td className="py-2 px-2 text-right text-blue-700 font-medium">{formatCurrency(entry.thelo)}</td>
-            <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.pool_plus)}</td>
+            <ClickableCell value={entry.maxine} col="maxine" mois={drillMois} className="text-purple-700 font-medium" />
+            <ClickableCell value={entry.thelo} col="thelo" mois={drillMois} className="text-blue-700 font-medium" />
+            <ClickableCell value={entry.pool_plus} col="pool_plus" mois={drillMois} className="text-gray-600" />
           </>
         ) : (
-          <td className="py-2 px-2 text-right text-indigo-700 font-medium">
-            {formatCurrency(entry.pool_plus + entry.thelo + entry.maxine)}
-          </td>
+          <ClickableCell value={entry.pool_plus + entry.thelo + entry.maxine} col="pool" mois={drillMois} className="text-indigo-700 font-medium" />
         )}
-        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.steph_fr)}</td>
-        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.steph_asie)}</td>
-        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.consultant + entry.mathias)}</td>
-        <td className="py-2 px-2 text-right text-gray-600">{formatCurrency(entry.part_cabinet)}</td>
+        <ClickableCell value={entry.steph_fr} col="steph_fr" mois={drillMois} className="text-gray-600" />
+        <ClickableCell value={entry.steph_asie} col="steph_asie" mois={drillMois} className="text-gray-600" />
+        <ClickableCell value={entry.consultant + entry.mathias} col="consultant" mois={drillMois} className="text-gray-600" />
+        <ClickableCell value={entry.part_cabinet} col="part_cabinet" mois={drillMois} className="text-gray-600" />
       </tr>
     )
   }
@@ -174,116 +229,131 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
         </Button>
       </div>
 
-      {/* ───── Summary Cards — 4 cards, même structure ───── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-              <TrendingUp size={16} className="text-blue-600" />
-              Total encaissé
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(totals.net_cabinet)}</p>
-          </CardContent>
-        </Card>
-
+      {/* ───── Barre récapitulative (seul résumé) ───── */}
+      <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-8' : 'md:grid-cols-6'} gap-3`}>
+        <div
+          className="bg-blue-50 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100 transition-colors"
+          onClick={() => openDrillDown('net_cabinet')}
+          title="Voir le détail"
+        >
+          <p className="text-xs text-blue-500">Total encaissé</p>
+          <p className="text-sm font-bold text-blue-700">{formatCurrency(totals.net_cabinet)}</p>
+        </div>
         {isManager ? (
           <>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                  <Users size={16} className="text-purple-600" />
-                  Maxine
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-purple-700">{formatCurrency(totals.maxine)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500">Thélo</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-blue-700">{formatCurrency(totals.thelo)}</p>
-              </CardContent>
-            </Card>
-          </>
-        ) : (
-          <>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                  <Users size={16} className="text-indigo-600" />
-                  POOL
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-indigo-700">{formatCurrency(pool(totals))}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-500">Consultant</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-gray-700">{formatCurrency(consultantTotal(totals) + totals.steph_fr + totals.steph_asie)}</p>
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500">Cabinet</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-gray-700">{formatCurrency(totals.part_cabinet)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ───── Detailed breakdown ───── */}
-      <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-7' : 'md:grid-cols-6'} gap-3`}>
-        {isManager ? (
-          <>
-            <div className="bg-purple-50 rounded-lg p-3 text-center">
+            <div
+              className="bg-purple-50 rounded-lg p-3 text-center cursor-pointer hover:bg-purple-100 transition-colors"
+              onClick={() => openDrillDown('maxine')}
+              title="Voir le détail Maxine"
+            >
               <p className="text-xs text-purple-500">Maxine</p>
               <p className="text-sm font-semibold text-purple-700">{formatCurrency(totals.maxine)}</p>
             </div>
-            <div className="bg-blue-50 rounded-lg p-3 text-center">
+            <div
+              className="bg-blue-50 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100 transition-colors"
+              onClick={() => openDrillDown('thelo')}
+              title="Voir le détail Thélo"
+            >
               <p className="text-xs text-blue-500">Thélo</p>
               <p className="text-sm font-semibold text-blue-700">{formatCurrency(totals.thelo)}</p>
             </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <div
+              className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+              onClick={() => openDrillDown('pool_plus')}
+              title="Voir le détail POOL+"
+            >
               <p className="text-xs text-gray-500">POOL+</p>
               <p className="text-sm font-semibold">{formatCurrency(totals.pool_plus)}</p>
             </div>
           </>
         ) : (
-          <div className="bg-indigo-50 rounded-lg p-3 text-center">
+          <div
+            className="bg-indigo-50 rounded-lg p-3 text-center cursor-pointer hover:bg-indigo-100 transition-colors"
+            onClick={() => openDrillDown('pool')}
+            title="Voir le détail POOL"
+          >
             <p className="text-xs text-indigo-500">POOL</p>
             <p className="text-sm font-semibold text-indigo-700">{formatCurrency(pool(totals))}</p>
           </div>
         )}
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
+        <div
+          className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+          onClick={() => openDrillDown('steph_fr')}
+          title="Voir le détail Stéphane FR"
+        >
           <p className="text-xs text-gray-500">Stéphane FR</p>
           <p className="text-sm font-semibold">{formatCurrency(totals.steph_fr)}</p>
         </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
+        <div
+          className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+          onClick={() => openDrillDown('steph_asie')}
+          title="Voir le détail Stéphane SG"
+        >
           <p className="text-xs text-gray-500">Stéphane SG</p>
           <p className="text-sm font-semibold">{formatCurrency(totals.steph_asie)}</p>
         </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
+        <div
+          className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+          onClick={() => openDrillDown('consultant')}
+          title="Voir le détail Consultant"
+        >
           <p className="text-xs text-gray-500">Consultant</p>
           <p className="text-sm font-semibold">{formatCurrency(consultantTotal(totals))}</p>
         </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">Entrées</p>
-          <p className="text-sm font-semibold">{data.length}</p>
+        <div
+          className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+          onClick={() => openDrillDown('part_cabinet')}
+          title="Voir le détail Cabinet"
+        >
+          <p className="text-xs text-gray-500">Cabinet</p>
+          <p className="text-sm font-semibold">{formatCurrency(totals.part_cabinet)}</p>
         </div>
       </div>
+
+      {/* ───── Drill-down modal ───── */}
+      {drillDown && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDrillDown(null)}>
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-bold text-gray-900">{drillDown.title}</h3>
+              <button onClick={() => setDrillDown(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4">
+              {drillDown.entries.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Aucun dossier</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-gray-500">
+                      <th className="py-2 pr-4 font-medium">Dossier</th>
+                      <th className="py-2 px-2 font-medium">Mois</th>
+                      <th className="py-2 px-2 font-medium text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drillDown.entries.map((e, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-2 pr-4 text-gray-900">{e.label}</td>
+                        <td className="py-2 px-2 text-gray-500">{MONTH_LABELS[e.mois] || e.mois}</td>
+                        <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="border-t p-4 flex items-center justify-between bg-gray-50 rounded-b-xl">
+              <span className="text-sm text-gray-500">{drillDown.entries.length} dossier(s)</span>
+              <span className="text-sm font-bold">{formatCurrency(drillDown.total)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ───── Fallback: factures encaissées ───── */}
       {data.length === 0 && facturesPaid.length > 0 && (
@@ -397,12 +467,13 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                     </thead>
                     <tbody>
                       {entries.map((entry) => (
-                        <MonthRow key={entry.id} entry={entry as any} />
+                        <MonthRow key={entry.id} entry={entry as any} mois={mois} />
                       ))}
                       <MonthRow
                         entry={mt}
                         isTotalRow
                         label={`Total ${MONTH_LABELS[mois] || mois}`}
+                        mois={mois}
                       />
                     </tbody>
                   </table>
