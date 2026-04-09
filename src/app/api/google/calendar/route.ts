@@ -15,8 +15,10 @@ async function getValidToken(supabase: any, token: any, cid: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    const name = new URL(request.url).searchParams.get('name')
-    if (!name) return NextResponse.json({ error: 'Nom requis' }, { status: 400 })
+    const url = new URL(request.url)
+    const name = url.searchParams.get('name')
+    const email = url.searchParams.get('email')
+    if (!name && !email) return NextResponse.json({ error: 'Nom ou email requis' }, { status: 400 })
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
@@ -26,23 +28,52 @@ export async function GET(request: NextRequest) {
     if (!tokenData) return NextResponse.json({ connected: false, events: [] })
     const accessToken = await getValidToken(supabase, tokenData, consultant.id)
     const tMin = new Date(Date.now() - 180 * 86400000).toISOString()
-    const tMax = new Date(Date.now() + 180 * 86400000).toISOString()
-    const r = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?q=${encodeURIComponent(name)}&timeMin=${tMin}&timeMax=${tMax}&maxResults=20&orderBy=startTime&singleEvents=true`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    )
-    const cal = await r.json()
-    const events = (cal.items || []).map((e: any) => ({
-      id: e.id, summary: e.summary,
+    const tMax = new Date(Date.now() + 365 * 86400000).toISOString()
+    const baseUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events`
+    const params = `&timeMin=${tMin}&timeMax=${tMax}&maxResults=30&orderBy=startTime&singleEvents=true`
+
+    // Search by name and optionally by email, merge results
+    const searches: Promise<any>[] = []
+    if (name) {
+      searches.push(
+        fetch(`${baseUrl}?q=${encodeURIComponent(name)}${params}`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json())
+      )
+    }
+    if (email) {
+      searches.push(
+        fetch(`${baseUrl}?q=${encodeURIComponent(email)}${params}`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(r => r.json())
+      )
+    }
+
+    const results = await Promise.all(searches)
+    const allItems = new Map<string, any>()
+    for (const cal of results) {
+      for (const e of (cal.items || [])) {
+        if (!allItems.has(e.id)) allItems.set(e.id, e)
+      }
+    }
+
+    const events = Array.from(allItems.values()).map((e: any) => ({
+      id: e.id,
+      summary: e.summary,
       start: e.start?.dateTime || e.start?.date,
       end: e.end?.dateTime || e.end?.date,
       htmlLink: e.htmlLink,
-      attendees: e.attendees?.length || 0,
+      attendees: (e.attendees || []).map((a: any) => ({
+        email: a.email || '',
+        displayName: a.displayName || '',
+        responseStatus: a.responseStatus || 'needsAction',
+        self: a.self || false,
+      })),
       isPast: new Date(e.start?.dateTime || e.start?.date) < new Date(),
     }))
+
+    // Sort by start date (newest first for past, soonest first for upcoming)
+    events.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+
     return NextResponse.json({ connected: true, events })
   } catch (err) {
     console.error('Calendar error:', err)
     return NextResponse.json({ error: 'Erreur Calendar' }, { status: 500 })
   }
-    }
+}

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Mail, Calendar, ExternalLink, Paperclip, RefreshCw, Plus, FolderOpen } from 'lucide-react'
+import { Mail, Calendar, ExternalLink, Paperclip, RefreshCw, Plus, FolderOpen, ChevronDown, ChevronUp, Check, X, HelpCircle, Clock } from 'lucide-react'
 
 interface Props {
   clientEmail?: string | null
@@ -9,16 +9,42 @@ interface Props {
 }
 
 interface GmailMessage {
-  id: string; from: string; to: string; subject: string; date: string; snippet: string; hasAttachments: boolean; labelIds: string[]
+  id: string; threadId: string; from: string; to: string; subject: string; date: string; snippet: string; hasAttachments: boolean; labelIds: string[]
 }
+
+interface Attendee {
+  email: string
+  displayName: string
+  responseStatus: 'accepted' | 'declined' | 'tentative' | 'needsAction'
+  self: boolean
+}
+
 interface CalendarEvent {
-  id: string; summary: string; start: string; end: string; htmlLink: string; attendees: number; isPast: boolean
+  id: string; summary: string; start: string; end: string; htmlLink: string; attendees: Attendee[]; isPast: boolean
 }
 
 function formatDate(dateStr: string) {
   if (!dateStr) return ''
   try { return new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
   catch { return dateStr }
+}
+
+const RESPONSE_STATUS: Record<string, { label: string; color: string; icon: 'check' | 'x' | 'help' | 'clock' }> = {
+  accepted: { label: 'Accepté', color: 'text-green-600', icon: 'check' },
+  declined: { label: 'Refusé', color: 'text-red-500', icon: 'x' },
+  tentative: { label: 'Peut-être', color: 'text-amber-500', icon: 'help' },
+  needsAction: { label: 'En attente', color: 'text-gray-400', icon: 'clock' },
+}
+
+function ResponseIcon({ status }: { status: string }) {
+  const info = RESPONSE_STATUS[status] || RESPONSE_STATUS.needsAction
+  const iconClass = `w-3 h-3 ${info.color}`
+  switch (info.icon) {
+    case 'check': return <Check className={iconClass} />
+    case 'x': return <X className={iconClass} />
+    case 'help': return <HelpCircle className={iconClass} />
+    case 'clock': return <Clock className={iconClass} />
+  }
 }
 
 export default function CommunicationsTab({ clientEmail, clientName, driveUrl }: Props) {
@@ -28,6 +54,7 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
   const [emailsLoading, setEmailsLoading] = useState(false)
   const [eventsLoading, setEventsLoading] = useState(false)
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null)
+  const [showAllEmails, setShowAllEmails] = useState(false)
   const lastName = clientName?.split(' ').pop() || clientName
 
   async function loadEmails() {
@@ -45,7 +72,10 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
   async function loadEvents() {
     setEventsLoading(true)
     try {
-      const r = await fetch(`/api/google/calendar?name=${encodeURIComponent(lastName)}`)
+      const params = new URLSearchParams()
+      if (lastName) params.set('name', lastName)
+      if (clientEmail) params.set('email', clientEmail)
+      const r = await fetch(`/api/google/calendar?${params.toString()}`)
       const d = await r.json()
       if (d.connected === false) { setGoogleConnected(false); return }
       setGoogleConnected(true)
@@ -55,6 +85,9 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
 
   useEffect(() => { loadEmails() }, [clientEmail])
   useEffect(() => { if (tab === 'rdv') loadEvents() }, [tab])
+
+  const gmailThreadUrl = (msg: GmailMessage) =>
+    `https://mail.google.com/mail/u/0/#inbox/${msg.threadId}`
 
   if (googleConnected === false) {
     return (
@@ -66,6 +99,13 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
       </div>
     )
   }
+
+  const visibleEmails = showAllEmails ? emails : emails.slice(0, 3)
+  const hasMoreEmails = emails.length > 3
+
+  // Split events into upcoming and past
+  const upcomingEvents = events.filter(e => !e.isPast)
+  const pastEvents = events.filter(e => e.isPast)
 
   return (
     <div className="space-y-4">
@@ -85,6 +125,8 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
             <Calendar className="w-4 h-4"/>RDV Calendar{events.length>0&&<span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{events.length}</span>}
           </button>
         </div>
+
+        {/* EMAILS TAB */}
         {tab==='emails'&&(
           <div>
             <div className="p-3 border-b border-gray-100 flex items-center justify-between">
@@ -94,47 +136,136 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
             {!clientEmail?<div className="p-8 text-center text-gray-400 text-sm">Email du client non renseigné</div>
             :emailsLoading?<div className="p-8 text-center text-gray-400 text-sm">Chargement...</div>
             :emails.length===0?<div className="p-8 text-center text-gray-400 text-sm">Aucun email trouvé avec {clientEmail}</div>
-            :<div className="divide-y divide-gray-100">{emails.map(m=>(
-              <div key={m.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.labelIds.includes('UNREAD')?'bg-blue-500':'bg-gray-200'}`}/>
-                      <span className="text-sm font-medium text-gray-900 truncate">{m.subject||'(sans objet)'}</span>
-                      {m.hasAttachments&&<Paperclip className="w-3 h-3 text-gray-400 flex-shrink-0"/>}
+            :<div>
+              <div className="divide-y divide-gray-100">
+                {visibleEmails.map(m=>(
+                  <a
+                    key={m.id}
+                    href={gmailThreadUrl(m)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-4 hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.labelIds.includes('UNREAD')?'bg-blue-500':'bg-gray-200'}`}/>
+                          <span className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-700">{m.subject||'(sans objet)'}</span>
+                          {m.hasAttachments&&<Paperclip className="w-3 h-3 text-gray-400 flex-shrink-0"/>}
+                          <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1 truncate">{m.from}</div>
+                        <div className="text-xs text-gray-400 mt-1 line-clamp-1">{m.snippet}</div>
+                      </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.date)}</span>
                     </div>
-                    <div className="text-xs text-gray-500 mt-1 truncate">{m.from}</div>
-                    <div className="text-xs text-gray-400 mt-1 line-clamp-1">{m.snippet}</div>
-                  </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.date)}</span>
-                </div>
+                  </a>
+                ))}
               </div>
-            ))}</div>}
+              {hasMoreEmails && (
+                <button
+                  onClick={() => setShowAllEmails(!showAllEmails)}
+                  className="w-full py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-t border-gray-100 flex items-center justify-center gap-1 transition-colors"
+                >
+                  {showAllEmails ? (
+                    <><ChevronUp className="w-4 h-4" />Réduire</>
+                  ) : (
+                    <><ChevronDown className="w-4 h-4" />Voir les {emails.length - 3} autres emails</>
+                  )}
+                </button>
+              )}
+            </div>}
           </div>
         )}
+
+        {/* CALENDAR TAB */}
         {tab==='rdv'&&(
           <div>
             <div className="p-3 border-b border-gray-100 flex items-center justify-between">
-              <span className="text-xs text-gray-500">Recherche: "{lastName}"</span>
+              <span className="text-xs text-gray-500">Recherche: &quot;{lastName}&quot;{clientEmail ? ` / ${clientEmail}` : ''}</span>
               <button onClick={loadEvents} disabled={eventsLoading} className="text-gray-400 hover:text-gray-600"><RefreshCw className={`w-4 h-4 ${eventsLoading?'animate-spin':''}`}/></button>
             </div>
             {eventsLoading?<div className="p-8 text-center text-gray-400 text-sm">Chargement...</div>
-            :events.length===0?<div className="p-8 text-center text-gray-400 text-sm">Aucun RDV trouvé pour "{lastName}"</div>
-            :<div className="divide-y divide-gray-100">{[...events].sort((a,b)=>new Date(b.start).getTime()-new Date(a.start).getTime()).map(e=>(
-              <div key={e.id} className={`p-4 hover:bg-gray-50 ${e.isPast?'opacity-60':''}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${e.isPast?'bg-gray-300':'bg-green-500'}`}/>
-                      <span className="text-sm font-medium text-gray-900">{e.summary}</span>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">{formatDate(e.start)}</div>
-                    {e.attendees>0&&<div className="text-xs text-gray-400 mt-0.5">{e.attendees} participant(s)</div>}
+            :events.length===0?<div className="p-8 text-center text-gray-400 text-sm">Aucun RDV trouvé pour &quot;{lastName}&quot;</div>
+            :<div>
+              {/* Upcoming events */}
+              {upcomingEvents.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 bg-green-50 border-b border-green-100">
+                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wider">À venir ({upcomingEvents.length})</span>
                   </div>
-                  <a href={e.htmlLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700 flex-shrink-0"><ExternalLink className="w-4 h-4"/></a>
+                  <div className="divide-y divide-gray-100">
+                    {upcomingEvents.map(e=>(
+                      <div key={e.id} className="p-4 hover:bg-gray-50">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"/>
+                              <span className="text-sm font-medium text-gray-900">{e.summary}</span>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">{formatDate(e.start)}</div>
+                            {/* Attendees with response status */}
+                            {e.attendees && e.attendees.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {e.attendees.filter(a => !a.self).map((a, i) => {
+                                  const status = RESPONSE_STATUS[a.responseStatus] || RESPONSE_STATUS.needsAction
+                                  return (
+                                    <div key={i} className="flex items-center gap-1.5 text-xs">
+                                      <ResponseIcon status={a.responseStatus} />
+                                      <span className="text-gray-600">{a.displayName || a.email}</span>
+                                      <span className={`${status.color} font-medium`}>· {status.label}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <a href={e.htmlLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700 flex-shrink-0 p-1"><ExternalLink className="w-4 h-4"/></a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}</div>}
+              )}
+              {/* Past events */}
+              {pastEvents.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 border-t">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Passés ({pastEvents.length})</span>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {[...pastEvents].reverse().map(e=>(
+                      <div key={e.id} className="p-4 hover:bg-gray-50 opacity-60">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300"/>
+                              <span className="text-sm font-medium text-gray-900">{e.summary}</span>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">{formatDate(e.start)}</div>
+                            {e.attendees && e.attendees.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {e.attendees.filter(a => !a.self).map((a, i) => {
+                                  const status = RESPONSE_STATUS[a.responseStatus] || RESPONSE_STATUS.needsAction
+                                  return (
+                                    <div key={i} className="flex items-center gap-1.5 text-xs">
+                                      <ResponseIcon status={a.responseStatus} />
+                                      <span className="text-gray-600">{a.displayName || a.email}</span>
+                                      <span className={`${status.color} font-medium`}>· {status.label}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <a href={e.htmlLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700 flex-shrink-0 p-1"><ExternalLink className="w-4 h-4"/></a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>}
           </div>
         )}
       </div>
