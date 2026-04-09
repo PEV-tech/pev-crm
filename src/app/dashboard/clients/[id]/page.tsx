@@ -604,6 +604,7 @@ export default function ClientDetailPage() {
     statut_kyc: 'non',
     der: false,
     pi: false,
+    preco: false,
     lm: false,
     rm: false,
   })
@@ -636,6 +637,7 @@ export default function ClientDetailPage() {
           statut_kyc: clientData.statut_kyc || 'non',
           der: clientData.der || false,
           pi: clientData.pi || false,
+          preco: clientData.preco || false,
           lm: clientData.lm || false,
           rm: clientData.rm || false,
         })
@@ -683,6 +685,7 @@ export default function ClientDetailPage() {
         statut_kyc: editReg.statut_kyc,
         der: editReg.der,
         pi: editReg.pi,
+        preco: editReg.preco,
         lm: editReg.lm,
         rm: editReg.rm,
       })
@@ -717,17 +720,17 @@ export default function ClientDetailPage() {
   const finalisedCount = dossiers.filter(d => d.statut === 'client_finalise').length
   const enCoursCount = dossiers.filter(d => d.statut === 'client_en_cours').length
 
-  // Compliance
-  // PRECO is derived (der AND pi) — count only 5 real fields
+  // Compliance — 6 champs : KYC/Réglementaire, DER, PI, PRECO, LM, RM
   const complianceFields = [
     { label: 'Réglementaire', ok: client.statut_kyc === 'oui' },
     { label: 'DER', ok: !!client.der },
     { label: 'PI', ok: !!client.pi },
+    { label: 'PRECO', ok: !!client.preco },
     { label: 'LM', ok: !!client.lm },
     { label: 'RM', ok: !!client.rm },
   ]
   const complianceDone = complianceFields.filter(f => f.ok).length
-  const compliancePct = (complianceDone / 5) * 100
+  const compliancePct = (complianceDone / 6) * 100
 
   return (
     <div className="space-y-6">
@@ -794,7 +797,7 @@ export default function ClientDetailPage() {
           <p className="text-xs font-medium text-gray-500">Conformité</p>
           <div className="flex items-center gap-2 mt-1">
             <p className={`text-2xl font-bold ${compliancePct === 100 ? 'text-green-700' : compliancePct >= 50 ? 'text-amber-700' : 'text-red-700'}`}>
-              {complianceDone}/5
+              {complianceDone}/6
             </p>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
@@ -839,7 +842,6 @@ export default function ClientDetailPage() {
                             />
                           </div>
                           <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                            <span>{formatCurrency(d.montant)}</span>
                             <span>{d.financement || '-'}</span>
                             {d.date_operation && (
                               <span>{new Date(d.date_operation).toLocaleDateString('fr-FR')}</span>
@@ -849,11 +851,14 @@ export default function ClientDetailPage() {
                             )}
                           </div>
                         </div>
-                        <div className="text-right ml-4">
-                          <p className="text-sm font-semibold text-gray-900">
-                            {formatCurrency(isConsultant ? d.rem_apporteur : d.commission_brute)}
+                        <div className="text-right ml-4 flex-shrink-0">
+                          <p className="text-sm font-bold text-gray-900">
+                            {formatCurrency(d.montant)}
                           </p>
-                          <div className="flex gap-1 mt-1">
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            com. {formatCurrency(isConsultant ? d.rem_apporteur : d.commission_brute)}
+                          </p>
+                          <div className="flex gap-1 mt-1 justify-end">
                             {d.facturee && <Badge variant="success" className="text-[10px] px-1.5">Facturée</Badge>}
                             {d.payee === 'oui' && <Badge variant="success" className="text-[10px] px-1.5">Payée</Badge>}
                           </div>
@@ -1021,7 +1026,7 @@ export default function ClientDetailPage() {
                     complianceDone === 6 ? 'bg-green-100 text-green-700' :
                     complianceDone >= 4 ? 'bg-blue-100 text-blue-700' :
                     complianceDone >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                  }`}>{complianceDone}/5</span>
+                  }`}>{complianceDone}/6</span>
                 </div>
               </div>
             </CardHeader>
@@ -1080,6 +1085,16 @@ export default function ClientDetailPage() {
                     <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
                       <input
                         type="checkbox"
+                        id="preco"
+                        checked={editReg.preco}
+                        onChange={e => setEditReg({ ...editReg, preco: e.target.checked })}
+                        className="rounded"
+                      />
+                      <label htmlFor="preco" className="text-sm font-medium text-gray-700 cursor-pointer">PRECO</label>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
                         id="lm"
                         checked={editReg.lm}
                         onChange={e => setEditReg({ ...editReg, lm: e.target.checked })}
@@ -1114,6 +1129,7 @@ export default function ClientDetailPage() {
                           statut_kyc: client.statut_kyc || 'non',
                           der: client.der || false,
                           pi: client.pi || false,
+                          preco: client.preco || false,
                           lm: client.lm || false,
                           rm: client.rm || false,
                         })
