@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { ClientRelances } from '@/components/shared/client-relances'
 import { JournalSuivi } from '@/components/shared/journal-suivi'
+import CommunicationsTab from '@/components/google/CommunicationsTab'
 
 const formatCurrency = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -997,7 +998,7 @@ export default function ClientDetailPage() {
           </Card>
 
           {/* Google Suite Integration */}
-          <GoogleSuiteCard clientId={clientId} clientName={fullName} clientEmail={client.email} supabase={supabase} />
+          <CommunicationsTab clientEmail={client.email} clientName={fullName} />
 
           <Card>
             <CardHeader>
