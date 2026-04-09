@@ -12,7 +12,7 @@ interface RelanceRow {
   consultantPrenom: string
   produitNom: string
   dateOperation: string
-  typeRelance: 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging'
+  typeRelance: 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging' | 'manuelle'
   statut: string
   urgency: 'critical' | 'high' | 'medium'
   detail?: string
@@ -163,6 +163,55 @@ export function RelancesClientWrapper() {
               }
             }
           })
+        }
+
+        // Fetch manual relances from the relances table (CDC §10)
+        const today = new Date().toISOString().split('T')[0]
+        const { data: manualRelances } = await supabase
+          .from('relances')
+          .select('id, client_id, dossier_id, type, description, date_echeance, rappel_date, statut')
+          .in('statut', ['a_faire', 'reporte'])
+
+        if (manualRelances) {
+          // Fetch client names for manual relances
+          const clientIds = [...new Set(manualRelances.map(r => r.client_id).filter(Boolean))]
+          if (clientIds.length > 0) {
+            const { data: clients } = await supabase
+              .from('clients')
+              .select('id, nom, prenom, consultant_id')
+              .in('id', clientIds)
+
+            const consultantMap = new Map<string, { nom: string; prenom: string }>()
+            if (consultants) {
+              consultants.forEach((c: Consultant) => {
+                consultantMap.set(c.id, { nom: c.nom || '', prenom: c.prenom || '' })
+              })
+            }
+
+            manualRelances.forEach(mr => {
+              // Only show active ones (a_faire or reporte with rappel_date reached)
+              if (mr.statut === 'reporte' && mr.rappel_date && mr.rappel_date > today) return
+
+              const client = clients?.find(c => c.id === mr.client_id)
+              if (!client) return
+
+              const consultant = client.consultant_id ? consultantMap.get(client.consultant_id) : null
+              const isOverdue = mr.date_echeance < today
+
+              relances.push({
+                id: `manual-${mr.id}`,
+                clientNom: `${client.prenom || ''} ${client.nom || ''}`.trim(),
+                consultantNom: consultant?.nom || '',
+                consultantPrenom: consultant?.prenom || '',
+                produitNom: mr.type || 'Relance manuelle',
+                dateOperation: mr.date_echeance || '',
+                typeRelance: 'manuelle',
+                statut: mr.statut,
+                urgency: isOverdue ? 'critical' : 'medium',
+                detail: mr.description,
+              })
+            })
+          }
         }
 
         // Remove duplicates (a dossier could match multiple criteria)

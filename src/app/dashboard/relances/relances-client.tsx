@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Clock, CreditCard, ShieldAlert, CalendarClock } from 'lucide-react'
+import { AlertCircle, Clock, CreditCard, ShieldAlert, CalendarClock, Bell } from 'lucide-react'
 
 interface RelanceRow {
   id: string
@@ -13,7 +13,7 @@ interface RelanceRow {
   consultantPrenom: string
   produitNom: string
   dateOperation: string
-  typeRelance: 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging'
+  typeRelance: 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging' | 'manuelle'
   statut: string
   urgency: 'critical' | 'high' | 'medium'
   detail?: string
@@ -69,6 +69,7 @@ const getRelanceTypeBadge = (type: string) => {
     paiement: 'destructive',
     reglementaire: 'warning',
     facture_aging: 'destructive',
+    manuelle: 'warning',
   }
   const labels: Record<string, string> = {
     kyc: 'Réglementaire manquant',
@@ -76,6 +77,7 @@ const getRelanceTypeBadge = (type: string) => {
     paiement: 'Paiement en attente',
     reglementaire: 'Réglementaire incomplet',
     facture_aging: 'Facture impayée 30j+',
+    manuelle: 'Relance manuelle',
   }
   const icons: Record<string, any> = {
     kyc: <AlertCircle className="inline mr-1" size={14} />,
@@ -83,6 +85,7 @@ const getRelanceTypeBadge = (type: string) => {
     paiement: <CreditCard className="inline mr-1" size={14} />,
     reglementaire: <ShieldAlert className="inline mr-1" size={14} />,
     facture_aging: <CalendarClock className="inline mr-1" size={14} />,
+    manuelle: <Bell className="inline mr-1" size={14} />,
   }
   return (
     <Badge variant={variants[type] || 'default'}>
@@ -92,7 +95,7 @@ const getRelanceTypeBadge = (type: string) => {
   )
 }
 
-type TabType = 'all' | 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging'
+type TabType = 'all' | 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging' | 'manuelle'
 
 export function RelancesClient({ initialData }: RelancesClientProps) {
   const [activeTab, setActiveTab] = useState<TabType>('all')
@@ -149,6 +152,7 @@ export function RelancesClient({ initialData }: RelancesClientProps) {
     paiement: initialData.filter((r) => r.typeRelance === 'paiement').length,
     reglementaire: initialData.filter((r) => r.typeRelance === 'reglementaire').length,
     facture_aging: initialData.filter((r) => r.typeRelance === 'facture_aging').length,
+    manuelle: initialData.filter((r) => r.typeRelance === 'manuelle').length,
   }
 
   const tabs: Array<{ id: TabType; label: string; icon: React.ReactNode }> = [
@@ -158,6 +162,7 @@ export function RelancesClient({ initialData }: RelancesClientProps) {
     { id: 'inactivite', label: 'Inactivité 30j+', icon: <Clock size={16} /> },
     { id: 'paiement', label: 'Paiement', icon: <CreditCard size={16} /> },
     { id: 'facture_aging', label: 'Facture 30j+', icon: <CalendarClock size={16} /> },
+    { id: 'manuelle', label: 'Manuelles', icon: <Bell size={16} /> },
   ]
 
   return (
