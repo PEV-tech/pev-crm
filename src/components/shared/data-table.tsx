@@ -43,7 +43,7 @@ export const DataTable = React.forwardRef<
       columns,
       searchField,
       searchPlaceholder = 'Search...',
-      pageSize: initialPageSize = 10,
+      pageSize: initialPageSize = 50,
       className,
       rowClassName,
       onRowClick,

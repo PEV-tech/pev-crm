@@ -38,20 +38,34 @@ export async function GET(request: NextRequest) {
     const googleUser = await userRes.json()
 
     // Stocker le token avec l'ID du consultant (obtenu via state)
+    // Utilise la fonction SECURITY DEFINER pour contourner les problèmes RLS post-redirect
     const supabase = await createClient()
-    const { error: upsertError } = await supabase.from('google_tokens').upsert({
-      consultant_id: consultantId,
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token || null,
-      expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
-      google_email: googleUser.email || null,
-      scopes: tokens.scope ? tokens.scope.split(' ') : [],
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'consultant_id' })
+    const { error: rpcError } = await supabase.rpc('upsert_google_token', {
+      p_consultant_id: consultantId,
+      p_access_token: tokens.access_token,
+      p_refresh_token: tokens.refresh_token || null,
+      p_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+      p_google_email: googleUser.email || null,
+      p_scopes: tokens.scope ? tokens.scope.split(' ') : [],
+    })
 
-    if (upsertError) {
-      console.error('Google callback: upsert failed', upsertError)
-      return NextResponse.redirect(new URL('/dashboard/parametres?google=error&reason=db', request.url))
+    if (rpcError) {
+      console.error('Google callback: rpc upsert failed', rpcError)
+      // Fallback: try direct upsert
+      const { error: upsertError } = await supabase.from('google_tokens').upsert({
+        consultant_id: consultantId,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token || null,
+        expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+        google_email: googleUser.email || null,
+        scopes: tokens.scope ? tokens.scope.split(' ') : [],
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'consultant_id' })
+
+      if (upsertError) {
+        console.error('Google callback: direct upsert also failed', upsertError)
+        return NextResponse.redirect(new URL('/dashboard/parametres?google=error&reason=db', request.url))
+      }
     }
 
     return NextResponse.redirect(new URL('/dashboard/parametres?google=success', request.url))

@@ -6,7 +6,7 @@ import { useUser } from '@/hooks/use-user'
 import { VDossiersComplets } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
+// DataTable removed — detail section was redundant with dossiers page
 import { StatusBadge } from '@/components/shared/status-badge'
 import {
   BarChart3, Download, Filter, TrendingUp,
@@ -429,41 +429,6 @@ export default function AnalysePage() {
     setFiltrePays('tous')
   }
 
-  // Table columns
-  const columns: ColumnDefinition<VDossiersComplets>[] = [
-    {
-      key: 'client_nom',
-      label: 'Client',
-      sortable: true,
-      render: (_, row) => `${row.client_prenom || ''} ${row.client_nom || ''}`.trim(),
-    },
-    { key: 'produit_nom', label: 'Produit', sortable: true },
-    { key: 'compagnie_nom', label: 'Compagnie', sortable: true },
-    {
-      key: 'montant', label: 'Montant', sortable: true,
-      render: (v) => formatCurrency(v),
-    },
-    {
-      key: 'date_operation', label: 'Date', sortable: true,
-      render: (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '-'),
-    },
-    {
-      key: 'commission_brute', label: 'Commission', sortable: true,
-      render: (v) => formatCurrency(v),
-    },
-    ...(isManager ? [{
-      key: 'consultant_nom' as keyof VDossiersComplets,
-      label: 'Consultant', sortable: true,
-      render: (_: any, row: VDossiersComplets) => `${row.consultant_prenom || ''} ${row.consultant_nom || ''}`.trim(),
-    }] : []),
-    {
-      key: 'statut', label: 'Statut', sortable: true,
-      render: (v) => (
-        <StatusBadge status={(v as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'} type="dossier" />
-      ),
-    },
-  ]
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px] text-gray-500">
@@ -688,18 +653,6 @@ export default function AnalysePage() {
         )}
       </div>
 
-      {/* Detail Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 size={20} className="text-gray-600" />
-            Détail ({filteredData.length} résultat{filteredData.length > 1 ? 's' : ''})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable data={filteredData} columns={columns} pageSize={15} />
-        </CardContent>
-      </Card>
       {/* Month detail popup */}
       {selectedMonth !== null && (() => {
         const year = periodeDebut ? parseInt(periodeDebut.substring(0, 4)) : new Date().getFullYear()
