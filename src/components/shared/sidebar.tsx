@@ -15,6 +15,7 @@ import {
   Bell,
   BarChart3,
   Settings,
+  BookOpen,
   Menu,
   X,
   LogOut,
@@ -182,6 +183,21 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
               </Link>
             )
           })}
+
+          {/* Aide - Visible à tous */}
+          <Link
+            href="/dashboard/aide"
+            onClick={() => setIsOpen(false)}
+            className={cn(
+              'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-all duration-200',
+              isActive('/dashboard/aide')
+                ? 'bg-accent-blue text-white shadow-lg'
+                : 'text-gray-200 hover:bg-navy-light hover:text-white'
+            )}
+          >
+            <BookOpen size={18} />
+            <span>Aide & Manuel</span>
+          </Link>
 
           {/* Settings - Only for managers and back office */}
           {isManagerOrBO && (
