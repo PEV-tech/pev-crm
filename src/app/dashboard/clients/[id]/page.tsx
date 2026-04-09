@@ -722,7 +722,7 @@ export default function ClientDetailPage() {
 
   // Compliance — 6 champs : KYC/Réglementaire, DER, PI, PRECO, LM, RM
   const complianceFields = [
-    { label: 'Réglementaire', ok: client.statut_kyc === 'oui' },
+    { label: 'KYC', ok: client.statut_kyc === 'oui' },
     { label: 'DER', ok: !!client.der },
     { label: 'PI', ok: !!client.pi },
     { label: 'PRECO', ok: !!client.preco },
@@ -1049,18 +1049,16 @@ export default function ClientDetailPage() {
                 </>
               ) : (
                 <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600">Statut KYC</label>
-                    <select
-                      value={editReg.statut_kyc}
-                      onChange={e => setEditReg({ ...editReg, statut_kyc: e.target.value })}
-                      className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                    >
-                      <option value="non">Non</option>
-                      <option value="en_cours">En cours</option>
-                      <option value="oui">Oui</option>
-                    </select>
-                  </div>
+                  <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
+                        id="kyc"
+                        checked={editReg.statut_kyc === 'oui'}
+                        onChange={e => setEditReg({ ...editReg, statut_kyc: e.target.checked ? 'oui' : 'non' })}
+                        className="rounded"
+                      />
+                      <label htmlFor="kyc" className="text-sm font-medium text-gray-700 cursor-pointer">KYC</label>
+                    </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-3 p-2 bg-gray-50 rounded">
                       <input
