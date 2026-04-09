@@ -375,18 +375,18 @@ export default function AidePage() {
           <section id="reglementaire" className="scroll-mt-6 space-y-5">
             <h2 className="text-2xl font-bold text-gray-900">Réglementaire</h2>
             <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-2">
-              <p className="text-sm text-gray-700 mb-3">Score de conformité sur 5 points :</p>
+              <p className="text-sm text-gray-700 mb-3">Score de conformité sur 6 points :</p>
               {[
-                { label: '1. Réglementaire (KYC)', counted: true },
-                { label: '2. DER', counted: true },
-                { label: '3. PI', counted: true },
-                { label: '4. LM', counted: true },
-                { label: '5. RM', counted: true },
-                { label: '6. PRECO (affiché mais non compté)', counted: false },
-              ].map(c => (
-                <div key={c.label} className={`flex items-center gap-3 p-2 rounded-lg ${c.counted ? 'bg-gray-50' : 'bg-amber-50'}`}>
-                  <CheckCircle className={`w-4 h-4 flex-shrink-0 ${c.counted ? 'text-indigo-600' : 'text-amber-500'}`} />
-                  <span className={`text-sm ${c.counted ? 'text-gray-900' : 'text-amber-800 italic'}`}>{c.label}</span>
+                '1. Réglementaire (KYC)',
+                '2. DER',
+                '3. PI',
+                '4. PRECO',
+                '5. LM',
+                '6. RM',
+              ].map(label => (
+                <div key={label} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
+                  <CheckCircle className="w-4 h-4 flex-shrink-0 text-indigo-600" />
+                  <span className="text-sm text-gray-900">{label}</span>
                 </div>
               ))}
             </div>

@@ -437,11 +437,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       : dossier?.commission_brute ?? null,
     [effectiveTauxEntree, dossier?.montant, dossier?.commission_brute]
   )
-  // Réglementaire: count of validated fields (PRECO excluded — derived from der+pi)
+  // Réglementaire: count of validated fields (PRECO comptabilisé)
   const reglementaireFields = React.useMemo(() => [
     dossier?.statut_kyc === 'oui',
-    !!dossier?.der, !!dossier?.pi, !!dossier?.lm, !!dossier?.rm,
-  ], [dossier?.statut_kyc, dossier?.der, dossier?.pi, dossier?.lm, dossier?.rm])
+    !!dossier?.der, !!dossier?.pi, !!dossier?.preco, !!dossier?.lm, !!dossier?.rm,
+  ], [dossier?.statut_kyc, dossier?.der, dossier?.pi, dossier?.preco, dossier?.lm, dossier?.rm])
   const reglementaireDone = React.useMemo(() => reglementaireFields.filter(Boolean).length, [reglementaireFields])
 
   // Part consultant from entry: use consultantTauxRemuneration directly
@@ -1024,16 +1024,16 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                 <CardTitle className="text-lg">Réglementaire</CardTitle>
                 {!isEditing && (
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      reglementaireDone === 5 ? 'bg-green-100 text-green-700' :
-                      reglementaireDone >= 3 ? 'bg-blue-100 text-blue-700' :
+                      reglementaireDone === 6 ? 'bg-green-100 text-green-700' :
+                      reglementaireDone >= 4 ? 'bg-blue-100 text-blue-700' :
                       reglementaireDone >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                    }`}>{reglementaireDone}/5</span>
+                    }`}>{reglementaireDone}/6</span>
                 )}
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
               {!isEditing && (() => {
-                const pct = (reglementaireDone / 5) * 100
+                const pct = (reglementaireDone / 6) * 100
                 return (
                   <div className="mb-3">
                     <div className="w-full bg-gray-200 rounded-full h-2">

@@ -83,18 +83,19 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
 
       groups[key].dossiers.push(d)
 
-      // Calculate per-dossier compliance
+      // Calculate per-dossier compliance (6 champs: KYC, DER, PI, PRECO, LM, RM)
       const checks = [
         d.statut_kyc === 'oui',
         d.der === true,
         d.pi === true,
+        d.preco === true,
         d.lm === true,
         d.rm === true,
       ]
       const score = checks.filter(Boolean).length
       groups[key].complianceScore += score
-      groups[key].totalChecks += 5
-      if (score < 5) groups[key].isFullyCompliant = false
+      groups[key].totalChecks += 6
+      if (score < 6) groups[key].isFullyCompliant = false
     })
 
     return Object.values(groups).sort((a, b) => {
@@ -364,10 +365,11 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
                 <div className="col-span-3">Client</div>
                 <div className="col-span-1">Pays</div>
                 <div className="col-span-1 text-center">Dossiers</div>
-                <div className="col-span-2">Conformité</div>
-                <div className="col-span-1 text-center">Réglementaire</div>
+                <div className="col-span-1">Conformité</div>
+                <div className="col-span-1 text-center">KYC</div>
                 <div className="col-span-1 text-center">DER</div>
                 <div className="col-span-1 text-center">PI</div>
+                <div className="col-span-1 text-center">PRECO</div>
                 <div className="col-span-1 text-center">LM</div>
                 <div className="col-span-1 text-center">RM</div>
               </div>
@@ -378,6 +380,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
                 const anyKycBad = group.dossiers.some((d: any) => d.statut_kyc !== 'oui')
                 const anyDerBad = group.dossiers.some((d: any) => d.der !== true)
                 const anyPiBad = group.dossiers.some((d: any) => d.pi !== true)
+                const anyPrecoBad = group.dossiers.some((d: any) => d.preco !== true)
                 const anyLmBad = group.dossiers.some((d: any) => d.lm !== true)
                 const anyRmBad = group.dossiers.some((d: any) => d.rm !== true)
 
@@ -404,7 +407,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
                       <div className="col-span-1 text-center text-sm text-gray-600">
                         {group.dossiers.length}
                       </div>
-                      <div className="col-span-2">
+                      <div className="col-span-1">
                         <ComplianceBar score={group.complianceScore} total={group.totalChecks} />
                       </div>
                       <div className="col-span-1 text-center">
@@ -420,6 +423,11 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
                       <div className="col-span-1 text-center">
                         <Badge variant={anyPiBad ? 'destructive' : 'success'} className="text-xs">
                           {anyPiBad ? 'Non' : 'OK'}
+                        </Badge>
+                      </div>
+                      <div className="col-span-1 text-center">
+                        <Badge variant={anyPrecoBad ? 'destructive' : 'success'} className="text-xs">
+                          {anyPrecoBad ? 'Non' : 'OK'}
                         </Badge>
                       </div>
                       <div className="col-span-1 text-center">
@@ -457,7 +465,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
                             <div className="col-span-1 text-center text-xs text-gray-500">
                               {formatCurrency(d.montant)}
                             </div>
-                            <div className="col-span-2 text-xs text-gray-500">
+                            <div className="col-span-1 text-xs text-gray-500">
                               {d.statut === 'client_finalise'
                                 ? 'Finalisé'
                                 : d.statut === 'client_en_cours'
@@ -472,6 +480,9 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
                             </div>
                             <div className="col-span-1 text-center">
                               <BoolBadge value={d.pi} />
+                            </div>
+                            <div className="col-span-1 text-center">
+                              <BoolBadge value={d.preco} />
                             </div>
                             <div className="col-span-1 text-center">
                               <BoolBadge value={d.lm} />

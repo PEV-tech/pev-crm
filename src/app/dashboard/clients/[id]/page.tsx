@@ -1023,7 +1023,7 @@ export default function ClientDetailPage() {
                     </button>
                   )}
                   <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                    complianceDone === 5 ? 'bg-green-100 text-green-700' :
+                    complianceDone === 6 ? 'bg-green-100 text-green-700' :
                     complianceDone >= 4 ? 'bg-blue-100 text-blue-700' :
                     complianceDone >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
                   }`}>{complianceDone}/6</span>
