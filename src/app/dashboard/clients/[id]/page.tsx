@@ -1004,6 +1004,9 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Relations */}
+          <ClientRelations clientId={clientId} clientName={fullName} />
+
           {/* Google Suite Integration */}
           <CommunicationsTab clientEmail={client.email} clientName={fullName} />
 
@@ -1155,9 +1158,6 @@ export default function ClientDetailPage() {
 
           {/* Pièces jointes */}
           <PiecesJointes clientId={clientId} supabase={supabase} currentUserId={currentUser?.id} />
-
-          {/* Relations */}
-          <ClientRelations clientId={clientId} clientName={fullName} />
 
           {/* Relances */}
           <ClientRelances

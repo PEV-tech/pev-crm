@@ -3,12 +3,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
-import { Search, X, User, FileText, Building, Package, Loader2 } from 'lucide-react'
+import { Search, X, User, Building, Package, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 interface SearchResult {
   id: string
-  type: 'client' | 'dossier' | 'compagnie' | 'produit'
+  type: 'client' | 'compagnie' | 'produit'
   title: string
   subtitle: string
   url: string
@@ -50,20 +50,13 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       const supabase = createClient()
       const searchTerm = `%${q.toLowerCase()}%`
 
-      // P0 fix: consultants must only search their own dossiers
-      const isManager = consultant?.role === 'manager'
-      const isBackOffice = consultant?.role === 'back_office'
-      let dossiersQuery = supabase
-        .from('v_dossiers_complets')
-        .select('id, client_nom, client_prenom, client_pays, produit_nom, compagnie_nom, statut, montant')
-        .or(`client_nom.ilike.${searchTerm},client_prenom.ilike.${searchTerm},produit_nom.ilike.${searchTerm},compagnie_nom.ilike.${searchTerm}`)
-        .limit(8)
-      if (!isManager && !isBackOffice) {
-        dossiersQuery = dossiersQuery.eq('consultant_prenom', consultant?.prenom)
-      }
-
-      const [dossiersRes, compagniesRes, produitsRes] = await Promise.all([
-        dossiersQuery,
+      // Search clients directly from the clients table
+      const [clientsRes, compagniesRes, produitsRes] = await Promise.all([
+        supabase
+          .from('clients')
+          .select('id, nom, prenom, pays, statut_kyc')
+          .or(`nom.ilike.${searchTerm},prenom.ilike.${searchTerm}`)
+          .limit(10),
         supabase
           .from('compagnies')
           .select('id, nom')
@@ -78,37 +71,21 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
       const searchResults: SearchResult[] = []
 
-      // Add client and dossier results
-      if (dossiersRes.data) {
-        // First: add unique client results (navigate to client page)
-        const seenClients = new Set<string>()
-        dossiersRes.data.forEach((d: any) => {
-          const clientKey = `${d.client_prenom || ''} ${d.client_nom || ''}`.trim()
-          if (!seenClients.has(clientKey) && clientKey) {
-            seenClients.add(clientKey)
+      // Add client results — navigate directly to client page
+      if (clientsRes.data) {
+        clientsRes.data.forEach((c: any) => {
+          const fullName = `${c.prenom || ''} ${c.nom || ''}`.trim()
+          if (fullName) {
             searchResults.push({
-              id: `client-${d.client_id || d.id}`,
+              id: `client-${c.id}`,
               type: 'client',
-              title: clientKey,
-              subtitle: `${d.client_pays || ''} · ${d.statut === 'client_finalise' ? 'Finalisé' : d.statut === 'client_en_cours' ? 'En cours' : 'Prospect'}`,
-              url: d.client_id ? `/dashboard/clients/${d.client_id}` : `/dashboard/dossiers/${d.id}`,
+              title: fullName,
+              subtitle: c.pays || '',
+              url: `/dashboard/clients/${c.id}`,
             })
           }
         })
-        // Then: add individual dossier results
-        dossiersRes.data.forEach((d: any) => {
-          searchResults.push({
-            id: `dossier-${d.id}`,
-            type: 'dossier',
-            title: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
-            subtitle: `${d.produit_nom || 'Pas de produit'} · ${d.compagnie_nom || ''} · ${
-              new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(d.montant || 0)
-            }`,
-            url: `/dashboard/dossiers/${d.id}`,
-          })
-        })
       }
-
 
       // Add compagnie results
       if (compagniesRes.data) {
@@ -173,7 +150,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const getIcon = (type: string) => {
     switch (type) {
       case 'client': return <User size={16} className="text-blue-500" />
-      case 'dossier': return <FileText size={16} className="text-indigo-500" />
       case 'compagnie': return <Building size={16} className="text-green-500" />
       case 'produit': return <Package size={16} className="text-orange-500" />
       default: return <Search size={16} className="text-gray-400" />
@@ -183,7 +159,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'client': return 'Client'
-      case 'dossier': return 'Dossier'
       case 'compagnie': return 'Compagnie'
       case 'produit': return 'Produit'
       default: return type
@@ -205,7 +180,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Rechercher un client, dossier, produit, compagnie..."
+            placeholder="Rechercher un client, produit, compagnie..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
