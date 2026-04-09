@@ -78,35 +78,37 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
       const searchResults: SearchResult[] = []
 
-      // Add dossier/client results
+      // Add client and dossier results
       if (dossiersRes.data) {
-        // Deduplicate by client name
+        // First: add unique client results (navigate to client page)
         const seenClients = new Set<string>()
         dossiersRes.data.forEach((d: any) => {
           const clientKey = `${d.client_prenom || ''} ${d.client_nom || ''}`.trim()
-          // Add as dossier result
-          searchResults.push({
-            id: `dossier-${d.id}`,
-            type: 'dossier',
-            title: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
-            subtitle: `${d.produit_nom || 'Pas de produit'} Â· ${d.compagnie_nom || ''} Â· ${
-              new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(d.montant || 0)
-            }`,
-            url: `/dashboard/dossiers/${d.id}`,
-          })
-          // Also add as unique client â link to client page if client_id available
           if (!seenClients.has(clientKey) && clientKey) {
             seenClients.add(clientKey)
             searchResults.push({
               id: `client-${d.client_id || d.id}`,
               type: 'client',
               title: clientKey,
-              subtitle: `${d.client_pays || ''} Â· ${d.statut === 'client_finalise' ? 'FinalisÃ©' : d.statut === 'client_en_cours' ? 'En cours' : 'Prospect'}`,
+              subtitle: `${d.client_pays || ''} · ${d.statut === 'client_finalise' ? 'Finalisé' : d.statut === 'client_en_cours' ? 'En cours' : 'Prospect'}`,
               url: d.client_id ? `/dashboard/clients/${d.client_id}` : `/dashboard/dossiers/${d.id}`,
             })
           }
         })
+        // Then: add individual dossier results
+        dossiersRes.data.forEach((d: any) => {
+          searchResults.push({
+            id: `dossier-${d.id}`,
+            type: 'dossier',
+            title: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
+            subtitle: `${d.produit_nom || 'Pas de produit'} · ${d.compagnie_nom || ''} · ${
+              new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(d.montant || 0)
+            }`,
+            url: `/dashboard/dossiers/${d.id}`,
+          })
+        })
       }
+
 
       // Add compagnie results
       if (compagniesRes.data) {
@@ -244,11 +246,11 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             </div>
           ) : query.length >= 2 && !loading ? (
             <div className="py-8 text-center text-gray-500 text-sm">
-              Aucun rÃ©sultat pour &laquo; {query} &raquo;
+              Aucun résultat pour « {query} »
             </div>
           ) : query.length < 2 ? (
             <div className="py-8 text-center text-gray-400 text-sm">
-              Tapez au moins 2 caractÃ¨res pour rechercher
+              Tapez au moins 2 caractères pour rechercher
             </div>
           ) : null}
         </div>

@@ -117,6 +117,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             statut_kyc: data.statut_kyc || 'non',
             der: data.der ? 'oui' : 'non',
             pi: data.pi ? 'oui' : 'non',
+            preco: data.preco ? 'oui' : 'non',
             lm: data.lm ? 'oui' : 'non',
             rm: data.rm ? 'oui' : 'non',
             pays: data.client_pays || '',
@@ -211,7 +212,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         statut: editForm.statut,
         montant: parseFloat(editForm.montant) || 0,
         financement: editForm.financement || null,
-        date_operation: editForm.date_operation,
+        date_operation: editForm.date_operation || null,
         commentaire: editForm.commentaire || null,
         produit_id: editForm.produit_id || null,
         compagnie_id: editForm.compagnie_id || null,
@@ -257,6 +258,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           statut_kyc: editForm.statut_kyc || 'non',
           der: editForm.der === 'oui',
           pi: editForm.pi === 'oui',
+          preco: editForm.preco === 'oui',
           lm: editForm.lm === 'oui',
           rm: editForm.rm === 'oui',
         }
@@ -369,7 +371,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   }
 
   // Delete handler — only for non-finalized dossiers
-  const canDelete = dossier && dossier.statut !== 'client_finalise' && !isConsultant
+  const canDelete = dossier && !isConsultant
   const handleDelete = async () => {
     if (!dossier?.id) return
     setDeleting(true)
@@ -383,7 +385,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       // Delete dossier
       const { error } = await supabase.from('dossiers').delete().eq('id', dossier.id)
       if (error) throw error
-      router.push('/dashboard/dossiers')
+      router.push(dossier.client_id ? `/dashboard/clients/${dossier.client_id}` : '/dashboard/dossiers')
     } catch (e: any) {
       setSaveError(e.message || 'Erreur lors de la suppression')
       setDeleting(false)
@@ -657,16 +659,6 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Date opération</p>
-                  {isEditing ? (
-                    <Input name="date_operation" type="date" value={editForm.date_operation} onChange={handleEditChange} className="mt-1" />
-                  ) : (
-                    <p className="text-lg font-semibold text-gray-900 mt-1">
-                      {dossier.date_operation ? new Date(dossier.date_operation).toLocaleDateString('fr-FR') : '-'}
-                    </p>
-                  )}
-                </div>
-                <div>
                   <p className="text-sm font-medium text-gray-500">Date entrée en relation</p>
                   {isEditing ? (
                     <Input name="date_entree_en_relation" type="date" value={editForm.date_entree_en_relation} onChange={handleEditChange} className="mt-1" />
@@ -677,7 +669,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Date signature</p>
+                  <p className="text-sm font-medium text-gray-500">Date de réalisation</p>
                   {isEditing ? (
                     <Input name="date_signature" type="date" value={editForm.date_signature} onChange={handleEditChange} className="mt-1" />
                   ) : (
@@ -1012,7 +1004,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                 <StatusBadge status={facturationStatus} type="facturation" />
               </div>
               <div>
-                <p className="text-sm text-gray-600 mb-2">Réglementaire</p>
+                <p className="text-sm text-gray-600 mb-2">KYC</p>
                 <StatusBadge status={(dossier.statut_kyc as 'non' | 'en_cours' | 'oui') || 'non'} type="kyc" />
               </div>
             </CardContent>
@@ -1021,7 +1013,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Réglementaire</CardTitle>
+                <CardTitle className="text-lg">KYC</CardTitle>
                 {!isEditing && (
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
                       reglementaireDone === 6 ? 'bg-green-100 text-green-700' :
@@ -1047,9 +1039,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               {isEditing ? (
                 <>
                   {[
-                    { name: 'statut_kyc', label: 'Réglementaire' },
+                    { name: 'statut_kyc', label: 'KYC' },
                     { name: 'der', label: 'DER' },
                     { name: 'pi', label: 'PI' },
+                    { name: 'preco', label: 'PRECO' },
                     { name: 'lm', label: 'LM' },
                     { name: 'rm', label: 'RM' },
                   ].map(({ name, label }) => (
@@ -1062,18 +1055,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                       </Select>
                     </div>
                   ))}
-                  {/* PRECO is computed (der AND pi) — show read-only */}
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm font-medium text-gray-700">PRECO</span>
-                    <Badge variant={editForm.der === 'oui' && editForm.pi === 'oui' ? 'success' : 'destructive'}>
-                      {editForm.der === 'oui' && editForm.pi === 'oui' ? 'Validé (auto)' : 'Non validé'}
-                    </Badge>
-                  </div>
                 </>
               ) : (
                 <>
                   {[
-                    { label: 'Réglementaire', value: dossier.statut_kyc === 'oui', enCours: dossier.statut_kyc === 'en_cours' },
+                    { label: 'KYC', value: dossier.statut_kyc === 'oui', enCours: dossier.statut_kyc === 'en_cours' },
                     { label: 'DER', value: !!dossier.der },
                     { label: 'PI', value: !!dossier.pi },
                     { label: 'PRECO', value: !!dossier.preco },

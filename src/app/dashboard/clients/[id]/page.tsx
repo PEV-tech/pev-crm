@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { ClientRelances } from '@/components/shared/client-relances'
 import { JournalSuivi } from '@/components/shared/journal-suivi'
+import { ClientRelations } from '@/components/shared/client-relations'
 import CommunicationsTab from '@/components/google/CommunicationsTab'
 
 const formatCurrency = (value: number | null | undefined): string => {
@@ -38,6 +39,7 @@ interface ClientDossier {
   payee: string | null
   consultant_prenom: string | null
   consultant_nom: string | null
+  taux_commission: number | null
 }
 
 interface ClientInfo {
@@ -856,7 +858,7 @@ export default function ClientDetailPage() {
                             {formatCurrency(d.montant)}
                           </p>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            com. {formatCurrency(isConsultant ? d.rem_apporteur : d.commission_brute)}
+                            com. {formatCurrency(isConsultant ? d.rem_apporteur : (d.commission_brute || (d.taux_commission && d.montant ? d.montant * d.taux_commission : null)))}
                           </p>
                           <div className="flex gap-1 mt-1 justify-end">
                             {d.facturee && <Badge variant="success" className="text-[10px] px-1.5">Facturée</Badge>}
@@ -1010,7 +1012,7 @@ export default function ClientDetailPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Shield size={18} className="text-gray-600" />
-                  Réglementaire
+                  KYC
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   {!editingReglementaire && (
@@ -1153,6 +1155,9 @@ export default function ClientDetailPage() {
 
           {/* Pièces jointes */}
           <PiecesJointes clientId={clientId} supabase={supabase} currentUserId={currentUser?.id} />
+
+          {/* Relations */}
+          <ClientRelations clientId={clientId} clientName={fullName} />
 
           {/* Relances */}
           <ClientRelances

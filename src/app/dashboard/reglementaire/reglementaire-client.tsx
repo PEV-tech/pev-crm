@@ -167,7 +167,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
     },
     {
       key: 'statut_kyc',
-      label: 'Réglementaire',
+      label: 'KYC',
       render: (value) => <KYCBadge status={value || 'non'} />,
     },
     {
@@ -514,7 +514,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
             <div>
-              <p className="font-medium text-gray-900">Réglementaire</p>
+              <p className="font-medium text-gray-900">KYC</p>
               <p className="text-gray-600">Know Your Customer</p>
             </div>
             <div>
