@@ -1,590 +1,853 @@
 'use client'
-
-import { useState, useEffect, useMemo } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
-import { useRole, useConsultantInfo } from '@/hooks/use-user'
+import { useUser } from '@/hooks/use-user'
 import {
-  BookOpen, ChevronDown, ChevronRight, CheckCircle, AlertCircle, Star, Zap,
-  Mail, Calendar, Home, Search, HelpCircle, Phone, FileText, Shield, Bell,
-  BarChart3, DollarSign, Users, FolderOpen, Settings, Briefcase, MessageSquare,
+  BookOpen, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Star, Zap,
+  Mail, Calendar, Home, Shield, FolderOpen, Users, CreditCard, DollarSign,
+  Bell, BarChart2, Settings, FileText, Lock, X, ExternalLink, TrendingUp,
 } from 'lucide-react'
 
-// ─── Types ────────────────────────────────────────────────────────
-interface FaqEntry {
-  id: string
-  categorie: string
-  sous_categorie: string | null
-  question: string
-  reponse: string
-  ordre: number
+const ROLE_LABELS: Record<string, string> = {
+  consultant: 'Consultant',
+  manager: 'Manager',
+  back_office: 'Back-office',
 }
 
-type RoleLabel = 'consultant' | 'manager' | 'back_office'
-
-// ─── Section definitions per role ─────────────────────────────────
-const ALL_SECTIONS = [
-  { id: 'bienvenue', label: 'Bienvenue', icon: BookOpen, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'navigation', label: 'Navigation', icon: Home, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'dossiers', label: 'Dossiers', icon: FolderOpen, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'clients', label: 'Clients', icon: Users, roles: ['consultant', 'manager'] },
-  { id: 'facturation', label: 'Facturation', icon: DollarSign, roles: ['manager', 'back_office'] },
-  { id: 'encaissements', label: 'Encaissements', icon: DollarSign, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'remunerations', label: 'Rémunérations', icon: Briefcase, roles: ['consultant', 'manager'] },
-  { id: 'relances', label: 'Relances', icon: Bell, roles: ['manager', 'back_office'] },
-  { id: 'reglementaire', label: 'Réglementaire', icon: Shield, roles: ['manager', 'back_office'] },
-  { id: 'analyse', label: 'Analyse', icon: BarChart3, roles: ['manager'] },
-  { id: 'journal', label: 'Journal de suivi', icon: MessageSquare, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'pj', label: 'Pièces jointes', icon: FileText, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'google', label: 'Google Suite', icon: Mail, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'faq', label: 'FAQ', icon: HelpCircle, roles: ['consultant', 'manager', 'back_office'] },
-  { id: 'support', label: 'Support', icon: Phone, roles: ['consultant', 'manager', 'back_office'] },
+// ─── FAQ data ─────────────────────────────────────────────────────────────────
+const FAQ_CATEGORIES = [
+  {
+    id: 'acces',
+    label: 'Accès & Connexion',
+    questions: [
+      {
+        q: "Je ne vois pas les dossiers de mes collègues — est-ce normal ?",
+        a: "Oui, c'est intentionnel. En tant que consultant, vous ne voyez que vos propres dossiers et clients. Les managers et le back-office ont accès à l'ensemble des données.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Comment me connecter au CRM ?",
+        a: "Rendez-vous sur pev-crm.vercel.app et connectez-vous avec votre adresse @private-equity-valley.com. Si vous n'avez pas accès, contactez le support.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "La connexion Google ne fonctionne pas — que faire ?",
+        a: "Allez dans Paramètres, cliquez 'Connecter Google', puis sélectionnez votre compte @private-equity-valley.com. Si le problème persiste, déconnectez-vous du CRM, reconnectez-vous, et réessayez.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+    ],
+  },
+  {
+    id: 'dossiers',
+    label: 'Dossiers',
+    questions: [
+      {
+        q: "Comment ajouter un client qui n'existe pas encore ?",
+        a: "Lors de la création d'un dossier, tapez le nom du client dans le champ Client — si le client n'existe pas, une option 'Créer ce client' apparaîtra automatiquement.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Comment retrouver un dossier rapidement ?",
+        a: "Utilisez les filtres dans la page Dossiers : par statut, produit, compagnie, ou montant. La barre de recherche en haut filtre aussi par nom de client.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Quand passer un dossier en 'Client finalisé' ?",
+        a: "Dès que la souscription est confirmée et que les fonds sont engagés. Ce changement de statut déclenche automatiquement le calcul de la commission dans la Facturation.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Puis-je modifier un dossier après sa création ?",
+        a: "Oui, cliquez sur le dossier puis sur le bouton d'édition. Vous pouvez modifier le montant, le statut, le produit et la date d'opération.",
+        roles: ['consultant', 'manager'],
+      },
+    ],
+  },
+  {
+    id: 'facturation',
+    label: 'Facturation & Paiements',
+    questions: [
+      {
+        q: "Comment savoir si une commission a été payée ?",
+        a: "Les commissions payées disparaissent de la Facturation et apparaissent dans les Encaissements. Si vous ne la voyez nulle part, contactez le back-office.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "À quel moment marquer une facture comme 'émise' ?",
+        a: "Uniquement quand vous avez réellement envoyé votre facture au service comptable. Cette action déclenche le suivi de paiement côté back-office.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Qui peut marquer une commission comme payée ?",
+        a: "Seul le back-office et les managers peuvent valider le paiement d'une commission. Les consultants voient uniquement le statut.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+    ],
+  },
+  {
+    id: 'reglementaire',
+    label: 'Réglementaire',
+    questions: [
+      {
+        q: "Quels sont les 6 documents de conformité requis ?",
+        a: "KYC (questionnaire client), DER (Document d'Entrée en Relation), PI (Profil Investisseur), PRECO (Recommandations personnalisées), LM (Lettre de Mission), RM (Rapport de Mission).",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Comment mettre à jour la conformité d'un client ?",
+        a: "Ouvrez la fiche client, section 'Réglementaire', cliquez le crayon ✏️, cochez les documents reçus et validés, puis sauvegardez. Le score se met à jour automatiquement.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+    ],
+  },
+  {
+    id: 'google',
+    label: 'Google Gmail & Calendar',
+    questions: [
+      {
+        q: "Les emails du client n'apparaissent pas dans sa fiche — pourquoi ?",
+        a: "Vérifiez trois points : (1) votre compte Google est connecté dans Paramètres, (2) l'adresse email du client est renseignée dans ses Coordonnées, (3) cliquez sur l'icône ↻ Actualiser dans l'onglet Emails.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "L'onglet RDV ne trouve pas mes rendez-vous — comment faire ?",
+        a: "La recherche se fait sur le nom du client. Assurez-vous que vos RDV Google Calendar contiennent le nom exact du client (ex: 'Martin × PEV'). Cliquez ↻ pour actualiser.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Mes données Google sont-elles visibles par mes collègues ?",
+        a: "Non. Chaque consultant connecte son propre compte Google. Vous ne voyez que vos propres emails et RDV — jamais ceux de vos collègues.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+    ],
+  },
+  {
+    id: 'technique',
+    label: 'Questions techniques',
+    questions: [
+      {
+        q: "Puis-je uploader n'importe quel type de fichier ?",
+        a: "Oui — PDF, images (JPG, PNG), documents Word. Taille maximale recommandée : 10 Mo par fichier.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Que se passe-t-il si je clique 'Snooze' sur une relance ?",
+        a: "La relance disparaît de votre vue et réapparaît automatiquement à la date que vous avez choisie. Elle n'est pas supprimée.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Le CRM fonctionne-t-il sur mobile ?",
+        a: "Oui, le CRM est responsive et fonctionne sur tablette et smartphone. La navigation est adaptée aux petits écrans.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Le nombre de lignes par page est-il configurable ?",
+        a: "Oui, chaque tableau affiche 50 lignes par défaut. Un sélecteur en bas du tableau permet de changer à 25, 50, 100 ou 250 lignes.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+    ],
+  },
 ]
 
-// ─── Navigation items per role ────────────────────────────────────
-const NAV_ITEMS: Record<string, { label: string; desc: string; roles: RoleLabel[] }> = {
-  'Tableau de bord': { label: 'Tableau de bord', desc: 'Vue d\'ensemble, KPIs principaux', roles: ['consultant', 'manager', 'back_office'] },
-  'Dossiers': { label: 'Dossiers', desc: 'Tous les dossiers clients', roles: ['manager', 'back_office'] },
-  'Ma clientèle': { label: 'Ma clientèle', desc: 'Fiches clients détaillées', roles: ['consultant', 'manager'] },
-  'Facturation': { label: 'Facturation', desc: 'Commissions à émettre ou émises', roles: ['manager', 'back_office'] },
-  'Encaissements': { label: 'Encaissements', desc: 'Commissions reçues', roles: ['manager', 'back_office'] },
-  'Rémunérations': { label: 'Rémunérations', desc: 'Votre cagnotte et grille de commissionnement', roles: ['consultant', 'manager'] },
-  'Relances': { label: 'Relances', desc: 'Suivi des relances automatiques et manuelles', roles: ['manager', 'back_office'] },
-  'Réglementaire': { label: 'Réglementaire', desc: 'Conformité des dossiers clients', roles: ['manager', 'back_office'] },
-  'Classement': { label: 'Classement', desc: 'Classement des consultants', roles: ['consultant', 'manager', 'back_office'] },
-  'Analyse': { label: 'Analyse', desc: 'Statistiques et rapports détaillés', roles: ['manager'] },
-  'Aide & Manuel': { label: 'Aide & Manuel', desc: 'Ce guide', roles: ['consultant', 'manager', 'back_office'] },
-  'Paramètres': { label: 'Paramètres', desc: 'Profil, produits, compagnies, connexion Google', roles: ['manager'] },
+const NAV_SECTIONS = [
+  { id: 'bienvenue', label: 'Bienvenue' },
+  { id: 'roles', label: 'Rôles & accès' },
+  { id: 'navigation', label: 'Navigation' },
+  { id: 'dossiers', label: 'Dossiers' },
+  { id: 'clients', label: 'Fiches clients' },
+  { id: 'facturation', label: 'Facturation' },
+  { id: 'relances', label: 'Relances' },
+  { id: 'reglementaire', label: 'Réglementaire' },
+  { id: 'google', label: 'Google Gmail & Calendar' },
+  { id: 'manager', label: 'Fonctions Manager' },
+  { id: 'backoffice', label: 'Fonctions Back-office' },
+  { id: 'faq', label: 'FAQ' },
+]
+
+function SectionTitle({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <h2 id={id} className="text-2xl font-bold text-gray-900 scroll-mt-6 mb-5">
+      {children}
+    </h2>
+  )
 }
 
-export default function AidePage() {
-  const role = useRole()
-  const consultantInfo = useConsultantInfo()
-  const currentRole = (role || 'consultant') as RoleLabel
-  const [active, setActive] = useState('bienvenue')
-  const [faqEntries, setFaqEntries] = useState<FaqEntry[]>([])
-  const [faqSearch, setFaqSearch] = useState('')
-  const [openFaqIds, setOpenFaqIds] = useState<Set<string>>(new Set())
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
-
-  // Filter sections by role
-  const visibleSections = useMemo(
-    () => ALL_SECTIONS.filter(s => s.roles.includes(currentRole)),
-    [currentRole]
+function InfoBox({ color, children }: { color: 'amber' | 'red' | 'blue' | 'green' | 'indigo'; children: React.ReactNode }) {
+  const styles = {
+    amber: 'bg-amber-50 border-amber-200',
+    red: 'bg-red-50 border-red-200',
+    blue: 'bg-blue-50 border-blue-200',
+    green: 'bg-green-50 border-green-200',
+    indigo: 'bg-indigo-50 border-indigo-200',
+  }
+  const icons = {
+    amber: <Star className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />,
+    red: <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />,
+    blue: <CheckCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />,
+    green: <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />,
+    indigo: <Star className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />,
+  }
+  return (
+    <div className={`flex gap-3 border rounded-lg p-4 ${styles[color]}`}>
+      {icons[color]}
+      <p className="text-sm text-gray-800">{children}</p>
+    </div>
   )
+}
 
-  // Fetch FAQ from Supabase
-  useEffect(() => {
-    const fetchFaq = async () => {
-      const supabase = createClient()
-      const { data } = await supabase
-        .from('faq')
-        .select('*')
-        .eq('visible', true)
-        .order('ordre', { ascending: true })
-      if (data) setFaqEntries(data)
-    }
-    fetchFaq()
-  }, [])
+function RoleBadge({ role }: { role: string }) {
+  const styles: Record<string, string> = {
+    consultant: 'bg-indigo-100 text-indigo-700',
+    manager: 'bg-green-100 text-green-700',
+    back_office: 'bg-orange-100 text-orange-700',
+  }
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${styles[role] || 'bg-gray-100 text-gray-600'}`}>
+      {ROLE_LABELS[role] || role}
+    </span>
+  )
+}
 
-  // Group FAQ by categorie > sous_categorie
-  const faqGrouped = useMemo(() => {
-    const filtered = faqSearch
-      ? faqEntries.filter(
-          f =>
-            f.question.toLowerCase().includes(faqSearch.toLowerCase()) ||
-            f.reponse.toLowerCase().includes(faqSearch.toLowerCase())
+function StepList({ steps }: { steps: [string, string][] }) {
+  return (
+    <div className="space-y-3">
+      {steps.map(function(step, i) {
+        return (
+          <div key={i} className="flex gap-4">
+            <div className="flex-shrink-0 w-7 h-7 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+              {i + 1}
+            </div>
+            <div>
+              <p className="font-medium text-gray-900 text-sm">{step[0]}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{step[1]}</p>
+            </div>
+          </div>
         )
-      : faqEntries
-    const groups: Record<string, Record<string, FaqEntry[]>> = {}
-    filtered.forEach(f => {
-      const cat = f.categorie
-      const sub = f.sous_categorie || 'Général'
-      if (!groups[cat]) groups[cat] = {}
-      if (!groups[cat][sub]) groups[cat][sub] = []
-      groups[cat][sub].push(f)
-    })
-    return groups
-  }, [faqEntries, faqSearch])
+      })}
+    </div>
+  )
+}
 
-  // Auto-expand all categories when searching
-  useEffect(() => {
-    if (faqSearch) {
-      setExpandedCategories(new Set(Object.keys(faqGrouped)))
-    }
-  }, [faqSearch, faqGrouped])
+// ─── Main component ────────────────────────────────────────────────────────────
+export default function AidePage() {
+  const { consultant } = useUser()
+  const role = consultant?.role || 'consultant'
+  const isManager = role === 'manager'
+  const isBackOffice = role === 'back_office'
+  const isConsultant = role === 'consultant'
+  const isManagerOrBO = isManager || isBackOffice
+
+  const [activeSection, setActiveSection] = useState('bienvenue')
+  const [openFaq, setOpenFaq] = useState<string | null>(null)
+  const [showSupport, setShowSupport] = useState(false)
 
   function goTo(id: string) {
-    setActive(id)
+    setActiveSection(id)
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  function toggleFaq(id: string) {
-    setOpenFaqIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  function toggleCategory(cat: string) {
-    setExpandedCategories(prev => {
-      const next = new Set(prev)
-      next.has(cat) ? next.delete(cat) : next.add(cat)
-      return next
-    })
-  }
-
-  const roleLabel = currentRole === 'manager' ? 'Manager' : currentRole === 'back_office' ? 'Back Office' : 'Consultant'
-  const roleColor = currentRole === 'manager' ? 'bg-green-100 text-green-700' : currentRole === 'back_office' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+  // Filter FAQ by role
+  const filteredFaq = FAQ_CATEGORIES.map(cat => ({
+    ...cat,
+    questions: cat.questions.filter(q => q.roles.includes(role)),
+  })).filter(cat => cat.questions.length > 0)
 
   return (
     <div className="flex gap-8 min-h-screen">
-      {/* Sidebar navigation */}
-      <div className="hidden lg:block w-56 flex-shrink-0">
+      {/* Sidebar nav */}
+      <div className="hidden lg:block w-52 flex-shrink-0">
         <div className="sticky top-6 bg-white border border-gray-200 rounded-xl p-3 space-y-0.5">
           <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
             <BookOpen className="w-4 h-4 text-indigo-600" />
             <span className="font-semibold text-gray-900 text-sm">Manuel CRM</span>
           </div>
-          <div className="flex items-center gap-2 mb-3 px-3">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColor}`}>{roleLabel}</span>
+          <div className="mb-2">
+            <RoleBadge role={role} />
           </div>
-          {visibleSections.map(s => {
-            const Icon = s.icon
-            const cls = active === s.id
-              ? 'w-full text-left px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 flex items-center gap-2'
-              : 'w-full text-left px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2'
+          {NAV_SECTIONS.filter(function(s) {
+            if (s.id === 'manager' && !isManagerOrBO) return false
+            if (s.id === 'backoffice' && !isManagerOrBO) return false
+            return true
+          }).map(function(s) {
+            const cls = activeSection === s.id
+              ? 'w-full text-left px-3 py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700'
+              : 'w-full text-left px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50'
             return (
-              <button key={s.id} onClick={() => goTo(s.id)} className={cls}>
-                <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+              <button key={s.id} onClick={function() { goTo(s.id) }} className={cls}>
                 {s.label}
               </button>
             )
           })}
-          <div className="pt-3 border-t border-gray-100 mt-1">
-            <Link href="/dashboard" className="flex items-center gap-2 text-xs text-gray-500 px-3 py-1">
+          <div className="pt-3 border-t border-gray-100 mt-1 space-y-1">
+            <Link href="/dashboard" className="flex items-center gap-2 text-xs text-gray-500 px-3 py-1 hover:text-gray-800">
               <Home className="w-3.5 h-3.5" />
               Tableau de bord
             </Link>
+            <button
+              onClick={function() { setShowSupport(true) }}
+              className="flex items-center gap-2 text-xs text-indigo-600 px-3 py-1 hover:text-indigo-800 w-full text-left"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              Contacter le support
+            </button>
           </div>
         </div>
       </div>
 
       {/* Main content */}
       <div className="flex-1 max-w-3xl space-y-14 pb-24">
+
         {/* Header */}
         <div className="bg-indigo-700 rounded-2xl p-8 text-white">
-          <h1 className="text-3xl font-bold">Aide & Manuel PEV CRM</h1>
-          <p className="text-indigo-200 mt-2">
-            Guide {roleLabel === 'Manager' ? 'complet — gestion et administration' : roleLabel === 'Back Office' ? '— gestion administrative' : '— utilisation quotidienne'}
+          <h1 className="text-3xl font-bold">Manuel PEV CRM</h1>
+          <p className="text-indigo-200 mt-1">
+            Guide {ROLE_LABELS[role]} — Private Equity Valley
           </p>
           <p className="text-indigo-100 leading-relaxed mt-4">
-            Bienvenue dans le CRM de Private Equity Valley. Ce guide couvre l&#39;ensemble des fonctionnalités
-            {currentRole === 'consultant' ? ' accessibles depuis votre compte consultant.' : currentRole === 'manager' ? ', y compris l\'administration et l\'analyse.' : ' de gestion et de suivi administratif.'}
+            Ce guide est personnalisé pour votre profil <strong>{ROLE_LABELS[role]}</strong>.
+            Il vous explique comment utiliser chaque fonctionnalité disponible au quotidien.
           </p>
-          <div className="mt-4">
-            <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full ${roleColor}`}>
-              Connecté en tant que {roleLabel}
-              {consultantInfo ? ` — ${consultantInfo.name}` : ''}
-            </span>
+          <div className="flex gap-2 mt-4">
+            <RoleBadge role={role} />
           </div>
         </div>
 
-        {/* ── Bienvenue ────────────────────────────────────── */}
-        <section id="bienvenue" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Bienvenue</h2>
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5">
+        {/* BIENVENUE */}
+        <section>
+          <SectionTitle id="bienvenue">Bienvenue dans le CRM</SectionTitle>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
             <p className="text-gray-700 leading-relaxed">
-              Le CRM PEV centralise vos dossiers clients, la facturation, les relances,
-              la réglementation et vos communications Gmail et Calendar.
+              Le CRM PEV centralise en un seul endroit vos dossiers clients, la facturation,
+              les relances, la réglementation et vos communications Gmail / Calendar.
+              Il remplace les fichiers Excel DELTA 2026.
             </p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-            <p className="text-sm font-semibold text-gray-900 mb-2">Trois profils d&#39;accès :</p>
-            <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
-              <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0">Consultant</span>
-              <p className="text-sm text-gray-700">Voit et gère ses propres dossiers et clients uniquement. Accès à sa cagnotte, ses rémunérations et sa grille de commissionnement.</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <p className="font-semibold text-gray-900 mb-1">Accès</p>
+            <p className="text-indigo-600 font-medium text-sm">pev-crm.vercel.app</p>
+            <p className="text-xs text-gray-500 mt-1">Connexion avec votre compte @private-equity-valley.com</p>
+          </div>
+        </section>
+
+        {/* RÔLES */}
+        <section>
+          <SectionTitle id="roles">Rôles &amp; accès</SectionTitle>
+          <div className="space-y-3">
+            <div className={`border rounded-xl p-4 ${isConsultant ? 'bg-indigo-50 border-indigo-300' : 'bg-white border-gray-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <RoleBadge role="consultant" />
+                {isConsultant && <span className="text-xs text-indigo-600 font-medium">— Votre profil</span>}
+              </div>
+              <ul className="text-sm text-gray-700 space-y-1">
+                <li>• Voir et gérer ses propres dossiers uniquement</li>
+                <li>• Accéder à ses fiches clients</li>
+                <li>• Émettre ses propres factures</li>
+                <li>• Voir ses commissions et encaissements</li>
+                <li>• Gérer ses relances et son réglementaire</li>
+                <li>• Connecter son compte Google (emails + RDV)</li>
+              </ul>
             </div>
-            <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
-              <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0">Manager</span>
-              <p className="text-sm text-gray-700">Accès complet à tous les dossiers, facturation, analyse, relances, réglementaire et paramètres d&#39;administration.</p>
+            <div className={`border rounded-xl p-4 ${isManager ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <RoleBadge role="manager" />
+                {isManager && <span className="text-xs text-green-600 font-medium">— Votre profil</span>}
+              </div>
+              <ul className="text-sm text-gray-700 space-y-1">
+                <li>• Accès complet à tous les dossiers et clients</li>
+                <li>• Vue globale de la facturation et des encaissements</li>
+                <li>• Accès aux analyses et statistiques cabinet</li>
+                <li>• Gestion du classement et des rémunérations</li>
+                <li>• Paramètres et configuration</li>
+              </ul>
             </div>
-            <div className="flex items-start gap-3 p-3 bg-purple-50 rounded-lg">
-              <span className="bg-purple-100 text-purple-700 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0">Back Office</span>
-              <p className="text-sm text-gray-700">Accès à tous les dossiers, facturation, encaissements, relances et réglementaire. Pas d&#39;accès à l&#39;analyse ni aux rémunérations.</p>
+            <div className={`border rounded-xl p-4 ${isBackOffice ? 'bg-orange-50 border-orange-300' : 'bg-white border-gray-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <RoleBadge role="back_office" />
+                {isBackOffice && <span className="text-xs text-orange-600 font-medium">— Votre profil</span>}
+              </div>
+              <ul className="text-sm text-gray-700 space-y-1">
+                <li>• Gestion des encaissements et validation des paiements</li>
+                <li>• Accès à tous les dossiers en lecture</li>
+                <li>• Suivi du réglementaire global</li>
+                <li>• Vue facturation complète</li>
+              </ul>
             </div>
           </div>
         </section>
 
-        {/* ── Navigation ───────────────────────────────────── */}
-        <section id="navigation" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Navigation</h2>
-          <p className="text-sm text-gray-500">Les éléments affichés ci-dessous correspondent à votre profil ({roleLabel}).</p>
+        {/* NAVIGATION */}
+        <section>
+          <SectionTitle id="navigation">Navigation</SectionTitle>
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="space-y-2">
-              {Object.entries(NAV_ITEMS)
-                .filter(([, v]) => v.roles.includes(currentRole))
-                .map(([key, v]) => (
-                  <div key={key} className="flex items-center gap-3 py-1.5 border-b border-gray-100 last:border-0">
-                    <span className="text-sm font-medium text-gray-900 w-44">{v.label}</span>
-                    <span className="text-xs text-gray-500">{v.desc}</span>
+              {[
+                ['Tableau de bord', "Vue d'ensemble, KPIs, statistiques rapides", true],
+                ['Dossiers', 'Tous vos dossiers clients avec filtres et recherche', true],
+                ['Ma clientèle', 'Fiches clients détaillées', !isBackOffice],
+                ['Facturation', 'Commissions à émettre ou émises', true],
+                ['Encaissements', 'Commissions reçues et historique de paiements', true],
+                ['Relances', 'Suivi et planification des relances clients', !isBackOffice],
+                ['Réglementaire', 'Conformité documentaire des clients (KYC, DER, PI…)', true],
+                ['Analyse', 'Statistiques, graphiques et exports', isManagerOrBO],
+                ['Aide & Manuel', 'Ce guide', true],
+                ['Paramètres', 'Profil, connexion Google', true],
+              ].filter(function(item) { return !!item[2] }).map(function(item) {
+                return (
+                  <div key={String(item[0])} className="flex items-start gap-3 py-1.5 border-b border-gray-100 last:border-0">
+                    <span className="text-sm font-medium text-gray-900 w-40 flex-shrink-0">{item[0]}</span>
+                    <span className="text-xs text-gray-500">{item[1] as string}</span>
                   </div>
-                ))}
+                )
+              })}
             </div>
           </div>
         </section>
 
-        {/* ── Dossiers ─────────────────────────────────────── */}
-        <section id="dossiers" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Dossiers</h2>
-          <p className="text-gray-600">Un dossier représente une opération d&#39;investissement d&#39;un client.</p>
-          <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-            {[
-              { label: 'Prospect', desc: 'Premier contact, opération non engagée', color: 'bg-gray-50', badge: 'bg-gray-100 text-gray-600' },
-              { label: 'Client en cours', desc: 'Souscription lancée, en attente de finalisation', color: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700' },
-              { label: 'Client finalisé', desc: 'Opération terminée, commission due', color: 'bg-green-50', badge: 'bg-green-100 text-green-700' },
-            ].map(s => (
-              <div key={s.label} className={`flex items-center gap-3 p-3 ${s.color} rounded-lg`}>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.badge}`}>{s.label}</span>
-                <p className="text-sm text-gray-700">{s.desc}</p>
+        {/* DOSSIERS */}
+        <section>
+          <SectionTitle id="dossiers">Dossiers</SectionTitle>
+          <p className="text-gray-600 mb-4">Un dossier représente une opération d'investissement d'un client.</p>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-4">Créer un dossier</p>
+            <StepList steps={[
+              ["Aller dans 'Dossiers'", "Accédez à la liste de vos dossiers."],
+              ["Cliquer 'Nouveau dossier'", "Le formulaire de création s'ouvre."],
+              ["Remplir les champs obligatoires", "Client, produit, compagnie, montant, type de financement, date."],
+              ["Sauvegarder", "Le dossier apparaît avec le statut Prospect."],
+            ]} />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Statuts d'un dossier</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">Prospect</span>
+                <p className="text-sm text-gray-700">Premier contact, opération non encore engagée</p>
               </div>
-            ))}
-          </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
-            <Star className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-800">Passez à « Client finalisé » dès que l&#39;opération est confirmée.</p>
-          </div>
-        </section>
-
-        {/* ── Clients ──────────────────────────────────────── */}
-        {visibleSections.some(s => s.id === 'clients') && (
-          <section id="clients" className="scroll-mt-6 space-y-5">
-            <h2 className="text-2xl font-bold text-gray-900">Fiches Clients</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-2">
-              {[
-                ['KPIs', 'Collecte, pipeline, commissions, conformité'],
-                ['Dossiers', 'Toutes les opérations liées à ce client'],
-                ['Coordonnées', 'Email, téléphone, pays — éditables via le crayon'],
-                ['Communications', 'Emails Gmail et RDV Calendar (nécessite connexion Google)'],
-                ['Réglementaire', 'KYC, DER, PI, PRECO, LM, RM — score sur 5'],
-                ['Journal de suivi', 'Historique structuré : notes, appels, emails, comptes rendus'],
-                ['Pièces jointes', 'Documents typés (ID, RIB, réglementaire...) et datés'],
-                ['Relances', 'Relances manuelles avec délais et rappels automatiques'],
-              ].map(item => (
-                <div key={item[0]} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
-                  <span className="text-sm font-medium text-gray-900 w-40 flex-shrink-0">{item[0]}</span>
-                  <span className="text-xs text-gray-500">{item[1]}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Facturation ──────────────────────────────────── */}
-        {visibleSections.some(s => s.id === 'facturation') && (
-          <section id="facturation" className="scroll-mt-6 space-y-5">
-            <h2 className="text-2xl font-bold text-gray-900">Facturation</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-              {[
-                { label: 'À émettre', desc: 'Commission calculée, facture non encore envoyée', color: 'bg-red-50 border-red-200', dot: 'bg-red-500', textColor: 'text-red-800', subColor: 'text-red-700' },
-                { label: 'Émise', desc: 'Facture envoyée, en attente de paiement', color: 'bg-orange-50 border-orange-200', dot: 'bg-orange-500', textColor: 'text-orange-800', subColor: 'text-orange-700' },
-                { label: 'Payée → Encaissements', desc: 'Passe dans les Encaissements', color: 'bg-green-50 border-green-200', dot: 'bg-green-500', textColor: 'text-green-800', subColor: 'text-green-700' },
-              ].map(s => (
-                <div key={s.label} className={`flex items-center gap-4 p-4 ${s.color} border rounded-xl`}>
-                  <div className={`w-4 h-4 ${s.dot} rounded-full flex-shrink-0`} />
-                  <div>
-                    <p className={`font-semibold ${s.textColor}`}>{s.label}</p>
-                    <p className={`text-sm ${s.subColor}`}>{s.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Encaissements ────────────────────────────────── */}
-        <section id="encaissements" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Encaissements</h2>
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <p className="text-sm text-gray-700 leading-relaxed">
-              Les encaissements regroupent toutes les commissions effectivement payées.
-              {currentRole === 'consultant'
-                ? ' Vous y retrouvez vos propres commissions encaissées.'
-                : ' Vue consolidée de l\'ensemble des commissions encaissées par consultant.'}
-            </p>
-          </div>
-        </section>
-
-        {/* ── Rémunérations ────────────────────────────────── */}
-        {visibleSections.some(s => s.id === 'remunerations') && (
-          <section id="remunerations" className="scroll-mt-6 space-y-5">
-            <h2 className="text-2xl font-bold text-gray-900">Rémunérations</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-              <p className="text-sm text-gray-700 leading-relaxed">
-                La page Rémunérations affiche votre cagnotte (commissions en attente), votre grille de commissionnement progressive et l&#39;historique de facturation.
-              </p>
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                <p className="text-sm font-semibold text-indigo-900 mb-2">Grille de commissionnement progressive :</p>
-                <div className="space-y-1">
-                  {[
-                    ['65 %', '0 — 75 000 €'],
-                    ['75 %', '75 000 — 100 000 €'],
-                    ['85 %', '100 000 € et plus'],
-                  ].map(([taux, tranche]) => (
-                    <div key={taux} className="flex items-center gap-3 text-sm text-indigo-800">
-                      <span className="font-bold w-12">{taux}</span>
-                      <span>CA glissant 12 mois : {tranche}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">Client en cours</span>
+                <p className="text-sm text-gray-700">Souscription lancée, en attente de finalisation</p>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">Client finalisé</span>
+                <p className="text-sm text-gray-700">Opération terminée, commission calculée automatiquement</p>
               </div>
             </div>
-          </section>
-        )}
+          </div>
 
-        {/* ── Relances ─────────────────────────────────────── */}
-        {visibleSections.some(s => s.id === 'relances') && (
-          <section id="relances" className="scroll-mt-6 space-y-5">
-            <h2 className="text-2xl font-bold text-gray-900">Relances</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-              <p className="text-sm text-gray-700 mb-2">La page Relances regroupe :</p>
-              <div className="space-y-2">
-                {[
-                  { label: 'Automatiques', desc: 'KYC manquant, inactivité 30j+, paiement en attente, réglementaire incomplet, facture impayée 30j+' },
-                  { label: 'Manuelles', desc: 'Créées depuis la fiche client avec des délais prédéfinis (3j, 5j, 15j, 3 sem, 1 mois, 3 mois, 6 mois, 1 an)' },
-                ].map(r => (
-                  <div key={r.label} className="flex gap-3 p-3 bg-gray-50 rounded-lg">
-                    <span className="bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0">{r.label}</span>
-                    <p className="text-sm text-gray-700">{r.desc}</p>
-                  </div>
-                ))}
-              </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Types de produits</p>
+            <div className="flex flex-wrap gap-2">
+              {['SCPI', 'Private Equity', 'CAV LUX', 'CAPI LUX', 'Trilake', 'Girardin'].map(function(p) {
+                return <span key={p} className="bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-full border border-indigo-200 font-medium">{p}</span>
+              })}
             </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
-              <Star className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-800">
-                Actions possibles : Fait, Ignoré, ou « Me le rappeler dans... ». La relance réapparaît automatiquement à la date de rappel choisie.
-              </p>
-            </div>
-          </section>
-        )}
+          </div>
 
-        {/* ── Réglementaire ────────────────────────────────── */}
-        {visibleSections.some(s => s.id === 'reglementaire') && (
-          <section id="reglementaire" className="scroll-mt-6 space-y-5">
-            <h2 className="text-2xl font-bold text-gray-900">Réglementaire</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-2">
-              <p className="text-sm text-gray-700 mb-3">Score de conformité sur 6 points :</p>
-              {[
-                '1. Réglementaire (KYC)',
-                '2. DER',
-                '3. PI',
-                '4. PRECO',
-                '5. LM',
-                '6. RM',
-              ].map(label => (
-                <div key={label} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
-                  <CheckCircle className="w-4 h-4 flex-shrink-0 text-indigo-600" />
-                  <span className="text-sm text-gray-900">{label}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Analyse ──────────────────────────────────────── */}
-        {visibleSections.some(s => s.id === 'analyse') && (
-          <section id="analyse" className="scroll-mt-6 space-y-5">
-            <h2 className="text-2xl font-bold text-gray-900">Analyse</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <p className="text-sm text-gray-700 leading-relaxed">
-                La page Analyse offre une vue statistique complète : distribution par produit, par consultant, par zone géographique, évolution mensuelle du CA, taux de conversion et répartition des statuts. Accessible uniquement aux managers.
-              </p>
-            </div>
-          </section>
-        )}
-
-        {/* ── Journal de suivi ─────────────────────────────── */}
-        <section id="journal" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Journal de suivi</h2>
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <p className="text-sm text-gray-700 mb-3">
-              Le journal de suivi remplace l&#39;ancien champ commentaire. Chaque entrée est structurée avec une étiquette colorée :
-            </p>
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Types de financement</p>
             <div className="grid grid-cols-2 gap-2">
+              {[['Cash', 'Paiement comptant'], ['Crédit', 'Financement bancaire'], ['Lombard', 'Prêt sur nantissement'], ['Remploi', 'Réinvestissement']].map(function(f) {
+                return (
+                  <div key={f[0]} className="bg-gray-50 rounded-lg p-3">
+                    <p className="font-medium text-sm text-gray-900">{f[0]}</p>
+                    <p className="text-xs text-gray-500">{f[1]}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <InfoBox color="amber">
+            Passez un dossier à "Client finalisé" dès que l'opération est confirmée — cela déclenche
+            automatiquement le calcul de commission dans la Facturation.
+          </InfoBox>
+        </section>
+
+        {/* CLIENTS */}
+        <section>
+          <SectionTitle id="clients">Fiches clients</SectionTitle>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Contenu d'une fiche client</p>
+            <div className="space-y-2">
               {[
-                { label: 'Compte rendu RDV', color: 'bg-blue-100 text-blue-700' },
-                { label: 'Email', color: 'bg-green-100 text-green-700' },
-                { label: 'Appel téléphonique', color: 'bg-yellow-100 text-yellow-700' },
-                { label: 'Note interne', color: 'bg-orange-100 text-orange-700' },
-                { label: 'Relance', color: 'bg-red-100 text-red-700' },
-                { label: 'Document reçu', color: 'bg-purple-100 text-purple-700' },
-                { label: 'Autre', color: 'bg-gray-100 text-gray-700' },
-              ].map(e => (
-                <span key={e.label} className={`text-xs font-medium px-3 py-1.5 rounded-full ${e.color}`}>{e.label}</span>
-              ))}
+                ['KPIs', 'Collecte finalisée, pipeline, commissions, score réglementaire'],
+                ['Dossiers', 'Toutes les opérations liées à ce client (cliquables)'],
+                ["Coordonnées", "Email, téléphone, pays — modifiables via le crayon ✏️"],
+                ["Communications", "Emails Gmail et RDV Calendar (si Google connecté)"],
+                ["Réglementaire", "KYC, DER, PI, PRECO, LM, RM"],
+                ["Journal de suivi", "Historique des notes, appels, RDV, emails"],
+                ["Pièces jointes", "Documents uploadés (RIB, pièce d'identité, contrats…)"],
+                ["Relances", "Relances liées à ce client"],
+              ].map(function(item) {
+                return (
+                  <div key={item[0]} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                    <span className="text-sm font-medium text-gray-900 w-36 flex-shrink-0">{item[0]}</span>
+                    <span className="text-xs text-gray-500">{item[1]}</span>
+                  </div>
+                )
+              })}
             </div>
-            <p className="text-xs text-gray-500 mt-3">
-              Les entrées sont triées par ordre chronologique inverse. Vous pouvez filtrer par type et éditer/supprimer vos propres entrées.
-            </p>
           </div>
-        </section>
 
-        {/* ── Pièces jointes ───────────────────────────────── */}
-        <section id="pj" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Pièces jointes</h2>
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-2">Journal de suivi</p>
             <p className="text-sm text-gray-700 mb-3">
-              Chaque pièce jointe peut être typée et datée :
+              Tracez chaque interaction avec vos clients pour garder un historique complet de la relation.
             </p>
-            <div className="grid grid-cols-2 gap-2">
-              {['Pièce d\'identité', 'RIB', 'Justificatif domicile', 'Origine des fonds', 'Disponibilité des fonds', 'NIF', 'Contrat', 'Bulletin de souscription', 'Réglementaire', 'Autre'].map(t => (
-                <div key={t} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                  <FileText className="w-3.5 h-3.5 text-gray-400" />
-                  <span className="text-xs text-gray-700">{t}</span>
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              {['Appel', 'Email', 'Compte rendu RDV', 'Note interne', 'Relance', 'Document reçu'].map(function(t) {
+                return <span key={t} className="bg-white text-gray-700 text-xs px-2.5 py-1 rounded-full border border-gray-200">{t}</span>
+              })}
             </div>
           </div>
+
+          <InfoBox color="amber">
+            L'affichage dans la liste clients montre en grand le montant investi (collecte) et
+            en petit la commission — c'est intentionnel : le montant est l'indicateur principal.
+          </InfoBox>
         </section>
 
-        {/* ── Google Suite ─────────────────────────────────── */}
-        <section id="google" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Intégration Google</h2>
-          <div className="bg-indigo-700 rounded-xl p-5 text-white">
+        {/* FACTURATION */}
+        <section>
+          <SectionTitle id="facturation">Facturation</SectionTitle>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
+            <div className="flex items-center gap-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+              <div className="w-4 h-4 bg-red-500 rounded-full flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-red-800 text-sm">À émettre</p>
+                <p className="text-xs text-red-700">Commission calculée, facture non encore envoyée au cabinet</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 p-4 bg-orange-50 border border-orange-200 rounded-xl">
+              <div className="w-4 h-4 bg-orange-500 rounded-full flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-orange-800 text-sm">Émise</p>
+                <p className="text-xs text-orange-700">Facture envoyée, en attente de paiement</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+              <div className="w-4 h-4 bg-green-500 rounded-full flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-green-800 text-sm">Payée → Encaissements</p>
+                <p className="text-xs text-green-700">Disparaît de la Facturation, visible dans les Encaissements</p>
+              </div>
+            </div>
+          </div>
+
+          <InfoBox color="red">
+            Ne marquez une commission comme "émise" que lorsque vous avez réellement envoyé
+            votre facture. Cette action déclenche le suivi comptable.
+          </InfoBox>
+        </section>
+
+        {/* RELANCES */}
+        <section>
+          <SectionTitle id="relances">Relances</SectionTitle>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-2">
+            {['Collecte', 'Réglementaire', 'Document', 'Anniversaire', 'Autre'].map(function(r) {
+              const descs: Record<string, string> = {
+                'Collecte': "Relancer un client sur un dossier d'investissement",
+                'Réglementaire': "Documents de conformité manquants",
+                'Document': "Demander un document spécifique",
+                'Anniversaire': "Révision annuelle du portefeuille",
+                'Autre': "Toute autre relance personnalisée",
+              }
+              return (
+                <div key={r} className="flex gap-3 p-2.5 border-b border-gray-100 last:border-0 items-center">
+                  <span className="bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0">{r}</span>
+                  <p className="text-sm text-gray-600">{descs[r]}</p>
+                </div>
+              )
+            })}
+          </div>
+
+          <InfoBox color="amber">
+            <strong>Snooze :</strong> Cliquez "Me le rappeler dans..." pour que la relance
+            réapparaisse automatiquement à la date choisie, sans être perdue.
+          </InfoBox>
+        </section>
+
+        {/* RÉGLEMENTAIRE */}
+        <section>
+          <SectionTitle id="reglementaire">Réglementaire</SectionTitle>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-4">Les 6 documents de conformité</p>
+            <div className="space-y-2">
+              {[
+                ['KYC', "Questionnaire Know Your Customer — document à fournir par le client"],
+                ['DER', "Document d'Entrée en Relation signé"],
+                ['PI', "Profil Investisseur établi"],
+                ['PRECO', "Recommandations personnalisées d'investissement"],
+                ['LM', "Lettre de Mission signée"],
+                ['RM', "Rapport de Mission remis"],
+              ].map(function(c) {
+                return (
+                  <div key={c[0]} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                    <span className="w-12 text-center font-bold text-indigo-700 text-sm bg-indigo-100 rounded px-1.5 py-0.5 flex-shrink-0">{c[0]}</span>
+                    <span className="text-sm text-gray-700">{c[1]}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Codes couleur du score</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3"><div className="w-3 h-3 bg-red-500 rounded-full" /><p className="text-sm text-gray-700">Rouge — 0 à 2 / 6 — Prioritaire</p></div>
+              <div className="flex items-center gap-3"><div className="w-3 h-3 bg-amber-500 rounded-full" /><p className="text-sm text-gray-700">Orange — 3 à 4 / 6 — En cours</p></div>
+              <div className="flex items-center gap-3"><div className="w-3 h-3 bg-green-500 rounded-full" /><p className="text-sm text-gray-700">Vert — 5 à 6 / 6 — Conforme</p></div>
+            </div>
+          </div>
+
+          <InfoBox color="blue">
+            Pour mettre à jour la conformité d'un client : ouvrez sa fiche, cliquez le crayon ✏️
+            dans la section Réglementaire, cochez les documents reçus, puis sauvegardez.
+          </InfoBox>
+        </section>
+
+        {/* GOOGLE */}
+        <section>
+          <SectionTitle id="google">Google Gmail &amp; Calendar</SectionTitle>
+
+          <div className="bg-indigo-700 rounded-xl p-5 text-white mb-5">
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-5 h-5" />
-              <span className="font-bold">Connexion Google</span>
+              <span className="font-bold">Intégration Google</span>
             </div>
-            <p className="text-indigo-100 text-sm">
-              Connectez votre compte Google depuis les Paramètres pour synchroniser vos emails Gmail et vos RDV Calendar directement dans les fiches clients.
+            <p className="text-indigo-100 text-sm leading-relaxed">
+              Connectez votre compte @private-equity-valley.com pour accéder à vos emails Gmail
+              et vos RDV Google Calendar directement depuis chaque fiche client.
             </p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-4">Étape 1 — Connecter votre compte Google</p>
+            <StepList steps={[
+              ["Aller dans Paramètres", "Menu de gauche > Paramètres."],
+              ["Cliquer 'Connecter mon compte Google'", "Vous êtes redirigé vers la page d'autorisation Google."],
+              ["Sélectionner votre compte @private-equity-valley.com", "Choisissez le bon compte si vous en avez plusieurs."],
+              ["Accepter les autorisations", "Lecture Gmail et Calendar uniquement."],
+              ["Retour automatique", "Le CRM confirme la connexion — vous êtes prêt."],
+            ]} />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
             <div className="bg-blue-50 px-5 py-3 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-blue-600" />
-                <span className="font-medium text-blue-900">Onglet Emails</span>
+                <span className="font-medium text-blue-900 text-sm">Onglet Emails</span>
               </div>
             </div>
-            <div className="p-5 text-sm text-gray-600">
-              Affiche les emails échangés avec le client via son adresse email : objet, expéditeur, date, extrait.
+            <div className="p-5 text-sm text-gray-600 space-y-1">
+              <p>• Emails échangés avec l'adresse email du client</p>
+              <p>• Objet, expéditeur, date, extrait du message</p>
+              <p>• Indicateur pièce jointe et statut lu / non lu</p>
+              <p>• Bouton ↻ pour actualiser en temps réel</p>
             </div>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
             <div className="bg-green-50 px-5 py-3 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-green-600" />
-                <span className="font-medium text-green-900">Onglet RDV Calendar</span>
+                <span className="font-medium text-green-900 text-sm">Onglet RDV Calendar</span>
               </div>
             </div>
-            <div className="p-5 text-sm text-gray-600">
-              Affiche les RDV mentionnant le nom du client sur ±6 mois : date, heure, participants.
+            <div className="p-5 text-sm text-gray-600 space-y-1">
+              <p>• RDV Google Calendar mentionnant le nom du client (±6 mois)</p>
+              <p>• Date, heure, nombre de participants</p>
+              <p>• Lien direct vers l'événement Google</p>
+              <p>• RDV à venir en vert, passés en grisé</p>
             </div>
           </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
-            <Star className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-800">
-              Nommez vos RDV Google Calendar avec le nom du client pour qu&#39;ils apparaissent dans la fiche.
-            </p>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3">
-            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-800">
-              Si l&#39;email du client n&#39;est pas renseigné, l&#39;onglet Emails ne peut pas afficher de résultats.
-            </p>
+
+          <div className="space-y-3">
+            <InfoBox color="red">
+              Si l'email du client n'est pas renseigné dans ses Coordonnées, l'onglet Emails
+              ne peut pas afficher de résultats.
+            </InfoBox>
+            <InfoBox color="amber">
+              Nommez vos RDV Google Calendar avec le nom du client (ex: "Louis Martin × PEV")
+              pour qu'ils apparaissent correctement dans la fiche.
+            </InfoBox>
+            <InfoBox color="blue">
+              Vos données Gmail et Calendar sont strictement privées — aucun collègue ne voit
+              vos emails ni vos RDV.
+            </InfoBox>
           </div>
         </section>
 
-        {/* ── FAQ ──────────────────────────────────────────── */}
-        <section id="faq" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">FAQ</h2>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher dans la FAQ..."
-              value={faqSearch}
-              onChange={e => setFaqSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
+        {/* FONCTIONS MANAGER — visible manager + backoffice */}
+        {isManagerOrBO && (
+          <section>
+            <SectionTitle id="manager">
+              {isBackOffice ? 'Fonctions Back-office' : 'Fonctions Manager'}
+            </SectionTitle>
 
-          {Object.keys(faqGrouped).length === 0 && faqSearch && (
-            <div className="text-center py-8">
-              <HelpCircle className="mx-auto text-gray-300 mb-3" size={36} />
-              <p className="text-gray-500 text-sm">Aucun résultat pour « {faqSearch} »</p>
-            </div>
-          )}
+            {isManager && (
+              <div className="space-y-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                  <p className="font-semibold text-gray-900 mb-3">Accès étendu</p>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <p>• Voir <strong>tous les dossiers</strong> de tous les consultants</p>
+                    <p>• Vue globale de la facturation du cabinet</p>
+                    <p>• Accès aux <strong>rémunérations</strong> de chaque consultant</p>
+                    <p>• <strong>Page Analyse</strong> avec statistiques cabinet, graphs, export Excel</p>
+                    <p>• Classement des consultants par collecte</p>
+                    <p>• Gestion des paramètres et configurations</p>
+                  </div>
+                </div>
 
-          {Object.entries(faqGrouped).map(([categorie, sousCategories]) => (
-            <div key={categorie} className="border border-gray-200 rounded-xl overflow-hidden">
-              <button
-                onClick={() => toggleCategory(categorie)}
-                className="w-full flex items-center justify-between px-5 py-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <span className="font-semibold text-gray-900">{categorie}</span>
-                {expandedCategories.has(categorie)
-                  ? <ChevronDown className="w-4 h-4 text-gray-500" />
-                  : <ChevronRight className="w-4 h-4 text-gray-500" />}
-              </button>
-              {expandedCategories.has(categorie) && (
-                <div className="divide-y divide-gray-100">
-                  {Object.entries(sousCategories).map(([sousCat, entries]) => (
-                    <div key={sousCat}>
-                      {sousCat !== 'Général' && (
-                        <div className="px-5 py-2 bg-gray-50/50">
-                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{sousCat}</span>
-                        </div>
-                      )}
-                      {entries.map(faq => (
-                        <div key={faq.id} className="border-b border-gray-50 last:border-0">
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                  <p className="font-semibold text-gray-900 mb-3">Page Analyse</p>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p>• Filtres par période, consultant, produit, compagnie</p>
+                    <p>• Graphique collecte mensuelle (cliquez un mois pour le détail)</p>
+                    <p>• Répartition par produit et financement</p>
+                    <p>• Indicateurs facturation : émises, payées, impayées</p>
+                    <p>• Export Excel de tous les dossiers filtrés</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isBackOffice && (
+              <div className="space-y-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                  <p className="font-semibold text-gray-900 mb-3">Votre rôle</p>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <p>• Valider le paiement des commissions (passage à "Payée")</p>
+                    <p>• Consulter tous les dossiers en lecture</p>
+                    <p>• Suivi du réglementaire de l'ensemble des clients</p>
+                    <p>• Vue complète de la facturation cabinet</p>
+                    <p>• Accès aux encaissements globaux</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* FAQ */}
+        <section>
+          <SectionTitle id="faq">FAQ — Questions fréquentes</SectionTitle>
+          <p className="text-gray-500 text-sm mb-6">
+            Questions filtrées pour votre profil <strong>{ROLE_LABELS[role]}</strong>.
+            Cliquez sur une question pour afficher la réponse.
+          </p>
+
+          <div className="space-y-8">
+            {filteredFaq.map(function(cat) {
+              return (
+                <div key={cat.id}>
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-indigo-600 rounded-full" />
+                    {cat.label}
+                  </h3>
+                  <div className="space-y-2">
+                    {cat.questions.map(function(item) {
+                      const faqId = cat.id + '-' + item.q.substring(0, 20)
+                      const isOpen = openFaq === faqId
+                      return (
+                        <div key={item.q} className="border border-gray-200 rounded-xl overflow-hidden">
                           <button
-                            onClick={() => toggleFaq(faq.id)}
-                            className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors"
+                            onClick={function() { setOpenFaq(isOpen ? null : faqId) }}
+                            className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
                           >
-                            <span className="font-medium text-gray-800 text-sm pr-4">{faq.question}</span>
-                            {openFaqIds.has(faq.id)
+                            <span className="font-medium text-gray-900 text-sm pr-4">{item.q}</span>
+                            {isOpen
                               ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                              : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                              : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            }
                           </button>
-                          {openFaqIds.has(faq.id) && (
-                            <div className="px-5 pb-4">
-                              <p className="text-sm text-gray-600 leading-relaxed bg-indigo-50 rounded-lg p-3">{faq.reponse}</p>
+                          {isOpen && (
+                            <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
+                              <p className="text-sm text-gray-700 pt-3 leading-relaxed">{item.a}</p>
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  ))}
+                      )
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </section>
-
-        {/* ── Support ──────────────────────────────────────── */}
-        <section id="support" className="scroll-mt-6 space-y-5">
-          <h2 className="text-2xl font-bold text-gray-900">Support</h2>
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6 text-center">
-            <HelpCircle className="mx-auto text-indigo-400 mb-3" size={32} />
-            <p className="font-semibold text-gray-900 mb-2">Besoin d&#39;aide ?</p>
-            <p className="text-sm text-gray-600 mb-4">
-              Si vous ne trouvez pas la réponse dans la FAQ, contactez le support.
-            </p>
-            <a
-              href="mailto:support@private-equity-valley.com"
-              className="inline-flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-            >
-              <Mail className="w-4 h-4" />
-              Contacter le support
-            </a>
-            <p className="text-xs text-gray-500 mt-3">support@private-equity-valley.com</p>
+              )
+            })}
           </div>
         </section>
 
+        {/* Support CTA */}
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6 text-center">
+          <p className="font-semibold text-gray-900 mb-2">Votre question ne figure pas dans ce guide ?</p>
+          <p className="text-sm text-gray-600 mb-4">
+            Contactez le support pour toute question non couverte ici.
+          </p>
+          <button
+            onClick={function() { setShowSupport(true) }}
+            className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition-colors"
+          >
+            <Mail className="w-4 h-4" />
+            Contacter le support
+          </button>
+        </div>
+
       </div>
+
+      {/* Support dialog */}
+      {showSupport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={function() { setShowSupport(false) }}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6"
+            onClick={function(e) { e.stopPropagation() }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Contacter le support</h3>
+              <button onClick={function() { setShowSupport(false) }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Pour toute question ou problème technique, envoyez un email au support PEV.
+                Précisez votre nom, votre rôle et décrivez le problème aussi précisément que possible.
+              </p>
+              <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-3">
+                <div className="bg-indigo-100 p-2 rounded-lg">
+                  <Mail className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Email support</p>
+                  <a
+                    href="mailto:support@private-equity-valley.com"
+                    className="text-indigo-600 font-medium text-sm hover:underline"
+                  >
+                    support@private-equity-valley.com
+                  </a>
+                </div>
+              </div>
+              <a
+                href="mailto:support@private-equity-valley.com"
+                className="flex items-center justify-center gap-2 w-full bg-indigo-600 text-white px-4 py-3 rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+                Ouvrir dans ma messagerie
+              </a>
+              <button
+                onClick={function() { setShowSupport(false) }}
+                className="w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
