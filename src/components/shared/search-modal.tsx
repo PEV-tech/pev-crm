@@ -114,6 +114,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       }
 
       // Deduplicate and limit
+      // Note: Deduplication by unique ID handles any accidental duplicates from OR conditions.
+      // If duplicates of the same client appear (e.g., "2x Marion Freret"), this indicates
+      // duplicate client records in the database that should be merged/reviewed in the clients table.
       const unique = Array.from(new Map(searchResults.map(r => [r.id, r])).values()).slice(0, 12)
       setResults(unique)
       setSelectedIndex(0)

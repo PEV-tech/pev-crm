@@ -40,6 +40,7 @@ interface ClientDossier {
   consultant_prenom: string | null
   consultant_nom: string | null
   taux_commission: number | null
+  produit_categorie: string | null
 }
 
 interface ClientInfo {
@@ -59,6 +60,7 @@ interface ClientInfo {
   rm: boolean
   created_at: string
   commentaires?: string | null
+  google_drive_url?: string | null
 }
 
 interface RendezVous {
@@ -601,6 +603,7 @@ export default function ClientDetailPage() {
     telephone: '',
     pays: '',
     numero_compte: '',
+    google_drive_url: '',
   })
   const [editReg, setEditReg] = React.useState({
     statut_kyc: 'non',
@@ -634,6 +637,7 @@ export default function ClientDetailPage() {
           telephone: clientData.telephone || '',
           pays: clientData.pays || '',
           numero_compte: clientData.numero_compte || '',
+          google_drive_url: clientData.google_drive_url || '',
         })
         setEditReg({
           statut_kyc: clientData.statut_kyc || 'non',
@@ -652,7 +656,11 @@ export default function ClientDetailPage() {
           .eq('client_id', clientId)
           .order('date_operation', { ascending: false })
 
-        setDossiers(dossierData || [])
+        // Deduplicate dossiers (safety net)
+        const uniqueDossiers = dossierData ? Array.from(
+          new Map(dossierData.map((d: any) => [d.id, d])).values()
+        ) : []
+        setDossiers(uniqueDossiers as ClientDossier[])
       } catch { setNotFound(true) }
       finally { setLoading(false) }
     }
@@ -669,6 +677,7 @@ export default function ClientDetailPage() {
         telephone: editContact.telephone || null,
         pays: editContact.pays || null,
         numero_compte: editContact.numero_compte || null,
+        google_drive_url: editContact.google_drive_url || null,
       })
       .eq('id', clientId)
     if (!error) {
@@ -733,6 +742,14 @@ export default function ClientDetailPage() {
   ]
   const complianceDone = complianceFields.filter(f => f.ok).length
   const compliancePct = (complianceDone / 6) * 100
+
+  // Group dossiers by product category
+  const dossiersByCategory = dossiers.reduce((acc, d) => {
+    const cat = d.produit_categorie || d.produit_nom?.split(' ')[0] || 'Autre'
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(d)
+    return acc
+  }, {} as Record<string, ClientDossier[]>)
 
   return (
     <div className="space-y-6">
@@ -829,44 +846,49 @@ export default function ClientDetailPage() {
             </CardHeader>
             <CardContent>
               {dossiers.length > 0 ? (
-                <div className="space-y-3">
-                  {dossiers.map(d => (
-                    <Link key={d.id} href={`/dashboard/dossiers/${d.id}`} className="block">
-                      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900 text-sm">
-                              {d.produit_nom || 'Sans produit'} {d.compagnie_nom ? `· ${d.compagnie_nom}` : ''}
-                            </span>
-                            <StatusBadge
-                              status={(d.statut as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'}
-                              type="dossier"
-                            />
+                <div className="space-y-4">
+                  {Object.entries(dossiersByCategory).map(([category, catDossiers]) => (
+                    <div key={category} className="space-y-2">
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-1">{category}</h3>
+                      {catDossiers.map(d => (
+                        <Link key={d.id} href={`/dashboard/dossiers/${d.id}`} className="block">
+                          <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900 text-sm">
+                                  {d.produit_nom || 'Sans produit'} {d.compagnie_nom ? `· ${d.compagnie_nom}` : ''}
+                                </span>
+                                <StatusBadge
+                                  status={(d.statut as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'}
+                                  type="dossier"
+                                />
+                              </div>
+                              <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                                <span>{d.financement || '-'}</span>
+                                {d.date_operation && (
+                                  <span>{new Date(d.date_operation).toLocaleDateString('fr-FR')}</span>
+                                )}
+                                {d.consultant_prenom && (
+                                  <span>{d.consultant_prenom} {d.consultant_nom}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right ml-4 flex-shrink-0">
+                              <p className="text-sm font-bold text-gray-900">
+                                {formatCurrency(d.montant)}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                com. {formatCurrency(isConsultant ? d.rem_apporteur : (d.commission_brute || (d.taux_commission && d.montant ? d.montant * d.taux_commission : null)))}
+                              </p>
+                              <div className="flex gap-1 mt-1 justify-end">
+                                {d.facturee && <Badge variant="success" className="text-[10px] px-1.5">Facturée</Badge>}
+                                {d.payee === 'oui' && <Badge variant="success" className="text-[10px] px-1.5">Payée</Badge>}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                            <span>{d.financement || '-'}</span>
-                            {d.date_operation && (
-                              <span>{new Date(d.date_operation).toLocaleDateString('fr-FR')}</span>
-                            )}
-                            {d.consultant_prenom && (
-                              <span>{d.consultant_prenom} {d.consultant_nom}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right ml-4 flex-shrink-0">
-                          <p className="text-sm font-bold text-gray-900">
-                            {formatCurrency(d.montant)}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            com. {formatCurrency(isConsultant ? d.rem_apporteur : (d.commission_brute || (d.taux_commission && d.montant ? d.montant * d.taux_commission : null)))}
-                          </p>
-                          <div className="flex gap-1 mt-1 justify-end">
-                            {d.facturee && <Badge variant="success" className="text-[10px] px-1.5">Facturée</Badge>}
-                            {d.payee === 'oui' && <Badge variant="success" className="text-[10px] px-1.5">Payée</Badge>}
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
+                        </Link>
+                      ))}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -926,6 +948,14 @@ export default function ClientDetailPage() {
                       <span className="text-sm text-gray-700">{client.numero_compte}</span>
                     </div>
                   )}
+                  {client.google_drive_url && (
+                    <div className="flex items-center gap-3">
+                      <FolderOpen size={16} className="text-gray-400 shrink-0" />
+                      <a href={client.google_drive_url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:underline truncate flex items-center gap-1">
+                        Google Drive <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  )}
                   {client.conformite && (
                     <div className="pt-2 border-t">
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
@@ -974,6 +1004,16 @@ export default function ClientDetailPage() {
                       className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
                     />
                   </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600">Lien Google Drive</label>
+                    <input
+                      type="url"
+                      value={editContact.google_drive_url}
+                      onChange={e => setEditContact({ ...editContact, google_drive_url: e.target.value })}
+                      placeholder="https://drive.google.com/..."
+                      className="w-full px-3 py-2 mt-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    />
+                  </div>
                   <div className="flex gap-2 pt-2">
                     <button
                       onClick={handleSaveContact}
@@ -991,6 +1031,7 @@ export default function ClientDetailPage() {
                           telephone: client.telephone || '',
                           pays: client.pays || '',
                           numero_compte: client.numero_compte || '',
+                          google_drive_url: client.google_drive_url || '',
                         })
                       }}
                       className="flex-1 py-2 border border-gray-300 text-sm font-medium rounded hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
@@ -1015,7 +1056,7 @@ export default function ClientDetailPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Shield size={18} className="text-gray-600" />
-                  KYC
+                  Réglementaire
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   {!editingReglementaire && (

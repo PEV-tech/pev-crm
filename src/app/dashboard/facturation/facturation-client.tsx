@@ -32,12 +32,20 @@ const getFacturationStatus = (
 }
 
 export function FacturationClient({ initialData }: FacturationClientProps) {
-  const [data, setData] = React.useState(initialData)
+  // Deduplicate data by dossier id (view can produce duplicates)
+  const dedupedData = React.useMemo(() => {
+    const map = new Map<string, VDossiersComplets>()
+    initialData.forEach(d => { if (d.id && !map.has(d.id)) map.set(d.id, d) })
+    return Array.from(map.values())
+  }, [initialData])
+  const [data, setData] = React.useState(dedupedData)
   const [activeTab, setActiveTab] = React.useState('a-emettre')
   const [loadingIds, setLoadingIds] = React.useState<Set<string>>(new Set())
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
+  const [sortField, setSortField] = React.useState<string>('date_operation')
+  const [sortAsc, setSortAsc] = React.useState(false)
 
   const supabase = React.useMemo(() => createClient(), [])
 
@@ -46,7 +54,12 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
     setSelectedIds(new Set())
   }, [activeTab])
 
-  // Filter data based on active tab + search
+  const handleSort = (field: string) => {
+    if (sortField === field) setSortAsc(!sortAsc)
+    else { setSortField(field); setSortAsc(true) }
+  }
+
+  // Filter data based on active tab + search + sort
   const filteredData = React.useMemo(() => {
     let result = data
     if (activeTab === 'a-emettre') result = result.filter((d) => !d.facturee)
@@ -59,8 +72,22 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
         return text.includes(q)
       })
     }
+    // Sort
+    result = [...result].sort((a, b) => {
+      let va: any, vb: any
+      if (sortField === 'client') { va = `${a.client_nom} ${a.client_prenom}`.toLowerCase(); vb = `${b.client_nom} ${b.client_prenom}`.toLowerCase() }
+      else if (sortField === 'produit_nom') { va = (a.produit_nom || '').toLowerCase(); vb = (b.produit_nom || '').toLowerCase() }
+      else if (sortField === 'montant') { va = a.montant || 0; vb = b.montant || 0 }
+      else if (sortField === 'commission_brute') { va = a.commission_brute || 0; vb = b.commission_brute || 0 }
+      else if (sortField === 'date_operation') { va = a.date_operation || ''; vb = b.date_operation || '' }
+      else if (sortField === 'date_facture') { va = a.date_facture || ''; vb = b.date_facture || '' }
+      else { va = ''; vb = '' }
+      if (va < vb) return sortAsc ? -1 : 1
+      if (va > vb) return sortAsc ? 1 : -1
+      return 0
+    })
     return result
-  }, [data, activeTab, searchQuery])
+  }, [data, activeTab, searchQuery, sortField, sortAsc])
 
   // Calculate stats
   const stats = React.useMemo(() => {
@@ -271,11 +298,12 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
                           className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                       </th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Client</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Produit</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('client')}>Client {sortField === 'client' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('produit_nom')}>Produit {sortField === 'produit_nom' ? (sortAsc ? '↑' : '↓') : ''}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">Compagnie</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Montant</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Commission</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('date_operation')}>Date {sortField === 'date_operation' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('montant')}>Montant {sortField === 'montant' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('commission_brute')}>Commission {sortField === 'commission_brute' ? (sortAsc ? '↑' : '↓') : ''}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">Action</th>
                     </tr>
                   </thead>
@@ -298,6 +326,7 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
                           <td className="px-4 py-3">{row.client_prenom} {row.client_nom}</td>
                           <td className="px-4 py-3">{row.produit_nom || '-'}</td>
                           <td className="px-4 py-3">{row.compagnie_nom || '-'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500">{row.date_operation ? new Date(row.date_operation).toLocaleDateString('fr-FR') : '-'}</td>
                           <td className="px-4 py-3">{formatCurrency(row.montant)}</td>
                           <td className="px-4 py-3">{formatCurrency(row.commission_brute)}</td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -316,7 +345,7 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7} className="px-4 py-6 text-center text-gray-500">Aucune facture à émettre</td>
+                        <td colSpan={8} className="px-4 py-6 text-center text-gray-500">Aucune facture à émettre</td>
                       </tr>
                     )}
                   </tbody>
@@ -330,12 +359,12 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
                 <table className="w-full text-sm">
                   <thead className="border-b border-gray-200 bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Client</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Produit</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('client')}>Client {sortField === 'client' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('produit_nom')}>Produit {sortField === 'produit_nom' ? (sortAsc ? '↑' : '↓') : ''}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">Compagnie</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Montant</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Commission</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Date facture</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('montant')}>Montant {sortField === 'montant' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('commission_brute')}>Commission {sortField === 'commission_brute' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('date_facture')}>Date facture {sortField === 'date_facture' ? (sortAsc ? '↑' : '↓') : ''}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">Action</th>
                     </tr>
                   </thead>
@@ -380,12 +409,12 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
                 <table className="w-full text-sm">
                   <thead className="border-b border-gray-200 bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Client</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Produit</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('client')}>Client {sortField === 'client' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('produit_nom')}>Produit {sortField === 'produit_nom' ? (sortAsc ? '↑' : '↓') : ''}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">Compagnie</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Montant</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Commission</th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Date facture</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('montant')}>Montant {sortField === 'montant' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('commission_brute')}>Commission {sortField === 'commission_brute' ? (sortAsc ? '↑' : '↓') : ''}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:text-indigo-600" onClick={() => handleSort('date_facture')}>Date facture {sortField === 'date_facture' ? (sortAsc ? '↑' : '↓') : ''}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">Statut</th>
                     </tr>
                   </thead>

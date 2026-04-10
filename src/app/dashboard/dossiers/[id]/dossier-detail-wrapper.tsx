@@ -85,7 +85,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     const fetchAll = async () => {
       try {
         const [dossierRes, produitsRes, compagniesRes, tauxRes] = await Promise.all([
-          supabase.from('v_dossiers_complets').select('*').eq('id', id).single(),
+          supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle(),
           supabase.from('produits').select('id, nom').order('nom'),
           supabase.from('compagnies').select('id, nom').order('nom'),
           supabase.from('taux_produit_compagnie').select('produit_id, compagnie_id, taux').eq('actif', true),
@@ -271,7 +271,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       }
 
       // Refresh view data
-      const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).single()
+      const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle()
       if (data) setDossier(data as VDossiersComplets)
       setIsEditing(false)
     } catch (e: any) { setSaveError(e.message || 'Erreur lors de la sauvegarde') }
@@ -346,7 +346,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       }
 
       // Refresh dossier data
-      const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).single()
+      const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).limit(1).maybeSingle()
       if (data) {
         setDossier(data as VDossiersComplets)
         // Re-initialize taux edit fields with updated values (null = not set)
@@ -1013,7 +1013,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">KYC</CardTitle>
+                <CardTitle className="text-lg">Réglementaire</CardTitle>
                 {!isEditing && (
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
                       reglementaireDone === 6 ? 'bg-green-100 text-green-700' :
