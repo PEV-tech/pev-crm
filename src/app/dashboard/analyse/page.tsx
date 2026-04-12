@@ -15,10 +15,7 @@ import {
 } from 'lucide-react'
 import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 const formatCompact = (value: number): string => {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M€`
@@ -234,13 +231,11 @@ export default function AnalysePage() {
       setLoading(true)
       try {
         const [dossierRes, consultantRes] = await Promise.all([
-          supabase.from('v_dossiers_complets').select('id, statut, montant, financement, date_operation, client_nom, client_prenom, consultant_nom, consultant_prenom, consultant_zone, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, part_cabinet, facturee, payee').order('date_operation', { ascending: false }),
+          supabase.from('v_dossiers_complets').select('*').order('date_operation', { ascending: false }),
           supabase.from('consultants').select('id, nom, prenom, role').eq('actif', true).order('nom'),
         ])
         setData(dossierRes.data || [])
         setConsultants(consultantRes.data || [])
-      } catch (err) {
-        console.error('Analyse fetch error:', err)
       } finally {
         setLoading(false)
       }
@@ -250,13 +245,13 @@ export default function AnalysePage() {
 
   // Unique filter values
   const produits = React.useMemo(
-    () => [...new Set(data.map((d) => d.produit_nom).filter(Boolean))].sort() as string[], [data]
+    () => Array.from(new Set(data.map((d) => d.produit_nom).filter(Boolean))).sort() as string[], [data]
   )
   const compagnies = React.useMemo(
-    () => [...new Set(data.map((d) => d.compagnie_nom).filter(Boolean))].sort() as string[], [data]
+    () => Array.from(new Set(data.map((d) => d.compagnie_nom).filter(Boolean))).sort() as string[], [data]
   )
   const pays = React.useMemo(
-    () => [...new Set(data.map((d) => d.client_pays).filter(Boolean))].sort() as string[], [data]
+    () => Array.from(new Set(data.map((d) => d.client_pays).filter(Boolean))).sort() as string[], [data]
   )
 
   // Filtered data
@@ -294,8 +289,8 @@ export default function AnalysePage() {
     const ticketMoyen = finalized.length > 0 ? montantFinalise / finalized.length : 0
 
     const facturees = filteredData.filter((d) => d.facturee).length
-    const payees = filteredData.filter((d) => d.payee === 'payee').length
-    const impayees = filteredData.filter((d) => d.facturee && d.payee !== 'payee').length
+    const payees = filteredData.filter((d) => d.payee === 'oui').length
+    const impayees = filteredData.filter((d) => d.facturee && d.payee !== 'oui').length
 
     const clientIds = new Set(filteredData.map((d) => d.client_id).filter(Boolean))
 

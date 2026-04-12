@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { DashboardLayoutClient } from './layout-client'
 import { UserContext } from '@/hooks/use-user'
+import { ErrorBoundary } from '@/components/shared/error-boundary'
 import type { Consultant } from '@/types/database'
 
 export default function DashboardLayout({
@@ -86,7 +87,9 @@ export default function DashboardLayout({
         userRole={consultant.role}
         onLogout={handleLogout}
       >
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </DashboardLayoutClient>
     </UserContext.Provider>
   )

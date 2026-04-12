@@ -1,10 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   async headers() {
     return [
@@ -33,20 +33,20 @@ const nextConfig = {
           },
           {
             key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload',
+            value: 'max-age=31536000; includeSubDomains',
           },
           {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co",
+              "script-src 'self' 'unsafe-inline' https://*.supabase.co",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.supabase.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.supabase.com https://oauth2.googleapis.com https://www.googleapis.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
-              "form-action 'self'",
+              "form-action 'self' https://accounts.google.com",
             ].join('; '),
           },
         ],

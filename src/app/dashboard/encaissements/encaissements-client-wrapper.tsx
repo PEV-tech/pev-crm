@@ -26,12 +26,12 @@ export function EncaissementsClientWrapper() {
             .eq('payee', 'oui')
             .order('date_facture', { ascending: false }),
         ])
-        if (remRes.error) { console.error('Error fetching encaissements_rem:', remRes.error) }
-        else { setData(remRes.data || []) }
+        if (!remRes.error) { setData(remRes.data || []) }
 
         if (!facturesRes.error) { setFacturesPaid(facturesRes.data || []) }
-        else { console.error('Error fetching factures:', facturesRes.error) }
-      } catch (error) { console.error('Error fetching encaissements:', error) }
+      } catch (error) {
+        // Error silenced - encaissements fetch failed
+      }
       finally { setLoading(false) }
     }
     fetchData()

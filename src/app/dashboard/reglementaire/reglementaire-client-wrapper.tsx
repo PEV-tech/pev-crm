@@ -174,14 +174,12 @@ export function ReglementaireClientWrapper() {
           .from('v_dossiers_complets')
           .select('id, client_id, statut, date_operation, montant, client_nom, client_prenom, client_pays, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, statut_kyc, der, pi, preco, lm, rm, commission_brute, facturee')
 
-        if (error) {
-          console.error('Error fetching dossiers:', error)
-          setData([])
-        } else {
+        if (!error) {
           setData(data || [])
+        } else {
+          setData([])
         }
       } catch (error) {
-        console.error('Error fetching compliance data:', error)
         setData([])
       } finally {
         setLoading(false)

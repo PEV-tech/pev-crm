@@ -1,18 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createHash } from 'crypto'
+
+// Max file sizes and allowed types for security
+const REDIRECT_BASE = '/dashboard/parametres'
+
+function verifyState(state: string, secret: string): { valid: boolean; consultantId: string | null } {
+  const parts = state.split(':')
+  if (parts.length !== 3) return { valid: false, consultantId: null }
+
+  const [consultantId, nonce, receivedHmac] = parts
+  const expectedHmac = createHash('sha256')
+    .update(`${consultantId}:${nonce}:${secret}`)
+    .digest('hex')
+    .substring(0, 16)
+
+  if (receivedHmac !== expectedHmac) return { valid: false, consultantId: null }
+  return { valid: true, consultantId }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
-  const consultantId = searchParams.get('state') // Passé par auth/route.ts
+  const state = searchParams.get('state')
 
-  if (!code || !consultantId) {
-    console.error('Google callback: missing code or state', { code: !!code, consultantId: !!consultantId })
-    return NextResponse.redirect(new URL('/dashboard/parametres?google=error', request.url))
+  if (!code || !state) {
+    return NextResponse.redirect(new URL(`${REDIRECT_BASE}?google=error`, request.url))
+  }
+
+  // Verify state HMAC to prevent CSRF and state tampering
+  const { valid, consultantId } = verifyState(state, process.env.GOOGLE_CLIENT_SECRET!)
+  if (!valid || !consultantId) {
+    console.error('Google callback: invalid state signature')
+    return NextResponse.redirect(new URL(`${REDIRECT_BASE}?google=error&reason=csrf`, request.url))
+  }
+
+  // Verify the authenticated user matches the consultant in the state
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  const { data: consultant } = await supabase
+    .from('consultants')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .single()
+
+  if (!consultant || consultant.id !== consultantId) {
+    console.error('Google callback: state consultant_id does not match authenticated user')
+    return NextResponse.redirect(new URL(`${REDIRECT_BASE}?google=error&reason=mismatch`, request.url))
   }
 
   try {
-    // Échanger le code contre des tokens
+    // Exchange code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -27,19 +69,17 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenRes.json()
     if (!tokens.access_token) {
-      console.error('Google callback: token exchange failed', JSON.stringify(tokens))
-      return NextResponse.redirect(new URL('/dashboard/parametres?google=error&reason=token', request.url))
+      console.error('Google callback: token exchange failed (no access_token returned)')
+      return NextResponse.redirect(new URL(`${REDIRECT_BASE}?google=error&reason=token`, request.url))
     }
 
-    // Récupérer l'email Google du consultant
+    // Get Google user email
     const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     })
     const googleUser = await userRes.json()
 
-    // Stocker le token avec l'ID du consultant (obtenu via state)
-    // Utilise la fonction SECURITY DEFINER pour contourner les problèmes RLS post-redirect
-    const supabase = await createClient()
+    // Store token using SECURITY DEFINER function
     const { error: rpcError } = await supabase.rpc('upsert_google_token', {
       p_consultant_id: consultantId,
       p_access_token: tokens.access_token,
@@ -50,7 +90,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (rpcError) {
-      console.error('Google callback: rpc upsert failed', rpcError)
+      console.error('Google callback: rpc upsert failed')
       // Fallback: try direct upsert
       const { error: upsertError } = await supabase.from('google_tokens').upsert({
         consultant_id: consultantId,
@@ -63,14 +103,14 @@ export async function GET(request: NextRequest) {
       }, { onConflict: 'consultant_id' })
 
       if (upsertError) {
-        console.error('Google callback: direct upsert also failed', upsertError)
-        return NextResponse.redirect(new URL('/dashboard/parametres?google=error&reason=db', request.url))
+        console.error('Google callback: direct upsert also failed')
+        return NextResponse.redirect(new URL(`${REDIRECT_BASE}?google=error&reason=db`, request.url))
       }
     }
 
-    return NextResponse.redirect(new URL('/dashboard/parametres?google=success', request.url))
+    return NextResponse.redirect(new URL(`${REDIRECT_BASE}?google=success`, request.url))
   } catch (err) {
-    console.error('Google OAuth callback error:', err)
-    return NextResponse.redirect(new URL('/dashboard/parametres?google=error&reason=exception', request.url))
+    console.error('Google OAuth callback error')
+    return NextResponse.redirect(new URL(`${REDIRECT_BASE}?google=error&reason=exception`, request.url))
   }
 }

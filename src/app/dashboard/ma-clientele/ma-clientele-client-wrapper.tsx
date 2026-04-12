@@ -5,18 +5,13 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
 import { VDossiersComplets } from '@/types/database'
 import { MaClienteleClient } from './ma-clientele-client'
-
-interface GrilleFrais {
-  encours_min: number
-  encours_max: number | null
-  taux: number
-}
+import { GrilleGestion } from '@/lib/commissions/gestion'
 
 export function MaClienteleClientWrapper() {
   const { consultant } = useUser()
   const [dossiers, setDossiers] = React.useState<VDossiersComplets[]>([])
-  const [gestionGrilles, setGestionGrilles] = React.useState<GrilleFrais[]>([])
-  const [entreeGrilles, setEntreeGrilles] = React.useState<GrilleFrais[]>([])
+  const [gestionGrilles, setGestionGrilles] = React.useState<GrilleGestion[]>([])
+  const [entreeGrilles, setEntreeGrilles] = React.useState<GrilleGestion[]>([])
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -28,7 +23,7 @@ export function MaClienteleClientWrapper() {
         let query = supabase
           .from('v_dossiers_complets')
           .select('id, client_id, statut, montant, financement, date_operation, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_nom, consultant_prenom, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee')
-          .eq('consultant_prenom', consultant?.prenom)
+          .eq('consultant_prenom', consultant?.prenom || '')
 
         // Fetch both gestion and entree grilles
         const [dossiersRes, gestionRes, entreeRes] = await Promise.all([
@@ -47,17 +42,15 @@ export function MaClienteleClientWrapper() {
             .order('encours_min', { ascending: true }),
         ])
 
-        if (dossiersRes.error) {
-          console.error('Error fetching dossiers:', dossiersRes.error)
-          setDossiers([])
-        } else {
+        if (!dossiersRes.error) {
           setDossiers((dossiersRes.data || []) as VDossiersComplets[])
+        } else {
+          setDossiers([])
         }
 
         if (!gestionRes.error && gestionRes.data) setGestionGrilles(gestionRes.data)
         if (!entreeRes.error && entreeRes.data) setEntreeGrilles(entreeRes.data)
       } catch (error) {
-        console.error('Error fetching data:', error)
         setDossiers([])
       } finally {
         setLoading(false)

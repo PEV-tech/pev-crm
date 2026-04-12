@@ -9,7 +9,7 @@ export function RemunerationsClientWrapper() {
   const { consultant } = useUser()
   const [dossiers, setDossiers] = React.useState<any[]>([])
   const [remTotals, setRemTotals] = React.useState<{ maxine: number; thelo: number }>({ maxine: 0, thelo: 0 })
-  const [cagnotte, setCagnotte] = React.useState<{ maxine: any; thelo: any }>({ maxine: null, thelo: null })
+  const [cagnotte, setCagnotte] = React.useState<{ maxine: Record<string, unknown> | null; thelo: Record<string, unknown> | null }>({ maxine: null, thelo: null })
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -31,24 +31,23 @@ export function RemunerationsClientWrapper() {
         // (RLS restricts these tables to manager role only — back_office will get empty results)
         if (isManager) {
           const [remRes, cagnotteRes] = await Promise.all([
-            supabase.from('encaissements_rem').select('maxine, thelo'),
+            supabase.from('encaissements_rem').select('*') as any,
             supabase.from('manager_cagnotte').select('*'),
           ])
           if (remRes.data && remRes.data.length > 0) {
             const totals = remRes.data.reduce(
-              (acc: any, e: any) => ({ maxine: acc.maxine + Number(e.maxine || 0), thelo: acc.thelo + Number(e.thelo || 0) }),
+              (acc: { maxine: number; thelo: number }, e: any) => ({ maxine: acc.maxine + Number(e.maxine || 0), thelo: acc.thelo + Number(e.thelo || 0) }),
               { maxine: 0, thelo: 0 }
             )
             setRemTotals(totals)
           }
           if (cagnotteRes.data && cagnotteRes.data.length > 0) {
-            const maxineRow = cagnotteRes.data.find((r: any) => r.manager_key === 'maxine')
-            const theloRow = cagnotteRes.data.find((r: any) => r.manager_key === 'thelo')
+            const maxineRow = cagnotteRes.data.find((r: Record<string, unknown>) => r.manager_key === 'maxine')
+            const theloRow = cagnotteRes.data.find((r: Record<string, unknown>) => r.manager_key === 'thelo')
             setCagnotte({ maxine: maxineRow || null, thelo: theloRow || null })
           }
         }
-      } catch (error) { console.error('Error fetching remuneration data:', error) }
-      finally { setLoading(false) }
+      } finally { setLoading(false) }
     }
     if (consultant) fetchData()
   }, [consultant])

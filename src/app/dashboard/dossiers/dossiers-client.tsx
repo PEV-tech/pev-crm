@@ -11,60 +11,23 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { Plus, Download } from 'lucide-react'
+import { Plus, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
-interface GrilleGestion {
-  encours_min: number
-  encours_max: number | null
-  taux: number
-}
-
-function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
-  const grille = grilles.find(
-    (g) => montant >= g.encours_min && (g.encours_max === null || montant <= g.encours_max)
-  )
-  return grille?.taux || 0
-}
-
-// Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
-function hasEncours(produitNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
-  const nom = (produitNom || '').toUpperCase().trim()
-  const cat = (produitCategorie || '').toUpperCase().trim()
-  const ENCOURS_TYPES = ['PE', 'CAPI LUX', 'CAV LUX']
-  return ENCOURS_TYPES.includes(nom) || ENCOURS_TYPES.includes(cat)
-}
-
-function computeQuarterlyConsultant(
-  montant: number | null | undefined,
-  remApporteur: number | null | undefined,
-  commissionBrute: number | null | undefined,
-  grilles: GrilleGestion[],
-  produitNom?: string | null,
-  produitCategorie?: string | null
-): number | null {
-  if (!montant || grilles.length === 0) return null
-  if (!hasEncours(produitNom, produitCategorie)) return null
-  const tauxGestion = getGestionTaux(grilles, montant)
-  if (!tauxGestion) return null
-  if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
-  return (montant * tauxGestion * (remApporteur / commissionBrute)) / 4
-}
+import { GrilleGestion, getGestionTaux, hasEncours, computeQuarterlyConsultant } from '@/lib/commissions/gestion'
 
 interface DossiersClientProps {
   initialData: VDossiersComplets[]
   role?: string
   gestionGrilles?: GrilleGestion[]
   entreeGrilles?: GrilleGestion[]
+  totalCount?: number
+  currentPage?: number
+  itemsPerPage?: number
+  onPageChange?: (page: number) => void
 }
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 const mapStatutForBadge = (statut: StatutDossierType | null | undefined): 'prospect' | 'client_en_cours' | 'client_finalise' | 'non_abouti' => {
   return (statut as 'prospect' | 'client_en_cours' | 'client_finalise' | 'non_abouti') || 'prospect'
@@ -76,7 +39,16 @@ const MODE_DETENTION_LABELS: Record<string, string> = {
   US: 'Usufruit',
 }
 
-export function DossiersClient({ initialData, role = 'manager', gestionGrilles = [], entreeGrilles = [] }: DossiersClientProps) {
+export function DossiersClient({
+  initialData,
+  role = 'manager',
+  gestionGrilles = [],
+  entreeGrilles = [],
+  totalCount = 0,
+  currentPage = 0,
+  itemsPerPage = 25,
+  onPageChange,
+}: DossiersClientProps) {
   const isConsultant = role === 'consultant'
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -452,7 +424,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
                     router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
-                pageSize={10}
+                pageSize={25}
               />
             </TabsContent>
 
@@ -465,7 +437,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
                     router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
-                pageSize={10}
+                pageSize={25}
               />
             </TabsContent>
 
@@ -478,7 +450,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
                     router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
-                pageSize={10}
+                pageSize={25}
               />
             </TabsContent>
 
@@ -491,7 +463,7 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
                     router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
-                pageSize={10}
+                pageSize={25}
               />
             </TabsContent>
 
@@ -504,9 +476,43 @@ export function DossiersClient({ initialData, role = 'manager', gestionGrilles =
                     router.push(`/dashboard/dossiers/${row.id}`)
                   }
                 }}
-                pageSize={10}
+                pageSize={25}
               />
             </TabsContent>
+
+            {/* Server-side Pagination Controls */}
+            {totalCount > itemsPerPage && onPageChange && (
+              <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                <span className="text-sm text-gray-600">
+                  {totalCount === 0 ? '0' : (currentPage * itemsPerPage) + 1} - {Math.min((currentPage + 1) * itemsPerPage, totalCount)} sur {totalCount}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(currentPage - 1)}
+                    disabled={currentPage === 0}
+                    className="gap-1"
+                  >
+                    <ChevronLeft size={16} />
+                    Précédent
+                  </Button>
+                  <span className="text-sm text-gray-600 flex items-center px-2">
+                    Page {currentPage + 1} sur {Math.ceil(totalCount / itemsPerPage)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(currentPage + 1)}
+                    disabled={(currentPage + 1) * itemsPerPage >= totalCount}
+                    className="gap-1"
+                  >
+                    Suivant
+                    <ChevronRight size={16} />
+                  </Button>
+                </div>
+              </div>
+            )}
           </Tabs>
         </CardContent>
       </Card>

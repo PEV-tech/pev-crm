@@ -21,14 +21,12 @@ export function FacturationClientWrapper() {
           .eq('statut', 'client_finalise')
           .order('date_operation', { ascending: false })
 
-        if (error) {
-          console.error('Error fetching facturation data:', error)
-          setData([])
-        } else {
+        if (!error) {
           setData((data || []) as VDossiersComplets[])
+        } else {
+          setData([])
         }
       } catch (error) {
-        console.error('Error fetching facturation data:', error)
         setData([])
       } finally {
         setLoading(false)

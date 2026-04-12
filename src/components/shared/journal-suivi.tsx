@@ -4,7 +4,9 @@ import * as React from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { SkeletonText } from '@/components/shared/skeleton'
 import { MessageSquare, Plus, X, Save, Pencil, Trash2, Filter } from 'lucide-react'
+import { useLoadingTimeout } from '@/hooks/use-loading-timeout'
 
 /** Étiquettes CDC §8 */
 const ETIQUETTES = [
@@ -49,6 +51,7 @@ interface JournalSuiviProps {
 export function JournalSuivi({ clientId, currentUserId, currentUserNom, isManager }: JournalSuiviProps) {
   const [commentaires, setCommentaires] = React.useState<Commentaire[]>([])
   const [loading, setLoading] = React.useState(true)
+  const timedOut = useLoadingTimeout(loading, 15000)
   const [showForm, setShowForm] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [filterType, setFilterType] = React.useState<EtiquetteType | 'all'>('all')
@@ -70,7 +73,7 @@ export function JournalSuivi({ clientId, currentUserId, currentUserNom, isManage
       .select('*')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false })
-    setCommentaires(data || [])
+    setCommentaires((data as any) || [])
     setLoading(false)
   }, [clientId, supabase])
 
@@ -227,7 +230,23 @@ export function JournalSuivi({ clientId, currentUserId, currentUserNom, isManage
 
         {/* Liste des commentaires */}
         {loading ? (
-          <p className="text-xs text-gray-400 text-center py-4">Chargement...</p>
+          timedOut ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-8">
+              <p className="text-gray-600 text-center">Impossible de charger les données. Vérifiez votre connexion et rechargez la page.</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              >
+                Recharger
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <SkeletonText lines={3} className="mb-3" />
+              <SkeletonText lines={2} />
+              <SkeletonText lines={4} />
+            </div>
+          )
         ) : filtered.length > 0 ? (
           <div className="space-y-2.5">
             {filtered.map(c => {

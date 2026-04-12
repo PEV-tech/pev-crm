@@ -14,13 +14,7 @@ interface FacturationClientProps {
   initialData: VDossiersComplets[]
 }
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 const getFacturationStatus = (
   facturee: boolean | null | undefined,
@@ -156,7 +150,6 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
       await upsertFacture(dossier.id, { facturee: true, date_facture: today })
       setData((prev) => prev.map((d) => d.id === dossier.id ? { ...d, facturee: true, date_facture: today } : d))
     } catch (err) {
-      console.error('Error marking as invoiced:', err)
       alert('Erreur lors de la mise à jour')
     } finally {
       setLoadingIds((prev) => { const s = new Set(prev); s.delete(dossier.id!); return s })
@@ -171,7 +164,6 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
       await upsertFacture(dossier.id, { facturee: true, payee: 'oui', date_paiement: today })
       setData((prev) => prev.map((d) => d.id === dossier.id ? { ...d, payee: 'oui' as PaiementType, date_paiement: today } : d))
     } catch (err) {
-      console.error('Error marking as paid:', err)
       alert('Erreur lors de la mise à jour')
     } finally {
       setLoadingIds((prev) => { const s = new Set(prev); s.delete(dossier.id!); return s })
@@ -192,7 +184,6 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
             await upsertFacture(id, { facturee: true, date_facture: today })
           } catch (err) {
             errorCount++
-            console.error(`Failed to invoice dossier ${id}:`, err)
           }
         })
       )
@@ -205,7 +196,6 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
       )
       setSelectedIds(new Set())
     } catch (err) {
-      console.error('Error in bulk invoice:', err)
       alert('Erreur lors de la création de la facture groupée')
     } finally {
       setBulkLoading(false)

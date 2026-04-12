@@ -5,9 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { TrendingUp, Award, Target, ArrowUp } from 'lucide-react'
+import { VDossiersComplets } from '@/types/database'
 
-const formatCurrency = (value: number): string =>
-  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)
+import { formatCurrency } from '@/lib/formatting'
 
 interface GrilleTier {
   id: string
@@ -19,7 +19,7 @@ interface GrilleTier {
 interface CommissionGrilleProps {
   consultantId: string
   consultantNom: string
-  dossiers: any[] // from v_dossiers_complets or v_dossiers_remunerations
+  dossiers: VDossiersComplets[] // from v_dossiers_complets or v_dossiers_remunerations
 }
 
 // Consultants excluded from progressive grille (fixed rates)

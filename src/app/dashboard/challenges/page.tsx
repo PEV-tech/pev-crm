@@ -7,13 +7,8 @@ import { Select } from '@/components/ui/select'
 import { useConsultantInfo, useRole } from '@/hooks/use-user'
 import { Trophy, TrendingUp, ArrowUp, Target } from 'lucide-react'
 
-const formatCurrency = (value: number): string => {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(value)
-}
+import { formatCurrencyRounded } from '@/lib/formatting'
+const formatCurrency = formatCurrencyRounded
 
 interface RankedConsultant {
   name: string // full "prenom nom" key

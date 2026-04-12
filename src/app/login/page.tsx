@@ -32,7 +32,6 @@ export default function LoginPage() {
       router.push('/dashboard')
     } catch (err) {
       setError('Une erreur est survenue. Veuillez réessayer.')
-      console.error(err)
     } finally {
       setIsLoading(false)
     }

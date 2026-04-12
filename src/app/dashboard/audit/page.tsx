@@ -1,0 +1,327 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { useRole } from '@/hooks/use-user'
+import { formatDate } from '@/lib/formatting'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+
+interface AuditLog {
+  id: string
+  user_id: string | null
+  user_nom: string | null
+  action: string
+  table_name: string
+  record_id: string | null
+  details: Record<string, unknown> | null
+  created_at: string
+}
+
+const ITEMS_PER_PAGE = 25
+
+export default function AuditLogsPage() {
+  const router = useRouter()
+  const role = useRole()
+
+  // Gate access: only managers and back_office can access
+  const isAuthorized = role === 'manager' || role === 'back_office'
+
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [filterAction, setFilterAction] = useState<string>('all')
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('')
+  const [filterDateTo, setFilterDateTo] = useState<string>('')
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      router.push('/dashboard')
+      return
+    }
+
+    async function loadAuditLogs() {
+      setLoading(true)
+      const supabase = createClient()
+
+      try {
+        // Build query with filters
+        let query = supabase
+          .from('audit_logs')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: false })
+
+        // Apply action filter
+        if (filterAction !== 'all') {
+          query = query.eq('action', filterAction)
+        }
+
+        // Apply date filters
+        if (filterDateFrom) {
+          query = query.gte('created_at', `${filterDateFrom}T00:00:00`)
+        }
+        if (filterDateTo) {
+          query = query.lte('created_at', `${filterDateTo}T23:59:59`)
+        }
+
+        // Apply pagination
+        const from = (currentPage - 1) * ITEMS_PER_PAGE
+        const to = from + ITEMS_PER_PAGE - 1
+        query = query.range(from, to)
+
+        const { data, count, error } = await query
+
+        if (error) {
+          console.error('Error fetching audit logs:', error)
+          setLogs([])
+          setTotalCount(0)
+        } else {
+          setLogs((data as AuditLog[]) || [])
+          setTotalCount(count || 0)
+        }
+      } catch (error) {
+        console.error('Error loading audit logs:', error)
+        setLogs([])
+        setTotalCount(0)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadAuditLogs()
+  }, [isAuthorized, currentPage, filterAction, filterDateFrom, filterDateTo, router])
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Accès refusé</h1>
+          <p className="text-gray-600 mt-2">Seuls les gestionnaires peuvent accéder aux journaux d'audit.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
+
+  const getActionBadge = (action: string) => {
+    const variants: Record<string, string> = {
+      create: 'success',
+      update: 'warning',
+      delete: 'destructive',
+    }
+    const labels: Record<string, string> = {
+      create: 'Création',
+      update: 'Modification',
+      delete: 'Suppression',
+    }
+    const variant = (variants[action] || 'default') as 'success' | 'warning' | 'destructive' | 'default'
+    return <Badge variant={variant}>{labels[action] || action}</Badge>
+  }
+
+  const handleResetFilters = () => {
+    setFilterAction('all')
+    setFilterDateFrom('')
+    setFilterDateTo('')
+    setCurrentPage(1)
+  }
+
+  const hasActiveFilters = filterAction !== 'all' || filterDateFrom || filterDateTo
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Journaux d'audit</h1>
+        <p className="text-gray-600 mt-1">Historique des modifications apportées aux données du CRM</p>
+      </div>
+
+      {/* Filters Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Filtres</CardTitle>
+          <CardDescription>Affinez votre recherche</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Action Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Type d'action</label>
+              <select
+                value={filterAction}
+                onChange={(e) => {
+                  setFilterAction(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Tous</option>
+                <option value="create">Création</option>
+                <option value="update">Modification</option>
+                <option value="delete">Suppression</option>
+              </select>
+            </div>
+
+            {/* Date From Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date de début</label>
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => {
+                  setFilterDateFrom(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Date To Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date de fin</label>
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => {
+                  setFilterDateTo(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Reset Button */}
+            {hasActiveFilters && (
+              <div className="flex items-end">
+                <button
+                  onClick={handleResetFilters}
+                  className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  Réinitialiser
+                </button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Logs Table Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">
+            Logs d'audit
+            {totalCount > 0 && <span className="text-gray-500 font-normal ml-2">({totalCount} entrées)</span>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <p className="text-gray-500">Chargement...</p>
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="flex justify-center py-12">
+              <p className="text-gray-500">Aucun journal d'audit trouvé</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-40">Date/Heure</TableHead>
+                      <TableHead>Utilisateur</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Table</TableHead>
+                      <TableHead>ID du dossier</TableHead>
+                      <TableHead>Détails</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {logs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="font-mono text-xs text-gray-600">
+                          {new Date(log.created_at).toLocaleString('fr-FR', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-900">{log.user_nom || 'Système'}</div>
+                            {log.user_id && (
+                              <div className="text-xs text-gray-500 font-mono">{log.user_id.substring(0, 8)}...</div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{getActionBadge(log.action)}</TableCell>
+                        <TableCell className="text-sm text-gray-700">{log.table_name}</TableCell>
+                        <TableCell className="font-mono text-xs text-gray-600">
+                          {log.record_id ? log.record_id.substring(0, 8) + '...' : '-'}
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-600">
+                          {log.details ? (
+                            <details className="cursor-pointer">
+                              <summary className="text-blue-600 hover:underline">Voir détails</summary>
+                              <pre className="mt-2 p-2 bg-gray-50 rounded text-xs overflow-auto max-h-48">
+                                {JSON.stringify(log.details, null, 2)}
+                              </pre>
+                            </details>
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200">
+                  <div className="text-sm text-gray-600">
+                    Page {currentPage} sur {totalPages}
+                    {totalCount > 0 && ` (${(currentPage - 1) * ITEMS_PER_PAGE + 1}-${Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} sur ${totalCount})`}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft size={16} />
+                      Précédent
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Suivant
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

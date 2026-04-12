@@ -4,16 +4,14 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/card'
 import { useRole, useConsultantInfo } from '@/hooks/use-user'
+import { useLoadingTimeout } from '@/hooks/use-loading-timeout'
 import { DashboardClient } from './dashboard-client'
+import { SkeletonDashboard } from '@/components/shared/skeleton'
 import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy, Target, AlertTriangle } from 'lucide-react'
+import { VDossiersComplets } from '@/types/database'
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '0 €'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
-}
+import { formatCurrencyOrZero } from '@/lib/formatting'
+const formatCurrency = formatCurrencyOrZero
 
 export default function DashboardPage() {
   const role = useRole()
@@ -21,14 +19,15 @@ export default function DashboardPage() {
   const isManager = role === 'manager' || role === 'back_office'
 
   const [stats, setStats] = useState({ collecte: 0, caGenere: 0, pipelineEnCours: 0, dossiersFinalisés: 0 })
-  const [allFinalisedDossiers, setAllFinalisedDossiers] = useState<any[]>([])
-  const [recentDossiers, setRecentDossiers] = useState<any[]>([])
-  const [pendingInvoices, setPendingInvoices] = useState<any[]>([])
+  const [allFinalisedDossiers, setAllFinalisedDossiers] = useState<VDossiersComplets[]>([])
+  const [recentDossiers, setRecentDossiers] = useState<VDossiersComplets[]>([])
+  const [pendingInvoices, setPendingInvoices] = useState<Record<string, unknown>[]>([])
   const [consultantRank, setConsultantRank] = useState<{ rank: number; totalConsultants: number; ecart: number | null } | null>(null)
   const [objectif, setObjectif] = useState<{ objectif: number; collecte: number } | null>(null)
   const [projection, setProjection] = useState<number | null>(null)
   const [relancesCount, setRelancesCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const timedOut = useLoadingTimeout(loading, 15000)
 
   useEffect(() => {
     async function loadData() {
@@ -62,7 +61,7 @@ export default function DashboardPage() {
 
       // Single pass through filtered dossiers to compute all stats at once
       let collecte = 0, pipelineEnCours = 0, caGenere = 0, dossiersFinalisés = 0, relCount = 0
-      const finalised: any[] = []
+      const finalised: VDossiersComplets[] = []
       const nowDate = new Date()
 
       filteredDossiers.forEach((d: any) => {
@@ -75,7 +74,7 @@ export default function DashboardPage() {
           if (d.facturee === true && (d.payee === 'non' || !d.payee)) relCount++
         } else if (d.statut === 'client_en_cours') {
           pipelineEnCours += d.montant || 0
-          if (d.statut_kyc === 'non' || d.statut_kyc === false) relCount++
+          if (d.statut_kyc === 'non') relCount++
           const dateOp = d.date_operation ? new Date(d.date_operation) : null
           if (dateOp && Math.floor((nowDate.getTime() - dateOp.getTime()) / 86400000) >= 30) relCount++
         }
@@ -113,11 +112,11 @@ export default function DashboardPage() {
       // Challenges / objectifs
       if (challenges.length > 0) {
         if (!isManager && consultantInfo?.id) {
-          const my = challenges.find((c: any) => c.consultant_id === consultantInfo.id)
-          if (my) setObjectif({ objectif: my.objectif, collecte: my.collecte })
+          const my = challenges.find((c: Record<string, unknown>) => c.consultant_id === consultantInfo.id)
+          if (my) setObjectif({ objectif: my.objectif as number, collecte: my.collecte as number })
         } else if (isManager) {
-          const totalObj = challenges.reduce((s: number, c: any) => s + (c.objectif || 0), 0)
-          const totalCol = challenges.reduce((s: number, c: any) => s + (c.collecte || 0), 0)
+          const totalObj = challenges.reduce((s: number, c: Record<string, unknown>) => s + ((c.objectif as number) || 0), 0)
+          const totalCol = challenges.reduce((s: number, c: Record<string, unknown>) => s + ((c.collecte as number) || 0), 0)
           if (totalObj > 0) setObjectif({ objectif: totalObj, collecte: totalCol })
         }
       }
@@ -125,9 +124,9 @@ export default function DashboardPage() {
       // Recent dossiers: use already-fetched data, sorted by date (avoid 2nd query)
       const sorted = [...filteredDossiers]
         .filter((d: any) => d.date_operation)
-        .sort((a: any, b: any) => new Date(b.date_operation).getTime() - new Date(a.date_operation).getTime())
+        .sort((a: any, b: any) => new Date(b.date_operation || '').getTime() - new Date(a.date_operation || '').getTime())
         .slice(0, 5)
-      setRecentDossiers(sorted)
+      setRecentDossiers(sorted as any)
 
       // Pending invoices: use pre-filtered factures (already fetched with facturee=false)
       const factures = facturesRes.data || []
@@ -135,9 +134,9 @@ export default function DashboardPage() {
         const dossierMap = new Map(filteredDossiers.map((d: any) => [d.id, d]))
         const pending = factures
           .slice(0, 5)
-          .map((f: any) => ({ ...f, dossier: dossierMap.get(f.dossier_id) }))
+          .map((f: any) => ({ ...f, dossier: dossierMap.get(f.dossier_id as string) }))
           .filter((f: any) => f.dossier)
-        setPendingInvoices(pending)
+        setPendingInvoices(pending as any)
       }
 
       setLoading(false)
@@ -147,11 +146,22 @@ export default function DashboardPage() {
   }, [isManager, consultantInfo])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Chargement...</div>
-      </div>
-    )
+    if (timedOut) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <div className="text-center">
+            <p className="text-gray-600 mb-4">Impossible de charger les données. Vérifiez votre connexion et rechargez la page.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+            >
+              Recharger
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return <SkeletonDashboard />
   }
 
   return (

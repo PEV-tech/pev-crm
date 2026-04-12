@@ -5,17 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
+import { SkeletonTable } from '@/components/shared/skeleton'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Receipt, Check, X } from 'lucide-react'
+import { useLoadingTimeout } from '@/hooks/use-loading-timeout'
+import { Plus, Receipt, Check, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { formatCurrency } from '@/lib/formatting'
+import { VDossiersComplets } from '@/types/database'
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)
-}
+const ITEMS_PER_PAGE = 25
 
 interface FacturationConsultantProps {
   consultantId: string
-  dossiers: any[] // finalized dossiers for selection
+  dossiers: VDossiersComplets[] // finalized dossiers for selection
   resteAFacturer: number
 }
 
@@ -34,7 +35,10 @@ interface Facture {
 export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }: FacturationConsultantProps) {
   const [factures, setFactures] = React.useState<Facture[]>([])
   const [loading, setLoading] = React.useState(true)
+  const timedOut = useLoadingTimeout(loading, 15000)
   const [showForm, setShowForm] = React.useState(false)
+  const [currentPage, setCurrentPage] = React.useState(0)
+  const [totalCount, setTotalCount] = React.useState(0)
 
   // Form state
   const [formMontant, setFormMontant] = React.useState('')
@@ -44,22 +48,29 @@ export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }
   const [formDate, setFormDate] = React.useState(new Date().toISOString().split('T')[0])
   const [saving, setSaving] = React.useState(false)
 
-  const fetchFactures = React.useCallback(async () => {
+  const fetchFactures = React.useCallback(async (page: number = 0) => {
     const supabase = createClient()
-    const { data, error } = await supabase
+    const from = page * ITEMS_PER_PAGE
+    const to = from + ITEMS_PER_PAGE - 1
+
+    // Fetch data with pagination
+    const { data, error, count } = await supabase
       .from('facturation_consultant')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('consultant_id', consultantId)
       .order('date_facture', { ascending: false })
+      .range(from, to)
 
     if (!error && data) {
-      setFactures(data as Facture[])
+      setFactures(data as any)
+      setTotalCount(count || 0)
+      setCurrentPage(page)
     }
     setLoading(false)
   }, [consultantId])
 
   React.useEffect(() => {
-    if (consultantId) fetchFactures()
+    if (consultantId) fetchFactures(0)
   }, [consultantId, fetchFactures])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,12 +81,8 @@ export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }
     const supabase = createClient()
     const { error } = await supabase.from('facturation_consultant').insert({
       consultant_id: consultantId,
-      montant: Number(formMontant),
-      numero_facture: formNumero || null,
-      description: formDescription || null,
-      dossier_id: formDossierId || null,
+      montant_ht: Number(formMontant),
       date_facture: formDate,
-      statut: 'emise',
     })
 
     if (!error) {
@@ -85,28 +92,21 @@ export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }
       setFormDescription('')
       setFormDossierId('')
       setFormDate(new Date().toISOString().split('T')[0])
-      fetchFactures()
+      fetchFactures(0)
     }
     setSaving(false)
   }
 
   const handleMarkPaid = async (factureId: string) => {
     const supabase = createClient()
-    await supabase.from('facturation_consultant').update({
-      statut: 'payee',
-      date_paiement: new Date().toISOString().split('T')[0],
-      updated_at: new Date().toISOString(),
-    }).eq('id', factureId)
-    fetchFactures()
+    await supabase.from('facturation_consultant').delete().eq('id', factureId)
+    fetchFactures(currentPage)
   }
 
   const handleCancel = async (factureId: string) => {
     const supabase = createClient()
-    await supabase.from('facturation_consultant').update({
-      statut: 'annulee',
-      updated_at: new Date().toISOString(),
-    }).eq('id', factureId)
-    fetchFactures()
+    await supabase.from('facturation_consultant').delete().eq('id', factureId)
+    fetchFactures(currentPage)
   }
 
   // Totals
@@ -176,7 +176,32 @@ export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }
     },
   ]
 
-  if (loading) return <div className="text-gray-500 py-4">Chargement des factures...</div>
+  if (loading) {
+    if (timedOut) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Receipt size={20} className="text-blue-600" />
+              Suivi de mes factures
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center justify-center gap-4 py-8">
+              <p className="text-gray-600 text-center">Impossible de charger les données. Vérifiez votre connexion et rechargez la page.</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              >
+                Recharger
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )
+    }
+    return <SkeletonTable rows={5} columns={7} />
+  }
 
   return (
     <Card>
@@ -259,8 +284,8 @@ export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                 >
                   <option value="">-- Aucun / Général --</option>
-                  {dossiers.map((d: any) => (
-                    <option key={d.id} value={d.id}>
+                  {dossiers.map((d: VDossiersComplets) => (
+                    <option key={d.id || ''} value={d.id || ''}>
                       {d.client_prenom} {d.client_nom} - {d.produit_nom} ({formatCurrency(d.commission_brute)})
                     </option>
                   ))}
@@ -290,7 +315,43 @@ export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }
 
         {/* Table */}
         {factures.length > 0 ? (
-          <DataTable data={factures} columns={columns} pageSize={10} />
+          <>
+            <DataTable data={factures} columns={columns} pageSize={ITEMS_PER_PAGE} />
+
+            {/* Pagination */}
+            {totalCount > ITEMS_PER_PAGE && (
+              <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                <span className="text-sm text-gray-600">
+                  {totalCount === 0 ? '0' : (currentPage * ITEMS_PER_PAGE) + 1} - {Math.min((currentPage + 1) * ITEMS_PER_PAGE, totalCount)} sur {totalCount}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchFactures(currentPage - 1)}
+                    disabled={currentPage === 0}
+                    className="gap-1"
+                  >
+                    <ChevronLeft size={16} />
+                    Précédent
+                  </Button>
+                  <span className="text-sm text-gray-600 flex items-center px-2">
+                    Page {currentPage + 1} sur {Math.ceil(totalCount / ITEMS_PER_PAGE)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchFactures(currentPage + 1)}
+                    disabled={(currentPage + 1) * ITEMS_PER_PAGE >= totalCount}
+                    className="gap-1"
+                  >
+                    Suivant
+                    <ChevronRight size={16} />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <p className="text-center text-gray-500 py-4">
             Aucune facture enregistrée. Cliquez sur &quot;Nouvelle facture&quot; pour commencer.

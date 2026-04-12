@@ -11,10 +11,12 @@ interface ExportOptions {
 interface ColumnConfig {
   key: string
   label: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   formatter?: (value: any) => string
 }
 
 export function exportCSV(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any[],
   columns: ColumnConfig[],
   options: ExportOptions
@@ -75,6 +77,7 @@ function escapeCSVField(field: string): string {
 /**
  * Get nested object values using dot notation (e.g., "user.name")
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((current, prop) => current?.[prop], obj)
 }

@@ -11,16 +11,8 @@ import { exportCSV, getExportFilename, formatCurrencyForCSV } from '@/lib/export
 import { FacturationConsultant } from '@/components/dashboard/facturation-consultant'
 import { CommissionGrille } from '@/components/shared/commission-grille'
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)
-}
-
-// Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
-function hasEncours(produitNom: string | null | undefined): boolean {
-  const nom = (produitNom || '').toUpperCase().trim()
-  return ['PE', 'CAPI LUX', 'CAV LUX'].includes(nom)
-}
+import { formatCurrency } from '@/lib/formatting'
+import { hasEncours } from '@/lib/commissions/gestion'
 
 const statutLabel = (s: string) => {
   switch (s) {
@@ -31,7 +23,8 @@ const statutLabel = (s: string) => {
   }
 }
 
-const statutVariant = (s: string): any => {
+type BadgeVariant = 'success' | 'warning' | 'secondary' | 'outline' | 'default' | 'destructive'
+const statutVariant = (s: string): BadgeVariant => {
   switch (s) {
     case 'client_finalise': return 'success'
     case 'client_en_cours': return 'warning'
@@ -40,6 +33,7 @@ const statutVariant = (s: string): any => {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface RemunerationsClientProps {
   dossiers: any[]
   consultant: any
@@ -59,7 +53,9 @@ function ManagerCagnotteCard({
 }: {
   label: string
   remTotal: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cagnotteRow: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dossiers: any[]
   consultantId?: string
   isCurrentUser: boolean

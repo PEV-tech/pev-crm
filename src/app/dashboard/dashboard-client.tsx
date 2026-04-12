@@ -6,6 +6,7 @@ import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { BarChart3, AlertCircle } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import { VDossiersComplets } from '@/types/database'
 
 // Lazy-load Recharts to reduce initial bundle size
 const RechartsBarChart = dynamic(
@@ -19,18 +20,17 @@ const CartesianGrid = dynamic(() => import('recharts').then(mod => ({ default: m
 const Tooltip = dynamic(() => import('recharts').then(mod => ({ default: mod.Tooltip })), { ssr: false })
 const ResponsiveContainer = dynamic(() => import('recharts').then(mod => ({ default: mod.ResponsiveContainer })), { ssr: false })
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
+import { formatCurrency } from '@/lib/formatting'
+
+interface PendingInvoice extends Record<string, unknown> {
+  dossier?: VDossiersComplets
+  date_facture?: string | null
 }
 
 interface DashboardClientProps {
-  recentDossiers: any[]
-  pendingInvoices: any[]
-  allFinalisedDossiers?: any[]
+  recentDossiers: VDossiersComplets[]
+  pendingInvoices: PendingInvoice[]
+  allFinalisedDossiers?: VDossiersComplets[]
 }
 
 const monthLabels = [
@@ -38,7 +38,7 @@ const monthLabels = [
   'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc',
 ]
 
-const CustomTooltip = ({ active, payload }: any) => {
+const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number }> }) => {
   if (active && payload && payload[0]) {
     const value = payload[0].value
     const formatted = new Intl.NumberFormat('fr-FR', {
@@ -81,7 +81,7 @@ export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedD
       collecte: monthlyData[index],
     }))
   }, [allFinalisedDossiers, recentDossiers])
-  const dossiersColumns: ColumnDefinition<any>[] = [
+  const dossiersColumns: ColumnDefinition<VDossiersComplets>[] = [
     {
       key: 'client_nom',
       label: 'Client',
@@ -110,7 +110,7 @@ export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedD
     },
   ]
 
-  const invoicesColumns: ColumnDefinition<any>[] = [
+  const invoicesColumns: ColumnDefinition<PendingInvoice>[] = [
     {
       key: 'dossier.client_nom',
       label: 'Client',

@@ -39,6 +39,7 @@ export type Database = {
           is_pool_member?: boolean
           actif?: boolean
         }
+        Relationships: []
       }
       clients: {
         Row: {
@@ -56,6 +57,9 @@ export type Database = {
           pi: boolean
           lm: boolean
           rm: boolean
+          preco: boolean
+          google_drive_url: string | null
+          commentaires: string | null
           created_at: string
           updated_at: string
         }
@@ -70,6 +74,9 @@ export type Database = {
           pi?: boolean
           lm?: boolean
           rm?: boolean
+          preco?: boolean
+          google_drive_url?: string | null
+          commentaires?: string | null
         }
         Update: {
           nom?: string
@@ -81,7 +88,11 @@ export type Database = {
           pi?: boolean
           lm?: boolean
           rm?: boolean
+          preco?: boolean
+          google_drive_url?: string | null
+          commentaires?: string | null
         }
+        Relationships: []
       }
       produits: {
         Row: {
@@ -99,6 +110,7 @@ export type Database = {
           nom?: string
           categorie?: string | null
         }
+        Relationships: []
       }
       compagnies: {
         Row: {
@@ -116,6 +128,7 @@ export type Database = {
           nom?: string
           taux_defaut?: number | null
         }
+        Relationships: []
       }
       taux_produit_compagnie: {
         Row: {
@@ -141,6 +154,7 @@ export type Database = {
           description?: string | null
           actif?: boolean
         }
+        Relationships: []
       }
       grilles_frais: {
         Row: {
@@ -167,6 +181,7 @@ export type Database = {
           taux?: number
           actif?: boolean
         }
+        Relationships: []
       }
       dossiers: {
         Row: {
@@ -187,6 +202,9 @@ export type Database = {
           apporteur_label: string | null
           referent: string | null
           support_id: string | null
+          has_apporteur_ext: boolean
+          apporteur_ext_nom: string | null
+          taux_apporteur_ext: number | null
           created_at: string
           updated_at: string
         }
@@ -208,6 +226,9 @@ export type Database = {
           apporteur_label?: string | null
           referent?: string | null
           support_id?: string | null
+          has_apporteur_ext?: boolean
+          apporteur_ext_nom?: string | null
+          taux_apporteur_ext?: number | null
         }
         Update: {
           client_id?: string
@@ -226,7 +247,11 @@ export type Database = {
           apporteur_label?: string | null
           referent?: string | null
           support_id?: string | null
+          has_apporteur_ext?: boolean
+          apporteur_ext_nom?: string | null
+          taux_apporteur_ext?: number | null
         }
+        Relationships: []
       }
       commissions: {
         Row: {
@@ -240,6 +265,7 @@ export type Database = {
           part_cabinet: number | null
           pct_cabinet: number | null
           calculated_at: string
+          taux_gestion: number | null
         }
         Insert: {
           id?: string
@@ -251,6 +277,7 @@ export type Database = {
           rem_support?: number | null
           part_cabinet?: number | null
           pct_cabinet?: number | null
+          taux_gestion?: number | null
         }
         Update: {
           taux_commission?: number
@@ -260,7 +287,9 @@ export type Database = {
           rem_support?: number | null
           part_cabinet?: number | null
           pct_cabinet?: number | null
+          taux_gestion?: number | null
         }
+        Relationships: []
       }
       factures: {
         Row: {
@@ -286,6 +315,7 @@ export type Database = {
           date_facture?: string | null
           date_paiement?: string | null
         }
+        Relationships: []
       }
       challenges: {
         Row: {
@@ -307,6 +337,7 @@ export type Database = {
           objectif?: number
           collecte?: number
         }
+        Relationships: []
       }
       audit_log: {
         Row: {
@@ -336,6 +367,393 @@ export type Database = {
           new_data?: Record<string, unknown> | null
           user_id?: string | null
         }
+        Relationships: []
+      }
+      client_commentaires: {
+        Row: {
+          id: string
+          client_id: string
+          auteur_id: string | null
+          auteur_nom: string
+          type_etiquette: string
+          contenu: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          auteur_id?: string | null
+          auteur_nom: string
+          type_etiquette: string
+          contenu: string
+        }
+        Update: {
+          client_id?: string
+          auteur_id?: string | null
+          auteur_nom?: string
+          type_etiquette?: string
+          contenu?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      client_pj: {
+        Row: {
+          id: string
+          client_id: string
+          nom_fichier: string
+          storage_path: string
+          taille_octets: number
+          type_mime: string | null
+          type_document: string
+          date_document: string | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          nom_fichier: string
+          storage_path: string
+          taille_octets: number
+          type_mime?: string | null
+          type_document: string
+          date_document?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          nom_fichier?: string
+          storage_path?: string
+          taille_octets?: number
+          type_mime?: string | null
+          type_document?: string
+          date_document?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      rendez_vous: {
+        Row: {
+          id: string
+          client_id: string
+          date_rdv: string
+          type: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          date_rdv: string
+          type: string
+          notes?: string | null
+        }
+        Update: {
+          client_id?: string
+          date_rdv?: string
+          type?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          id: string
+          user_id: string | null
+          user_nom: string | null
+          action: string
+          table_name: string
+          record_id: string | null
+          details: Record<string, unknown> | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          user_nom?: string | null
+          action: string
+          table_name: string
+          record_id?: string | null
+          details?: Record<string, unknown> | null
+        }
+        Update: {
+          user_id?: string | null
+          user_nom?: string | null
+          action?: string
+          table_name?: string
+          record_id?: string | null
+          details?: Record<string, unknown> | null
+        }
+        Relationships: []
+      }
+      document_templates: {
+        Row: {
+          id: string
+          produit_categorie: string
+          document_nom: string
+          obligatoire: boolean
+          sort_order: number
+        }
+        Insert: {
+          id?: string
+          produit_categorie: string
+          document_nom: string
+          obligatoire?: boolean
+          sort_order?: number
+        }
+        Update: {
+          produit_categorie?: string
+          document_nom?: string
+          obligatoire?: boolean
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      dossier_documents: {
+        Row: {
+          id: string
+          dossier_id: string
+          document_nom: string
+          recu: boolean
+          date_reception: string | null
+          commentaire: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          dossier_id: string
+          document_nom: string
+          recu?: boolean
+          date_reception?: string | null
+          commentaire?: string | null
+        }
+        Update: {
+          document_nom?: string
+          recu?: boolean
+          date_reception?: string | null
+          commentaire?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      client_relations: {
+        Row: {
+          id: string
+          client_id_1: string
+          client_id_2: string
+          type_relation: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id_1: string
+          client_id_2: string
+          type_relation: string
+        }
+        Update: {
+          client_id_1?: string
+          client_id_2?: string
+          type_relation?: string
+        }
+        Relationships: []
+      }
+      google_tokens: {
+        Row: {
+          id: string
+          consultant_id: string
+          access_token: string
+          refresh_token: string | null
+          expires_at: string
+          google_email: string | null
+          scopes: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          consultant_id: string
+          access_token: string
+          refresh_token?: string | null
+          expires_at: string
+          google_email?: string | null
+          scopes?: string | null
+        }
+        Update: {
+          access_token?: string
+          refresh_token?: string | null
+          expires_at?: string
+          google_email?: string | null
+          scopes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      relances: {
+        Row: {
+          id: string
+          client_id: string
+          dossier_id: string | null
+          type: string
+          description: string
+          date_echeance: string
+          rappel_date: string | null
+          statut: 'a_faire' | 'fait' | 'ignore' | 'reporte'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          dossier_id?: string | null
+          type: string
+          description: string
+          date_echeance: string
+          rappel_date?: string | null
+          statut?: 'a_faire' | 'fait' | 'ignore' | 'reporte'
+        }
+        Update: {
+          client_id?: string
+          dossier_id?: string | null
+          type?: string
+          description?: string
+          date_echeance?: string
+          rappel_date?: string | null
+          statut?: 'a_faire' | 'fait' | 'ignore' | 'reporte'
+        }
+        Relationships: []
+      }
+      faq: {
+        Row: {
+          id: string
+          categorie: string
+          sous_categorie: string
+          question: string
+          reponse: string
+          ordre: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          categorie: string
+          sous_categorie: string
+          question: string
+          reponse: string
+          ordre?: number
+        }
+        Update: {
+          categorie?: string
+          sous_categorie?: string
+          question?: string
+          reponse?: string
+          ordre?: number
+        }
+        Relationships: []
+      }
+      encaissements_rem: {
+        Row: {
+          id: string
+          dossier_id: string
+          montant: number
+          date_encaissement: string
+          type_encaissement: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          dossier_id: string
+          montant: number
+          date_encaissement: string
+          type_encaissement: string
+        }
+        Update: {
+          montant?: number
+          date_encaissement?: string
+          type_encaissement?: string
+        }
+        Relationships: []
+      }
+      grilles_commissionnement: {
+        Row: {
+          id: string
+          taux: number
+          ca_min: number
+          ca_max: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          taux: number
+          ca_min: number
+          ca_max?: number | null
+        }
+        Update: {
+          taux?: number
+          ca_min?: number
+          ca_max?: number | null
+        }
+        Relationships: []
+      }
+      visibility_settings: {
+        Row: {
+          id: string
+          consultant_id: string
+          key: string
+          value: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          consultant_id: string
+          key: string
+          value: boolean
+        }
+        Update: {
+          key?: string
+          value?: boolean
+        }
+        Relationships: []
+      }
+      facturation_consultant: {
+        Row: {
+          id: string
+          consultant_id: string
+          date_facture: string
+          montant_ht: number
+          taux_tva: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          consultant_id: string
+          date_facture: string
+          montant_ht: number
+          taux_tva?: number
+        }
+        Update: {
+          date_facture?: string
+          montant_ht?: number
+          taux_tva?: number
+        }
+        Relationships: []
+      }
+      manager_cagnotte: {
+        Row: {
+          id: string
+          manager_id: string
+          montant: number
+          date_creation: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          manager_id: string
+          montant: number
+          date_creation: string
+        }
+        Update: {
+          montant?: number
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -353,6 +771,81 @@ export type Database = {
           mode_detention: ModeDetentionType | null
           apporteur_label: string | null
           referent: string | null
+          has_apporteur_ext: boolean | null
+          apporteur_ext_nom: string | null
+          taux_apporteur_ext: number | null
+          client_nom: string | null
+          client_prenom: string | null
+          client_pays: string | null
+          client_ville: string | null
+          client_email: string | null
+          client_telephone: string | null
+          statut_kyc: StatutKycType | null
+          der: boolean | null
+          pi: boolean | null
+          preco: boolean | null
+          lm: boolean | null
+          rm: boolean | null
+          consultant_id: string | null
+          consultant_nom: string | null
+          consultant_prenom: string | null
+          consultant_zone: string | null
+          taux_remuneration: number | null
+          produit_nom: string | null
+          produit_categorie: string | null
+          compagnie_nom: string | null
+          taux_commission: number | null
+          taux_gestion: number | null
+          commission_brute: number | null
+          rem_apporteur: number | null
+          rem_apporteur_ext: number | null
+          rem_support: number | null
+          part_cabinet: number | null
+          pct_cabinet: number | null
+          facturee: boolean | null
+          payee: PaiementType | null
+          date_facture: string | null
+        }
+        Relationships: []
+      }
+      v_collecte_par_consultant: {
+        Row: {
+          consultant: string | null
+          produit: string | null
+          financement: FinancementType | null
+          total_montant: number | null
+          nb_dossiers: number | null
+          total_commissions: number | null
+        }
+        Relationships: []
+      }
+      v_pipeline_par_consultant: {
+        Row: {
+          consultant: string | null
+          produit: string | null
+          financement: FinancementType | null
+          total_montant: number | null
+          nb_dossiers: number | null
+        }
+        Relationships: []
+      }
+      v_dossiers_remunerations: {
+        Row: {
+          id: string | null
+          client_id: string | null
+          statut: StatutDossierType | null
+          montant: number | null
+          financement: FinancementType | null
+          commentaire: string | null
+          date_operation: string | null
+          date_entree_en_relation: string | null
+          date_signature: string | null
+          mode_detention: ModeDetentionType | null
+          apporteur_label: string | null
+          referent: string | null
+          has_apporteur_ext: boolean | null
+          apporteur_ext_nom: string | null
+          taux_apporteur_ext: number | null
           client_nom: string | null
           client_prenom: string | null
           client_pays: string | null
@@ -376,6 +869,7 @@ export type Database = {
           taux_gestion: number | null
           commission_brute: number | null
           rem_apporteur: number | null
+          rem_apporteur_ext: number | null
           rem_support: number | null
           part_cabinet: number | null
           pct_cabinet: number | null
@@ -383,25 +877,7 @@ export type Database = {
           payee: PaiementType | null
           date_facture: string | null
         }
-      }
-      v_collecte_par_consultant: {
-        Row: {
-          consultant: string | null
-          produit: string | null
-          financement: FinancementType | null
-          total_montant: number | null
-          nb_dossiers: number | null
-          total_commissions: number | null
-        }
-      }
-      v_pipeline_par_consultant: {
-        Row: {
-          consultant: string | null
-          produit: string | null
-          financement: FinancementType | null
-          total_montant: number | null
-          nb_dossiers: number | null
-        }
+        Relationships: []
       }
     }
     Functions: {
@@ -433,6 +909,17 @@ export type Database = {
           p_encours: number
         }
         Returns: number
+      }
+      upsert_google_token: {
+        Args: {
+          p_consultant_id: string
+          p_access_token: string
+          p_refresh_token?: string | null
+          p_expires_at: string
+          p_google_email?: string | null
+          p_scopes?: string | null
+        }
+        Returns: void
       }
     }
     Enums: {
@@ -501,7 +988,32 @@ export type AuditLog = Database['public']['Tables']['audit_log']['Row']
 export type AuditLogInsert = Database['public']['Tables']['audit_log']['Insert']
 export type AuditLogUpdate = Database['public']['Tables']['audit_log']['Update']
 
+export type ClientCommentaire = Database['public']['Tables']['client_commentaires']['Row']
+export type ClientCommentaireInsert = Database['public']['Tables']['client_commentaires']['Insert']
+export type ClientPj = Database['public']['Tables']['client_pj']['Row']
+export type ClientPjInsert = Database['public']['Tables']['client_pj']['Insert']
+export type RendezVous = Database['public']['Tables']['rendez_vous']['Row']
+export type RendezVousInsert = Database['public']['Tables']['rendez_vous']['Insert']
+export type AuditLogs = Database['public']['Tables']['audit_logs']['Row']
+export type AuditLogsInsert = Database['public']['Tables']['audit_logs']['Insert']
+export type DossierDocument = Database['public']['Tables']['dossier_documents']['Row']
+export type DossierDocumentInsert = Database['public']['Tables']['dossier_documents']['Insert']
+export type DocumentTemplate = Database['public']['Tables']['document_templates']['Row']
+export type ClientRelation = Database['public']['Tables']['client_relations']['Row']
+export type GoogleToken = Database['public']['Tables']['google_tokens']['Row']
+export type Relance = Database['public']['Tables']['relances']['Row']
+export type RelanceInsert = Database['public']['Tables']['relances']['Insert']
+export type RelanceUpdate = Database['public']['Tables']['relances']['Update']
+export type Faq = Database['public']['Tables']['faq']['Row']
+export type FaqInsert = Database['public']['Tables']['faq']['Insert']
+export type EncaissementsRem = Database['public']['Tables']['encaissements_rem']['Row']
+export type GrillesCommissionnement = Database['public']['Tables']['grilles_commissionnement']['Row']
+export type VisibilitySettings = Database['public']['Tables']['visibility_settings']['Row']
+export type FacturationConsultant = Database['public']['Tables']['facturation_consultant']['Row']
+export type ManagerCagnotte = Database['public']['Tables']['manager_cagnotte']['Row']
+
 // View types
 export type VDossiersComplets = Database['public']['Views']['v_dossiers_complets']['Row']
 export type VCollecteParConsultant = Database['public']['Views']['v_collecte_par_consultant']['Row']
 export type VPipelineParConsultant = Database['public']['Views']['v_pipeline_par_consultant']['Row']
+export type VDossiersRemunerations = Database['public']['Views']['v_dossiers_remunerations']['Row']

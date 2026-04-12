@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { CheckCircle, AlertCircle, Search, ChevronDown, ChevronRight, FileText } from 'lucide-react'
 import Link from 'next/link'
+import { VDossiersComplets } from '@/types/database'
 
 interface ReglementaireClientProps {
-  initialData: any[]
+  initialData: VDossiersComplets[]
 }
 
 const KYCBadge = ({ status }: { status: string }) => {
@@ -48,7 +49,7 @@ interface ClientGroup {
   clientNom: string
   clientPrenom: string
   clientPays: string
-  dossiers: any[]
+  dossiers: VDossiersComplets[]
   complianceScore: number
   totalChecks: number
   isFullyCompliant: boolean
@@ -65,7 +66,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
   const clientGroups = React.useMemo(() => {
     const groups: Record<string, ClientGroup> = {}
 
-    data.forEach((d: any) => {
+    data.forEach((d: VDossiersComplets) => {
       const key = `${(d.client_nom || '').toUpperCase()}|${(d.client_prenom || '').toUpperCase()}`
 
       if (!groups[key]) {
@@ -147,7 +148,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
   }
 
   // Flat dossier view columns
-  const dossierColumns: ColumnDefinition<any>[] = [
+  const dossierColumns: ColumnDefinition<VDossiersComplets>[] = [
     {
       key: 'client_nom',
       label: 'Client',
@@ -209,7 +210,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
 
     if (filterIncomplete) {
       result = result.filter(
-        (d: any) =>
+        (d: VDossiersComplets) =>
           d.statut_kyc !== 'oui' || d.der !== true || d.pi !== true || d.lm !== true || d.rm !== true
       )
     }
@@ -217,7 +218,7 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       result = result.filter(
-        (d: any) =>
+        (d: VDossiersComplets) =>
           (d.client_nom || '').toLowerCase().includes(q) ||
           (d.client_prenom || '').toLowerCase().includes(q) ||
           (d.produit_nom || '').toLowerCase().includes(q)
@@ -540,11 +541,5 @@ export function ReglementaireClient({ initialData }: ReglementaireClientProps) {
   )
 }
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(value)
-}
+import { formatCurrencyRounded } from '@/lib/formatting'
+const formatCurrency = formatCurrencyRounded

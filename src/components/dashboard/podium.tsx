@@ -18,13 +18,8 @@ interface PodiumProps {
   data: PodiumData[]
 }
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '0 €'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
-}
+import { formatCurrencyOrZero } from '@/lib/formatting'
+const formatCurrency = formatCurrencyOrZero
 
 const getMedalColor = (rank: number): string => {
   switch (rank) {

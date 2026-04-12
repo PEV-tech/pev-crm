@@ -24,7 +24,7 @@ export function DashboardLayoutClient({
     try {
       await onLogout()
     } catch (error) {
-      console.error('Logout error:', error)
+      // Logout error silenced
     }
   }
 

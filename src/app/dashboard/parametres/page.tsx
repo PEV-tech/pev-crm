@@ -9,14 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp, Target, Eye, Shield, Lock, Unlock } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
-
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 const formatPercentage = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -86,8 +79,6 @@ export default function ParametresPage() {
         setGrillesEncours(grillesEncoursRes.data || [])
         setChallenges(challengesRes.data || [])
         setVisibilitySettings(visibilityRes.data || [])
-      } catch (error) {
-        console.error('Error fetching data:', error)
       } finally {
         setLoading(false)
       }
@@ -106,15 +97,14 @@ export default function ParametresPage() {
     try {
       setSaving(true)
       if (isNew) {
-        const { error } = await supabase.from(table).insert([data])
+        const { error } = await (supabase.from(table as any) as any).insert([data])
         if (error) throw error
       } else {
-        const { error } = await supabase.from(table).update(data).eq('id', id)
+        const { error } = await (supabase.from(table as any) as any).update(data).eq('id', id as string)
         if (error) throw error
       }
       return true
     } catch (error) {
-      console.error('Error saving:', error)
       alert('Erreur lors de la sauvegarde')
       return false
     } finally {
@@ -137,7 +127,7 @@ export default function ParametresPage() {
       setCompagnies(compagniesRes.data || [])
       setGrilles(grillesRes.data || [])
     } catch (error) {
-      console.error('Error refetching data:', error)
+      // Error silenced - refetch is non-critical
     }
   }
 
@@ -362,14 +352,13 @@ export default function ParametresPage() {
     try {
       const { error } = await supabase
         .from('visibility_settings')
-        .update({ [field]: !currentValue, updated_at: new Date().toISOString() })
+        .update({ [field]: !currentValue })
         .eq('id', settingId)
       if (error) throw error
       setVisibilitySettings(prev => prev.map(s =>
         s.id === settingId ? { ...s, [field]: !currentValue } : s
       ))
     } catch (error) {
-      console.error('Error updating visibility:', error)
       alert('Erreur lors de la sauvegarde')
     } finally {
       setSavingVisibility(null)

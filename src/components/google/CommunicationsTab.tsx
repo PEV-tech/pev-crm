@@ -1,11 +1,15 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Mail, Calendar, ExternalLink, Paperclip, RefreshCw, Plus, FolderOpen, ChevronDown, ChevronUp, Check, X, HelpCircle, Clock } from 'lucide-react'
+import { Mail, Calendar, ExternalLink, Paperclip, RefreshCw, Plus, FolderOpen, ChevronDown, ChevronUp, Check, X, HelpCircle, Clock, Download } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   clientEmail?: string | null
   clientName: string
   driveUrl?: string | null
+  clientId?: string
+  currentUserId?: string
+  currentUserNom?: string
 }
 
 interface GmailMessage {
@@ -47,7 +51,7 @@ function ResponseIcon({ status }: { status: string }) {
   }
 }
 
-export default function CommunicationsTab({ clientEmail, clientName, driveUrl }: Props) {
+export default function CommunicationsTab({ clientEmail, clientName, driveUrl, clientId, currentUserId, currentUserNom }: Props) {
   const [tab, setTab] = useState<'emails' | 'rdv'>('emails')
   const [emails, setEmails] = useState<GmailMessage[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -55,7 +59,50 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
   const [eventsLoading, setEventsLoading] = useState(false)
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null)
   const [showAllEmails, setShowAllEmails] = useState(false)
+  const [importingEmailIds, setImportingEmailIds] = useState<Set<string>>(new Set())
+  const [importedEmailIds, setImportedEmailIds] = useState<Set<string>>(new Set())
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const supabase = createClient()
   const lastName = clientName?.split(' ').pop() || clientName
+
+  async function importEmailToJournal(message: GmailMessage) {
+    if (!clientId || !currentUserNom) return
+    if (importingEmailIds.has(message.id)) return
+
+    setImportingEmailIds(prev => new Set(prev).add(message.id))
+
+    try {
+      // Format the email content
+      const contenu = `**Objet:** ${message.subject || '(sans objet)'}\n**De:** ${message.from}\n**Date:** ${formatDate(message.date)}\n\n${message.snippet}`
+
+      // Insert into client_commentaires
+      const { error } = await supabase.from('client_commentaires').insert({
+        client_id: clientId,
+        auteur_id: currentUserId || null,
+        auteur_nom: currentUserNom,
+        type_etiquette: 'email',
+        contenu: contenu,
+      })
+
+      if (error) {
+        setToast({ message: 'Erreur lors de l\'import', type: 'error' })
+        console.error('Import error:', error)
+      } else {
+        setImportedEmailIds(prev => new Set(prev).add(message.id))
+        setToast({ message: 'Email importé au journal de suivi', type: 'success' })
+        setTimeout(() => setToast(null), 3000)
+      }
+    } catch (err) {
+      setToast({ message: 'Erreur lors de l\'import', type: 'error' })
+      console.error('Import error:', err)
+    } finally {
+      setImportingEmailIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(message.id)
+        return newSet
+      })
+    }
+  }
 
   async function loadEmails() {
     if (!clientEmail) return
@@ -66,7 +113,7 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
       if (d.connected === false) { setGoogleConnected(false); return }
       setGoogleConnected(true)
       setEmails(d.messages || [])
-    } catch(e) { console.error(e) } finally { setEmailsLoading(false) }
+    } finally { setEmailsLoading(false) }
   }
 
   async function loadEvents() {
@@ -80,7 +127,7 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
       if (d.connected === false) { setGoogleConnected(false); return }
       setGoogleConnected(true)
       setEvents(d.events || [])
-    } catch(e) { console.error(e) } finally { setEventsLoading(false) }
+    } finally { setEventsLoading(false) }
   }
 
   useEffect(() => { loadEmails() }, [clientEmail])
@@ -139,27 +186,43 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
             :<div>
               <div className="divide-y divide-gray-100">
                 {visibleEmails.map(m=>(
-                  <a
+                  <div
                     key={m.id}
-                    href={gmailThreadUrl(m)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block p-4 hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                    className="p-4 hover:bg-blue-50/50 transition-colors group flex items-start justify-between gap-2"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.labelIds.includes('UNREAD')?'bg-blue-500':'bg-gray-200'}`}/>
-                          <span className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-700">{m.subject||'(sans objet)'}</span>
-                          {m.hasAttachments&&<Paperclip className="w-3 h-3 text-gray-400 flex-shrink-0"/>}
-                          <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1 truncate">{m.from}</div>
-                        <div className="text-xs text-gray-400 mt-1 line-clamp-1">{m.snippet}</div>
+                    <a
+                      href={gmailThreadUrl(m)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 min-w-0 block cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.labelIds.includes('UNREAD')?'bg-blue-500':'bg-gray-200'}`}/>
+                        <span className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-700">{m.subject||'(sans objet)'}</span>
+                        {m.hasAttachments&&<Paperclip className="w-3 h-3 text-gray-400 flex-shrink-0"/>}
+                        <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(m.date)}</span>
+                      <div className="text-xs text-gray-500 mt-1 truncate">{m.from}</div>
+                      <div className="text-xs text-gray-400 mt-1 line-clamp-1">{m.snippet}</div>
+                    </a>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-gray-400">{formatDate(m.date)}</span>
+                      {clientId && currentUserNom && (
+                        <button
+                          onClick={() => importEmailToJournal(m)}
+                          disabled={importingEmailIds.has(m.id) || importedEmailIds.has(m.id)}
+                          title={importedEmailIds.has(m.id) ? 'Email importé' : 'Importer au journal'}
+                          className={`p-1.5 rounded transition-colors flex-shrink-0 ${
+                            importedEmailIds.has(m.id)
+                              ? 'bg-green-100 text-green-600'
+                              : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                          } ${importingEmailIds.has(m.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
-                  </a>
+                  </div>
                 ))}
               </div>
               {hasMoreEmails && (
@@ -272,6 +335,13 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl }:
       {!driveUrl&&(
         <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4 text-center">
           <a href="/api/google/auth" className="text-blue-600 text-sm hover:text-blue-700 flex items-center justify-center gap-1"><Plus className="w-3 h-3"/>Connecter Google pour accéder aux emails et RDV</a>
+        </div>
+      )}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity ${
+          toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+        }`}>
+          {toast.message}
         </div>
       )}
     </div>

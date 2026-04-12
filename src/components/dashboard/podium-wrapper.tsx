@@ -41,7 +41,7 @@ export function PodiumWrapper() {
         >()
 
         if (dossiers) {
-          dossiers.forEach((dossier: VDossiersComplets) => {
+          dossiers.forEach((dossier: any) => {
             // Skip back_office (statut already filtered server-side)
             if (!dossier.consultant_nom || dossier.consultant_nom.toLowerCase() === 'back office')
               return
@@ -78,7 +78,6 @@ export function PodiumWrapper() {
 
         setData(podiumData)
       } catch (err) {
-        console.error('Error fetching podium data:', err)
         setError(err instanceof Error ? err : new Error('Unknown error'))
       } finally {
         setIsLoading(false)

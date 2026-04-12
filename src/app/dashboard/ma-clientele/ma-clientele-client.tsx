@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { VDossiersComplets } from '@/types/database'
+import { VDossiersComplets, Consultant } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
@@ -13,50 +13,8 @@ import { Users, TrendingUp, CheckCircle, Plus, Globe, Package, Building, Downloa
 import Link from 'next/link'
 import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
-}
-
-interface GrilleGestion {
-  encours_min: number
-  encours_max: number | null
-  taux: number
-}
-
-function getGestionTaux(grilles: GrilleGestion[], montant: number): number {
-  const grille = grilles.find(
-    (g) => montant >= g.encours_min && (g.encours_max === null || montant <= g.encours_max)
-  )
-  return grille?.taux || 0
-}
-
-// Encours only for PE, CAPI LUX, CAV LUX — no encours for SCPI and Girardin
-function hasEncours(produitNom: string | null | undefined, produitCategorie: string | null | undefined): boolean {
-  const nom = (produitNom || '').toUpperCase().trim()
-  const cat = (produitCategorie || '').toUpperCase().trim()
-  const ENCOURS_TYPES = ['PE', 'CAPI LUX', 'CAV LUX']
-  return ENCOURS_TYPES.includes(nom) || ENCOURS_TYPES.includes(cat)
-}
-
-function computeQuarterlyConsultant(
-  montant: number | null | undefined,
-  remApporteur: number | null | undefined,
-  commissionBrute: number | null | undefined,
-  grilles: GrilleGestion[],
-  produitNom?: string | null,
-  produitCategorie?: string | null
-): number | null {
-  if (!montant || grilles.length === 0) return null
-  if (!hasEncours(produitNom, produitCategorie)) return null
-  const tauxGestion = getGestionTaux(grilles, montant)
-  if (!tauxGestion) return null
-  if (!remApporteur || !commissionBrute || commissionBrute <= 0) return null
-  return (montant * tauxGestion * (remApporteur / commissionBrute)) / 4
-}
+import { formatCurrency } from '@/lib/formatting'
+import { GrilleGestion, getGestionTaux, hasEncours, computeQuarterlyConsultant } from '@/lib/commissions/gestion'
 
 // Tooltip component for commission details
 function CommissionTooltip({
@@ -214,7 +172,7 @@ function DistributionChart({
 
 interface MaClienteleClientProps {
   initialData: VDossiersComplets[]
-  consultant: any
+  consultant: Consultant | null
   gestionGrilles?: GrilleGestion[]
   entreeGrilles?: GrilleGestion[]
 }

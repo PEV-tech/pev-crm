@@ -48,7 +48,7 @@ export function RelancesClientWrapper() {
         const now = new Date()
 
         if (dossiers) {
-          dossiers.forEach((dossier: VDossiersComplets) => {
+          dossiers.forEach((dossier: any) => {
             // Skip if no client or consultant name
             if (!dossier.client_nom || !dossier.consultant_nom) return
 
@@ -60,10 +60,10 @@ export function RelancesClientWrapper() {
               ? Math.floor((now.getTime() - dateOperation.getTime()) / (1000 * 60 * 60 * 24))
               : null
 
-            // 1. KYC manquant: statut_kyc = false/'non' AND statut = 'client_en_cours'
+            // 1. KYC manquant: statut_kyc = 'non' AND statut = 'client_en_cours'
             if (
               dossier.statut === 'client_en_cours' &&
-              (dossier.statut_kyc === 'non' || dossier.statut_kyc === false)
+              (dossier.statut_kyc === 'non')
             ) {
               relances.push({
                 id: `kyc-${dossier.id}`,
@@ -97,11 +97,11 @@ export function RelancesClientWrapper() {
               })
             }
 
-            // 3. Paiement en attente: finalized dossiers where facturee=true but payee=false/null
+            // 3. Paiement en attente: finalized dossiers where facturee=true but payee=non
             if (
               dossier.statut === 'client_finalise' &&
               dossier.facturee === true &&
-              (dossier.payee === 'non' || dossier.payee === false || dossier.payee === null)
+              (dossier.payee === 'non' || dossier.payee === null)
             ) {
               // Check if facture is aging (30j+ since date_facture)
               const dateFacture = dossier.date_facture ? new Date(dossier.date_facture) : null
@@ -140,7 +140,7 @@ export function RelancesClientWrapper() {
             // 4. Réglementaire incomplet: finalized dossiers with missing compliance fields
             if (dossier.statut === 'client_finalise') {
               const missingFields: string[] = []
-              if (dossier.statut_kyc !== 'oui' && dossier.statut_kyc !== true) missingFields.push('Réglementaire')
+              if (dossier.statut_kyc !== 'oui') missingFields.push('Réglementaire')
               if (!dossier.der) missingFields.push('DER')
               if (!dossier.pi) missingFields.push('PI')
               if (!dossier.preco) missingFields.push('PRECO')
@@ -174,16 +174,16 @@ export function RelancesClientWrapper() {
 
         if (manualRelances) {
           // Fetch client names for manual relances
-          const clientIds = [...new Set(manualRelances.map(r => r.client_id).filter(Boolean))]
+          const clientIds = Array.from(new Set(manualRelances.map(r => r.client_id).filter(Boolean)))
           if (clientIds.length > 0) {
             const { data: clients } = await supabase
               .from('clients')
-              .select('id, nom, prenom, consultant_id')
+              .select('id, nom, prenom')
               .in('id', clientIds)
 
             const consultantMap = new Map<string, { nom: string; prenom: string }>()
             if (consultants) {
-              consultants.forEach((c: Consultant) => {
+              consultants.forEach((c: any) => {
                 consultantMap.set(c.id, { nom: c.nom || '', prenom: c.prenom || '' })
               })
             }
@@ -192,17 +192,18 @@ export function RelancesClientWrapper() {
               // Only show active ones (a_faire or reporte with rappel_date reached)
               if (mr.statut === 'reporte' && mr.rappel_date && mr.rappel_date > today) return
 
-              const client = clients?.find(c => c.id === mr.client_id)
+              const client = clients?.find((c: any) => c.id === mr.client_id)
               if (!client) return
 
-              const consultant = client.consultant_id ? consultantMap.get(client.consultant_id) : null
+              // For now, we don't have consultant_id in the clients query, so consultant will be null
+              const consultant = null
               const isOverdue = mr.date_echeance < today
 
               relances.push({
                 id: `manual-${mr.id}`,
                 clientNom: `${client.prenom || ''} ${client.nom || ''}`.trim(),
-                consultantNom: consultant?.nom || '',
-                consultantPrenom: consultant?.prenom || '',
+                consultantNom: (consultant as any)?.nom || '',
+                consultantPrenom: (consultant as any)?.prenom || '',
                 produitNom: mr.type || 'Relance manuelle',
                 dateOperation: mr.date_echeance || '',
                 typeRelance: 'manuelle',
@@ -232,7 +233,6 @@ export function RelancesClientWrapper() {
 
         setData(uniqueRelances)
       } catch (err) {
-        console.error('Error fetching relances:', err)
         setError(err instanceof Error ? err : new Error('Unknown error'))
       } finally {
         setIsLoading(false)

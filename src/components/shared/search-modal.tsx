@@ -120,8 +120,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       const unique = Array.from(new Map(searchResults.map(r => [r.id, r])).values()).slice(0, 12)
       setResults(unique)
       setSelectedIndex(0)
-    } catch (err) {
-      console.error('Search error:', err)
     } finally {
       setLoading(false)
     }

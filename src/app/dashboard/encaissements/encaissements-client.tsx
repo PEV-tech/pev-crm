@@ -3,14 +3,15 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Download, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { TrendingUp, Download, ChevronDown, ChevronUp, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { VDossiersComplets } from '@/types/database'
 
+const ITEMS_PER_PAGE = 25
+
+import { formatCurrency as _formatCurrency } from '@/lib/formatting'
 const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined || value === 0) return '-'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
+  if (value === 0) return '-'
+  return _formatCurrency(value)
 }
 
 const MONTH_ORDER: Record<string, number> = {
@@ -89,7 +90,7 @@ function isFrance(clientPays: string | null): boolean {
   return p === 'FRANCE' || p === 'FR'
 }
 
-function factureToRemEntry(f: any): RemEntry {
+function factureToRemEntry(f: VDossiersComplets): RemEntry {
   const commBrute = Number(f.commission_brute || 0)
   const remApporteur = Number(f.rem_apporteur || 0)
   const partCabinet = Number(f.part_cabinet || 0)
@@ -162,7 +163,7 @@ interface DrillDownInfo {
 interface EncaissementsClientProps {
   initialData: RemEntry[]
   role?: string
-  facturesPaid?: any[]
+  facturesPaid?: VDossiersComplets[]
 }
 
 export function EncaissementsClient({ initialData, role = 'manager', facturesPaid = [] }: EncaissementsClientProps) {
@@ -170,15 +171,27 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
   const isManager = !isBackOffice
   const [expandedMonths, setExpandedMonths] = React.useState<Record<string, boolean>>({})
   const [drillDown, setDrillDown] = React.useState<DrillDownInfo | null>(null)
+  const [monthPagination, setMonthPagination] = React.useState<Record<string, number>>({})
 
   const toggleMonth = (mois: string) => {
     setExpandedMonths(prev => ({ ...prev, [mois]: !prev[mois] }))
   }
 
-  // Use encaissements_rem if available, otherwise compute from facturesPaid
+  // Merge encaissements_rem with computed facturesPaid entries
+  // encaissements_rem may not include recent dossiers (e.g. paid this month)
   const data: RemEntry[] = React.useMemo(() => {
-    if (initialData.length > 0) return initialData
-    return facturesPaid.map(factureToRemEntry)
+    if (initialData.length === 0) return facturesPaid.map(factureToRemEntry)
+    if (facturesPaid.length === 0) return initialData
+
+    // Build set of dossier IDs already covered by encaissements_rem
+    const existingIds = new Set(initialData.map(e => e.id))
+
+    // Compute entries from facturesPaid that are NOT already in initialData
+    const extraEntries = facturesPaid
+      .filter(f => f.id && !existingIds.has(f.id))
+      .map(factureToRemEntry)
+
+    return [...initialData, ...extraEntries]
   }, [initialData, facturesPaid])
 
   // Drill-down: show dossiers for a given column, optionally filtered by month
@@ -423,6 +436,10 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       {byMonth.map(([mois, entries]) => {
         const mt = sumEntries(entries)
         const isExpanded = expandedMonths[mois] !== false
+        const page = monthPagination[mois] || 0
+        const totalPages = Math.ceil(entries.length / ITEMS_PER_PAGE)
+        const paginatedEntries = entries.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE)
+
         return (
           <Card key={mois}>
             <CardHeader
@@ -473,7 +490,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                       </tr>
                     </thead>
                     <tbody>
-                      {entries.map((entry) => (
+                      {paginatedEntries.map((entry) => (
                         <MonthRow key={entry.id} entry={entry as any} mois={mois} />
                       ))}
                       <MonthRow
@@ -485,6 +502,40 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination for month entries */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <span className="text-xs text-gray-600">
+                      {entries.length === 0 ? '0' : (page * ITEMS_PER_PAGE) + 1} - {Math.min((page + 1) * ITEMS_PER_PAGE, entries.length)} sur {entries.length}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setMonthPagination(prev => ({ ...prev, [mois]: page - 1 }))}
+                        disabled={page === 0}
+                        className="gap-1"
+                      >
+                        <ChevronLeft size={14} />
+                        Préc.
+                      </Button>
+                      <span className="text-xs text-gray-600 flex items-center px-2">
+                        {page + 1}/{totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setMonthPagination(prev => ({ ...prev, [mois]: page + 1 }))}
+                        disabled={(page + 1) * ITEMS_PER_PAGE >= entries.length}
+                        className="gap-1"
+                      >
+                        Suiv.
+                        <ChevronRight size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             )}
           </Card>

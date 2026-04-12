@@ -2,6 +2,13 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 import { Database } from '@/types/database'
 
+// Routes restricted to manager and back_office roles
+const MANAGER_ROUTES = [
+  '/dashboard/remunerations',
+  '/dashboard/encaissements',
+  '/dashboard/parametres',
+]
+
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl
   const publicRoutes = ['/login', '/auth']
@@ -43,13 +50,30 @@ export async function updateSession(request: NextRequest) {
   // Redirect unauthenticated users to login (except public routes)
   if (!isPublicRoute && (!user || error)) {
     const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
+    // Sanitize redirect to prevent open redirect attacks
+    const safeRedirect = pathname.startsWith('/') && !pathname.startsWith('//') ? pathname : '/dashboard'
+    loginUrl.searchParams.set('redirect', safeRedirect)
     return NextResponse.redirect(loginUrl)
   }
 
   // Redirect authenticated users away from login page
   if (isPublicRoute && user && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // Server-side role check for manager-only routes
+  const isManagerRoute = MANAGER_ROUTES.some(route => pathname.startsWith(route))
+  if (isManagerRoute && user) {
+    const { data: consultant } = await supabase
+      .from('consultants')
+      .select('role')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    const role = consultant?.role
+    if (role !== 'manager' && role !== 'back_office') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
   }
 
   return response

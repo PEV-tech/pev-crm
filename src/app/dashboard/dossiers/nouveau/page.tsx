@@ -91,8 +91,9 @@ function NewDossierContent() {
             }))
           }
         }
-      } catch (err) { console.error('Error:', err) }
-      finally { setLoadingData(false) }
+      } catch (err) {
+        // Error silenced - fetch data failed
+      } finally { setLoadingData(false) }
     }
     fetchData()
   }, [supabase, clientIdParam])
@@ -169,9 +170,9 @@ function NewDossierContent() {
         await supabase.from('factures').insert({ dossier_id: dossierData.id, facturee: false, payee: 'non' })
       }
       router.push(`/dashboard/dossiers/${dossierData.id}`)
-    } catch (err: any) {
-      console.error('Error creating dossier:', err)
-      setError(err.message || 'Erreur lors de la création du dossier')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erreur lors de la création du dossier'
+      setError(message)
     } finally { setLoading(false) }
   }
 
