@@ -266,7 +266,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         }
       }
 
-      // 2. Update client fields (réglementaire + pays â columns on clients table)
+      // 2. Update client fields (réglementaire + pays — columns on clients table)
       const clientId = dossier?.client_id
       if (clientId) {
         const clientUpdate: Record<string, any> = {
@@ -416,7 +416,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     }
   }
 
-  // Delete handler â only for non-finalized dossiers
+  // Delete handler — only for non-finalized dossiers
   const canDelete = dossier && !isConsultant
   const handleDelete = async () => {
     if (!dossier?.id) return
@@ -566,6 +566,18 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       setNewApporteurNom('')
       setNewApporteurPrenom('')
       setNewApporteurTauxDefaut('')
+      // Auto-save: link new apporteur to dossier immediately
+      if (dossier?.id) {
+        const nomComplet = (data as any).prenom + ' ' + (data as any).nom
+        await supabase.from('dossiers').update({
+          has_apporteur_ext: true,
+          apporteur_id: (data as any).id,
+          apporteur_ext_nom: nomComplet,
+          taux_apporteur_ext: (data as any).taux_commission || 0,
+        }).eq('id', dossier.id)
+        const { data: refreshed } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).limit(1).maybeSingle()
+        if (refreshed) setDossier(refreshed as VDossiersComplets)
+      }
     } catch (err) {
       console.error('Error creating apporteur:', err)
     } finally {
@@ -700,7 +712,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   <p className="text-sm font-medium text-gray-500">Produit</p>
                   {isEditing ? (
                     <Select name="produit_id" value={editForm.produit_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">â Aucun â</option>
+                      <option value="">— Aucun —</option>
                       {produits.map((p) => (
                         <option key={p.id} value={p.id}>{p.nom}</option>
                       ))}
@@ -713,7 +725,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   <p className="text-sm font-medium text-gray-500">Compagnie</p>
                   {isEditing ? (
                     <Select name="compagnie_id" value={editForm.compagnie_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">â Aucun â</option>
+                      <option value="">— Aucun —</option>
                       {compagnies.map((c) => (
                         <option key={c.id} value={c.id}>{c.nom}</option>
                       ))}
@@ -799,7 +811,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   <p className="text-sm font-medium text-gray-500">Mode de détention</p>
                   {isEditing ? (
                     <Select name="mode_detention" value={editForm.mode_detention} onChange={handleEditChange} className="mt-1">
-                      <option value="">â Aucun â</option>
+                      <option value="">— Aucun —</option>
                       <option value="PP">Pleine Propriété</option>
                       <option value="NP">Nue-Propriété</option>
                       <option value="US">Usufruit</option>
@@ -832,7 +844,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             </CardContent>
           </Card>
 
-          {/* Commission Panel â visible for all statuses if data is available */}
+          {/* Commission Panel — visible for all statuses if data is available */}
           {hasCommissionData && (
             <CommissionPanel
               dossier={dossier}
