@@ -266,7 +266,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         }
       }
 
-      // 2. Update client fields (réglementaire + pays — columns on clients table)
+      // 2. Update client fields (réglementaire + pays â columns on clients table)
       const clientId = dossier?.client_id
       if (clientId) {
         const clientUpdate: Record<string, any> = {
@@ -362,7 +362,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       // Save apporteur externe to dossiers table
       const apporteurUpdate: Record<string, any> = {
         has_apporteur_ext: editApporteurExt,
-        apporteur_ext_nom: editApporteurExt ? (editApporteurId ? null : editApporteurExtNom || null) : null,
+        apporteur_ext_nom: editApporteurExt ? (editApporteurId ? (() => { const found = apporteurs.find(a => a.id === editApporteurId); return found ? found.prenom + ' ' + found.nom : editApporteurExtNom || null; })() : editApporteurExtNom || null) : null,
         apporteur_id: editApporteurExt && editApporteurId ? editApporteurId : null,
         taux_apporteur_ext: editApporteurExt && editApporteurTaux ? parseFloat(editApporteurTaux) / 100 : 0,
       }
@@ -416,7 +416,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     }
   }
 
-  // Delete handler — only for non-finalized dossiers
+  // Delete handler â only for non-finalized dossiers
   const canDelete = dossier && !isConsultant
   const handleDelete = async () => {
     if (!dossier?.id) return
@@ -547,7 +547,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     }
   }, [commissionNetteApporteur, consultantTauxRemuneration, commissionBruteCalculee, partApporteurCalculee, dossier?.part_cabinet])
 
-  // ── Créer un nouvel apporteur à la volée
+  // ââ Créer un nouvel apporteur à la volée
   const handleCreateApporteur = async () => {
     if (!newApporteurNom.trim() || !newApporteurPrenom.trim()) return
     setSavingNewApporteur(true)
@@ -700,7 +700,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   <p className="text-sm font-medium text-gray-500">Produit</p>
                   {isEditing ? (
                     <Select name="produit_id" value={editForm.produit_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">— Aucun —</option>
+                      <option value="">â Aucun â</option>
                       {produits.map((p) => (
                         <option key={p.id} value={p.id}>{p.nom}</option>
                       ))}
@@ -713,7 +713,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   <p className="text-sm font-medium text-gray-500">Compagnie</p>
                   {isEditing ? (
                     <Select name="compagnie_id" value={editForm.compagnie_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">— Aucun —</option>
+                      <option value="">â Aucun â</option>
                       {compagnies.map((c) => (
                         <option key={c.id} value={c.id}>{c.nom}</option>
                       ))}
@@ -799,7 +799,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   <p className="text-sm font-medium text-gray-500">Mode de détention</p>
                   {isEditing ? (
                     <Select name="mode_detention" value={editForm.mode_detention} onChange={handleEditChange} className="mt-1">
-                      <option value="">— Aucun —</option>
+                      <option value="">â Aucun â</option>
                       <option value="PP">Pleine Propriété</option>
                       <option value="NP">Nue-Propriété</option>
                       <option value="US">Usufruit</option>
@@ -832,7 +832,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             </CardContent>
           </Card>
 
-          {/* Commission Panel — visible for all statuses if data is available */}
+          {/* Commission Panel â visible for all statuses if data is available */}
           {hasCommissionData && (
             <CommissionPanel
               dossier={dossier}
