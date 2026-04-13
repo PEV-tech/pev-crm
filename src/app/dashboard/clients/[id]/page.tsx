@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +12,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, User, FileText, Shield, TrendingUp,
   MapPin, Calendar, DollarSign, CheckCircle,
-  Mail, Phone, CreditCard, FolderOpen, ExternalLink, Plus, Send, Clock, Pencil, Save, X,
+  Mail, Phone, CreditCard, FolderOpen, ExternalLink, Plus, Send, Clock, Pencil, Save, X, Trash2, Loader2,
 } from 'lucide-react'
 import { ClientRelances } from '@/components/shared/client-relances'
 import { JournalSuivi } from '@/components/shared/journal-suivi'
@@ -162,7 +162,7 @@ function GoogleSuiteCard({
   const formatRdvDate = (dateStr: string) => {
     const d = new Date(dateStr)
     return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-      + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      + ' Ã  ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -278,11 +278,11 @@ function GoogleSuiteCard({
         {/* Upcoming RDVs list */}
         {rdvList.filter(r => new Date(r.date_rdv) >= now).length > 1 && (
           <div className="space-y-1.5">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">RDV à venir</p>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">RDV Ã  venir</p>
             {rdvList.filter(r => new Date(r.date_rdv) >= now).map(r => (
               <div key={r.id} className="flex items-center justify-between p-1.5 rounded bg-green-50/50 text-xs">
                 <span className="text-gray-700">{formatRdvDate(r.date_rdv)} · {RDV_TYPE_LABELS[r.type] || r.type}</span>
-                <button onClick={() => handleDeleteRdv(r.id)} className="text-gray-400 hover:text-red-500 text-[10px]">✕</button>
+                <button onClick={() => handleDeleteRdv(r.id)} className="text-gray-400 hover:text-red-500 text-[10px]">â</button>
               </div>
             ))}
           </div>
@@ -341,8 +341,11 @@ function GoogleSuiteCard({
 
 export default function ClientDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const clientId = params.id as string
   const { consultant: currentUser } = useUser()
+  const [deletingClient, setDeletingClient] = React.useState(false)
+  const [showDeleteClientConfirm, setShowDeleteClientConfirm] = React.useState(false)
   const isConsultant = currentUser?.role === 'consultant'
 
   const [client, setClient] = React.useState<ClientInfo | null>(null)
@@ -426,6 +429,23 @@ export default function ClientDetailPage() {
     fetchData()
   }, [clientId, supabase])
 
+  const handleDeleteClient = async () => {
+    if (!client?.id) return
+    setDeletingClient(true)
+    try {
+      const sb = createClient()
+      const { data: ds } = await sb.from('dossiers').select('id').eq('client_id', client.id)
+      if (ds?.length) {
+        for (const d of ds) {
+          await sb.from('factures').delete().eq('dossier_id', d.id)
+          await sb.from('commissions').delete().eq('dossier_id', d.id)
+        }
+        await sb.from('dossiers').delete().eq('client_id', client.id)
+      }
+      await sb.from('clients').delete().eq('id', client.id)
+      router.push('/dashboard/dossiers')
+    } catch (e) { console.error(e); setDeletingClient(false); setShowDeleteClientConfirm(false) }
+  }
   const handleSaveContact = async () => {
     if (!client) return
     setSavingContact(true)
@@ -467,7 +487,7 @@ export default function ClientDetailPage() {
     setSavingReglementaire(false)
   }
 
-  // handleSaveNotes removed — replaced by JournalSuivi component
+  // handleSaveNotes removed â replaced by JournalSuivi component
 
   if (loading) return <div className="flex items-center justify-center min-h-[400px] text-gray-500">Chargement...</div>
   if (notFound || !client) {
@@ -490,7 +510,7 @@ export default function ClientDetailPage() {
   const finalisedCount = dossiers.filter(d => d.statut === 'client_finalise').length
   const enCoursCount = dossiers.filter(d => d.statut === 'client_en_cours').length
 
-  // Compliance — 6 champs : KYC/Réglementaire, DER, PI, PRECO, LM, RM
+  // Compliance â 6 champs : KYC/Réglementaire, DER, PI, PRECO, LM, RM
   const complianceFields = [
     { label: 'KYC', ok: client.statut_kyc === 'oui' },
     { label: 'DER', ok: !!client.der },
@@ -513,11 +533,12 @@ export default function ClientDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/ma-clientele">
-          <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button>
-        </Link>
-        <div className="flex-1">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/ma-clientele">
+            <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button>
+          </Link>
+          <div className="flex-1">
           <div className="flex items-center gap-3">
             <div className="bg-indigo-100 p-3 rounded-xl">
               <User size={28} className="text-indigo-600" />
@@ -550,6 +571,24 @@ export default function ClientDetailPage() {
             </div>
           </div>
         </div>
+        </div>
+        {!isConsultant && (
+          <div className="flex items-center gap-2">
+            {showDeleteClientConfirm ? (
+              <>
+                <span className="text-sm text-red-600 font-medium">Confirmer ?</span>
+                <Button size="sm" variant="outline" onClick={() => setShowDeleteClientConfirm(false)}>Annuler</Button>
+                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white gap-2" onClick={handleDeleteClient} disabled={deletingClient}>
+                  {deletingClient ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}Supprimer
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setShowDeleteClientConfirm(true)}>
+                <Trash2 size={14} />Supprimer le client
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Stats cards */}
@@ -617,6 +656,9 @@ export default function ClientDetailPage() {
                                 <span className="font-medium text-gray-900 text-sm">
                                   {d.produit_nom || 'Sans produit'} {d.compagnie_nom ? `· ${d.compagnie_nom}` : ''}
                                 </span>
+                                {d.apporteur_ext_nom && (
+                                  <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">· {d.apporteur_ext_nom}</span>
+                                )}
                                 <StatusBadge
                                   status={(d.statut as 'prospect' | 'client_en_cours' | 'client_finalise') || 'prospect'}
                                   type="dossier"
@@ -671,7 +713,7 @@ export default function ClientDetailPage() {
                   <button
                     onClick={() => setEditingContact(true)}
                     className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-                    title="Éditer"
+                    title="Ãditer"
                   >
                     <Pencil size={16} className="text-gray-500" />
                   </button>
@@ -828,7 +870,7 @@ export default function ClientDetailPage() {
                     <button
                       onClick={() => setEditingReglementaire(true)}
                       className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-                      title="Éditer"
+                      title="Ãditer"
                     >
                       <Pencil size={16} className="text-gray-500" />
                     </button>
@@ -954,7 +996,7 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Journal de suivi structuré (CDC §8) */}
+          {/* Journal de suivi structuré (CDC Â§8) */}
           <JournalSuivi
             clientId={clientId}
             currentUserId={currentUser?.id}
