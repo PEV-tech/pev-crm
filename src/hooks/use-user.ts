@@ -30,7 +30,7 @@ export function useRole() {
 
 export function useIsManager() {
   const role = useRole()
-  return role === 'manager'
+  return (role === 'manager' || role === 'gestionnaire')
 }
 
 export function useConsultantInfo() {
