@@ -200,7 +200,7 @@ export function CommissionPanel({
                       <label className="text-sm font-medium text-gray-700 block mb-1">Apporteur</label>
                       <div className="flex gap-1">
                         <select value={editApporteurId} onChange={(e) => { onEditApporteurIdChange?.(e.target.value); const f = apporteurs.find(a => a.id === e.target.value); if (f && f.taux_commission > 0) onEditApporteurTauxChange?.((f.taux_commission * 100).toFixed(2)); }} className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
-                          <option value="">â Sélectionner â</option>
+                          <option value="">— Sélectionner —</option>
                           {apporteurs.map(a => (<option key={a.id} value={a.id}>{a.prenom} {a.nom}</option>))}
                         </select>
                         <button type="button" onClick={() => onShowNewApporteurModalChange?.(true)} className="p-1.5 rounded-lg border border-gray-200 hover:bg-indigo-50 text-indigo-600" title="Créer"><Plus size={14} /></button>
@@ -310,7 +310,7 @@ export function CommissionPanel({
           )}
         </div>
 
-        {/* Encours trimestriel â uniquement pour PE, CAPI LUX, CAV LUX */}
+        {/* Encours trimestriel — uniquement pour PE, CAPI LUX, CAV LUX */}
         {dossierHasEncours && (effectiveTauxGestion || quarterlyEncoursCommission !== null) && (
           <div className="border-t border-gray-200 pt-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1">
@@ -372,7 +372,7 @@ export function CommissionPanel({
         {/* Status note for non-finalised */}
         {dossier.statut !== 'client_finalise' && (
           <p className="text-xs text-amber-600 bg-amber-50 rounded p-2">
-            â  Dossier non finalisé â ces montants sont des estimations basées sur le montant actuel.
+            â  Dossier non finalisé — ces montants sont des estimations basées sur le montant actuel.
           </p>
         )}
       </CardContent>
@@ -390,7 +390,7 @@ export function CommissionPanel({
                 <div><label className="text-xs font-medium text-gray-600 block mb-1">Prénom</label><Input value={newApporteurPrenom} onChange={(e) => onNewApporteurPrenomChange?.(e.target.value)} placeholder="Prénom" className="w-full" /></div>
                 <div><label className="text-xs font-medium text-gray-600 block mb-1">Nom</label><Input value={newApporteurNom} onChange={(e) => onNewApporteurNomChange?.(e.target.value)} placeholder="Nom" className="w-full" /></div>
               </div>
-              <div><label className="text-xs font-medium text-gray-600 block mb-1">Taux habituel (%) â optionnel</label><Input type="number" value={newApporteurTauxDefaut} onChange={(e) => onNewApporteurTauxDefautChange?.(e.target.value)} placeholder="ex: 20" step="0.01" min="0" max="100" className="w-full" /></div>
+              <div><label className="text-xs font-medium text-gray-600 block mb-1">Taux habituel (%) — optionnel</label><Input type="number" value={newApporteurTauxDefaut} onChange={(e) => onNewApporteurTauxDefautChange?.(e.target.value)} placeholder="ex: 20" step="0.01" min="0" max="100" className="w-full" /></div>
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" onClick={() => onShowNewApporteurModalChange?.(false)}>Annuler</button>
                 <button className="flex-1 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-1" onClick={onCreateApporteur} disabled={savingNewApporteur || !newApporteurNom.trim() || !newApporteurPrenom.trim()}>{savingNewApporteur ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}Créer</button>
