@@ -164,12 +164,13 @@ export function RemunerationsClient({
     const finDossiers = consultantDossiers.filter(d => d.statut === 'client_finalise')
     const ecDossiers = consultantDossiers.filter(d => d.statut === 'client_en_cours' && (d.commission_brute || 0) > 0)
     const acquis = finDossiers.reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
+    const encaisse = finDossiers.filter(d => d.payee === 'oui').reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
     const facture = finDossiers.filter(d => d.facturee).reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
     const resteAFacturer = acquis - facture
     const enCoursEstime = ecDossiers.reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
     const commissionBruteTotal = finDossiers.reduce((sum, d) => sum + (d.commission_brute || 0), 0)
     const partCabinet = finDossiers.reduce((sum, d) => sum + (d.part_cabinet || 0), 0)
-    return { acquis, facture, resteAFacturer, enCoursEstime, commissionBruteTotal, partCabinet, nbFinalises: finDossiers.length, nbEnCours: ecDossiers.length }
+    return { acquis, encaisse, facture, resteAFacturer, enCoursEstime, commissionBruteTotal, partCabinet, nbFinalises: finDossiers.length, nbEnCours: ecDossiers.length }
   }, [])
 
   // ==========================================
@@ -442,8 +443,13 @@ export function RemunerationsClient({
                 <p className="text-xs text-gray-500">{myCagnotte.nbFinalises} dossier(s)</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Déjà facturé</p>
-                <p className="text-2xl font-bold text-green-700">{formatCurrency(myCagnotte.facture)}</p>
+                <p className="text-sm text-gray-600">Encaissé</p>
+                <p className="text-2xl font-bold text-green-700">{formatCurrency(myCagnotte.encaisse)}</p>
+                <p className="text-xs text-gray-500">paiements reçus</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Facturé (en attente)</p>
+                <p className="text-2xl font-bold text-blue-600">{formatCurrency(myCagnotte.facture - myCagnotte.encaisse)}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Cagnotte</p>
