@@ -38,6 +38,8 @@ interface ClientDossier {
   consultant_nom: string | null
   taux_commission: number | null
   produit_categorie: string | null
+  apporteur_ext_nom: string | null
+  has_apporteur_ext: boolean | null
 }
 
 interface ClientInfo {
@@ -162,7 +164,7 @@ function GoogleSuiteCard({
   const formatRdvDate = (dateStr: string) => {
     const d = new Date(dateStr)
     return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-      + ' Ã  ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -278,7 +280,7 @@ function GoogleSuiteCard({
         {/* Upcoming RDVs list */}
         {rdvList.filter(r => new Date(r.date_rdv) >= now).length > 1 && (
           <div className="space-y-1.5">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">RDV Ã  venir</p>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">RDV à venir</p>
             {rdvList.filter(r => new Date(r.date_rdv) >= now).map(r => (
               <div key={r.id} className="flex items-center justify-between p-1.5 rounded bg-green-50/50 text-xs">
                 <span className="text-gray-700">{formatRdvDate(r.date_rdv)} · {RDV_TYPE_LABELS[r.type] || r.type}</span>
@@ -713,7 +715,7 @@ export default function ClientDetailPage() {
                   <button
                     onClick={() => setEditingContact(true)}
                     className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-                    title="Ãditer"
+                    title="Éditer"
                   >
                     <Pencil size={16} className="text-gray-500" />
                   </button>
@@ -870,7 +872,7 @@ export default function ClientDetailPage() {
                     <button
                       onClick={() => setEditingReglementaire(true)}
                       className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-                      title="Ãditer"
+                      title="Éditer"
                     >
                       <Pencil size={16} className="text-gray-500" />
                     </button>
@@ -996,7 +998,7 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Journal de suivi structuré (CDC Â§8) */}
+          {/* Journal de suivi structuré (CDC §8) */}
           <JournalSuivi
             clientId={clientId}
             currentUserId={currentUser?.id}
