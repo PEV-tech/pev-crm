@@ -860,6 +860,21 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               editApporteurExt={editApporteurExt}
               editApporteurExtNom={editApporteurExtNom}
               editApporteurExtTaux={editApporteurExtTaux}
+              apporteurs={apporteurs}
+              editApporteurId={editApporteurId}
+              editApporteurTaux={editApporteurTaux}
+              showNewApporteurModal={showNewApporteurModal}
+              newApporteurNom={newApporteurNom}
+              newApporteurPrenom={newApporteurPrenom}
+              newApporteurTauxDefaut={newApporteurTauxDefaut}
+              savingNewApporteur={savingNewApporteur}
+              onEditApporteurIdChange={setEditApporteurId}
+              onEditApporteurTauxChange={setEditApporteurTaux}
+              onShowNewApporteurModalChange={setShowNewApporteurModal}
+              onNewApporteurNomChange={setNewApporteurNom}
+              onNewApporteurPrenomChange={setNewApporteurPrenom}
+              onNewApporteurTauxDefautChange={setNewApporteurTauxDefaut}
+              onCreateApporteur={handleCreateApporteur}
             />
           )}
         </div>
