@@ -72,6 +72,15 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [editApporteurExtNom, setEditApporteurExtNom] = React.useState('')
   const [editApporteurExtTaux, setEditApporteurExtTaux] = React.useState('')
   const [editVille, setEditVille] = React.useState<string>('')
+  // Apporteurs
+  const [apporteurs, setApporteurs] = React.useState<{ id: string; nom: string; prenom: string; taux_commission: number }[]>([])
+  const [editApporteurId, setEditApporteurId] = React.useState<string>('')
+  const [editApporteurTaux, setEditApporteurTaux] = React.useState<string>('')
+  const [showNewApporteurModal, setShowNewApporteurModal] = React.useState(false)
+  const [newApporteurNom, setNewApporteurNom] = React.useState('')
+  const [newApporteurPrenom, setNewApporteurPrenom] = React.useState('')
+  const [newApporteurTauxDefaut, setNewApporteurTauxDefaut] = React.useState('')
+  const [savingNewApporteur, setSavingNewApporteur] = React.useState(false)
   const [editDateEntreeRelation, setEditDateEntreeRelation] = React.useState<string>('')
   const [editDateSignature, setEditDateSignature] = React.useState<string>('')
   const [editModeDetention, setEditModeDetention] = React.useState<string>('')
@@ -85,16 +94,18 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   React.useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [dossierRes, produitsRes, compagniesRes, tauxRes] = await Promise.all([
+        const [dossierRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
           supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle(),
           supabase.from('produits').select('id, nom').order('nom'),
           supabase.from('compagnies').select('id, nom').order('nom'),
           supabase.from('taux_produit_compagnie').select('produit_id, compagnie_id, taux').eq('actif', true),
+          supabase.from('apporteurs').select('id, nom, prenom, taux_commission').order('nom'),
         ])
 
         if (produitsRes.data) setProduits(produitsRes.data)
         if (compagniesRes.data) setCompagnies(compagniesRes.data)
         if (tauxRes.data) setTauxMap(tauxRes.data)
+        if (apporteursRes.data) setApporteurs(apporteursRes.data)
 
         const { data, error } = dossierRes
         if (error || !data) { setNotFound(true) }
@@ -147,6 +158,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           setEditApporteurExt(!!data.has_apporteur_ext)
           setEditApporteurExtNom(data.apporteur_ext_nom || '')
           setEditApporteurExtTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
+          // Initialize apporteur (table)
+          setEditApporteurId((data as any).apporteur_id || '')
+          setEditApporteurTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
 
           // Fetch grille taux for entry + encours commission (LUX/PE)
           if (data.montant && data.montant > 0) {
@@ -348,8 +362,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       // Save apporteur externe to dossiers table
       const apporteurUpdate: Record<string, any> = {
         has_apporteur_ext: editApporteurExt,
-        apporteur_ext_nom: editApporteurExt ? editApporteurExtNom || null : null,
-        taux_apporteur_ext: editApporteurExt && editApporteurExtTaux ? parseFloat(editApporteurExtTaux) / 100 : 0,
+        apporteur_ext_nom: editApporteurExt ? (editApporteurId ? null : editApporteurExtNom || null) : null,
+        apporteur_id: editApporteurExt && editApporteurId ? editApporteurId : null,
+        taux_apporteur_ext: editApporteurExt && editApporteurTaux ? parseFloat(editApporteurTaux) / 100 : 0,
       }
       await supabase.from('dossiers').update(apporteurUpdate).eq('id', dossier.id)
 
@@ -388,6 +403,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         setEditApporteurExt(!!data.has_apporteur_ext)
         setEditApporteurExtNom(data.apporteur_ext_nom || '')
         setEditApporteurExtTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
+        setEditApporteurId((data as any).apporteur_id || '')
+        setEditApporteurTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
       }
 
       setEditingTaux(false)
@@ -478,13 +495,83 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
 
   // Part consultant from entry: use consultantTauxRemuneration directly
   // IMPORTANT: all useMemo MUST be before early returns to respect React hook rules
+  // Calcul apporteur
+  const tauxApporteurEffectif = React.useMemo(() => {
+    if (!dossier?.has_apporteur_ext) return 0
+    return dossier?.taux_apporteur_ext || 0
+  }, [dossier?.has_apporteur_ext, dossier?.taux_apporteur_ext])
+
+  const partApporteurCalculee = React.useMemo(() => {
+    if (!commissionBruteCalculee || tauxApporteurEffectif <= 0) return 0
+    return commissionBruteCalculee * tauxApporteurEffectif
+  }, [commissionBruteCalculee, tauxApporteurEffectif])
+
+  const commissionNetteApporteur = React.useMemo(() => {
+    if (!commissionBruteCalculee) return null
+    return commissionBruteCalculee - partApporteurCalculee
+  }, [commissionBruteCalculee, partApporteurCalculee])
+
   const partConsultantEntree = React.useMemo(() => {
-    if (!commissionBruteCalculee) return dossier?.rem_apporteur ?? null
+    if (!commissionNetteApporteur) return dossier?.rem_apporteur ?? null
     if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-      return commissionBruteCalculee * consultantTauxRemuneration
+      return commissionNetteApporteur * consultantTauxRemuneration
     }
     return dossier?.rem_apporteur ?? null
-  }, [commissionBruteCalculee, consultantTauxRemuneration, dossier?.rem_apporteur])
+  }, [commissionNetteApporteur, consultantTauxRemuneration, dossier?.rem_apporteur])
+
+  // Nom apporteur résolu
+  const apporteurNomResolu = React.useMemo(() => {
+    if (!dossier?.has_apporteur_ext) return null
+    const apporteurId = (dossier as any).apporteur_id
+    if (apporteurId) {
+      const found = apporteurs.find(a => a.id === apporteurId)
+      if (found) return `${found.prenom} ${found.nom}`
+    }
+    return (dossier as any).apporteur_nom_complet || dossier?.apporteur_ext_nom || 'Apporteur externe'
+  }, [dossier, apporteurs])
+
+  // Breakdown complet pour managers/BO
+  const breakdownComplet = React.useMemo(() => {
+    if (!commissionNetteApporteur || !consultantTauxRemuneration) return null
+    const net = commissionNetteApporteur
+    const partConsultant = net * consultantTauxRemuneration
+    const partCabinet = dossier?.part_cabinet ?? (net * 0.25)
+    const partPool = net - partConsultant - partCabinet
+    return {
+      brute: commissionBruteCalculee || 0,
+      apporteur: partApporteurCalculee,
+      nette: net,
+      consultant: partConsultant,
+      pool: partPool > 0 ? partPool : 0,
+      cabinet: partCabinet,
+    }
+  }, [commissionNetteApporteur, consultantTauxRemuneration, commissionBruteCalculee, partApporteurCalculee, dossier?.part_cabinet])
+
+  // ── Créer un nouvel apporteur à la volée
+  const handleCreateApporteur = async () => {
+    if (!newApporteurNom.trim() || !newApporteurPrenom.trim()) return
+    setSavingNewApporteur(true)
+    try {
+      const { data, error } = await supabase.from('apporteurs').insert({
+        nom: newApporteurNom.trim(),
+        prenom: newApporteurPrenom.trim(),
+        taux_commission: newApporteurTauxDefaut ? parseFloat(newApporteurTauxDefaut) / 100 : 0,
+        created_by: currentUser?.id || null,
+      }).select().single()
+      if (error) throw error
+      setApporteurs(prev => [...prev, data as any].sort((a: any, b: any) => a.nom.localeCompare(b.nom)))
+      setEditApporteurId((data as any).id)
+      if ((data as any).taux_commission > 0) setEditApporteurTaux(((data as any).taux_commission * 100).toFixed(2))
+      setShowNewApporteurModal(false)
+      setNewApporteurNom('')
+      setNewApporteurPrenom('')
+      setNewApporteurTauxDefaut('')
+    } catch (err) {
+      console.error('Error creating apporteur:', err)
+    } finally {
+      setSavingNewApporteur(false)
+    }
+  }
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   if (notFound || !dossier) {
