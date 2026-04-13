@@ -106,7 +106,7 @@ export function CommissionPanel({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Award size={20} className="text-indigo-600" />
-            {isConsultant ? 'Ma rÃÂ©munÃÂ©ration' : 'DÃÂ©tail de la commission'}
+            {isConsultant ? 'Ma rémunération' : 'Détail de la commission'}
           </CardTitle>
           {!editingTaux && (
             <Button
@@ -140,7 +140,7 @@ export function CommissionPanel({
             <div className="space-y-3">
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">
-                  Taux d'entrÃÂ©e (%)
+                  Taux d'entrée (%)
                 </label>
                 <Input
                   type="number"
@@ -245,14 +245,14 @@ export function CommissionPanel({
           </div>
         )}
 
-        {/* Droits d'entrÃÂ©e (souscription) */}
+        {/* Droits d'entrée (souscription) */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
-            ÃÂ la souscription (droits d'entrÃÂ©e)
+            À la souscription (droits d'entrée)
           </p>
           {isConsultant ? (
             <div className="bg-indigo-50 rounded-lg p-4">
-              <p className="text-sm text-indigo-700">Votre rÃÂ©munÃÂ©ration</p>
+              <p className="text-sm text-indigo-700">Votre rémunération</p>
               <p className="text-2xl font-bold text-indigo-900 mt-1">{formatCurrency(partConsultantEntree)}</p>
               {effectiveTauxEntree && (
                 <p className="text-xs text-indigo-600 mt-1">Taux commission : {formatPct(effectiveTauxEntree)}</p>
@@ -270,11 +270,11 @@ export function CommissionPanel({
                     <>
                       <p className="text-xs text-gray-500 mt-1">
                         {tauxEntree && dossier.taux_commission && (Math.abs(dossier.taux_commission - tauxEntree) > 0.00001)
-                          ? `Grille : ${formatPct(tauxEntree)} Ã¢ÂÂ AppliquÃÂ© : ${formatPct(dossier.taux_commission)}`
-                          : `Taux appliquÃÂ© : ${formatPct(effectiveTauxEntree)}`
+                          ? `Grille : ${formatPct(tauxEntree)} â Appliqué : ${formatPct(dossier.taux_commission)}`
+                          : `Taux appliqué : ${formatPct(effectiveTauxEntree)}`
                         }
                       </p>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} ÃÂ {formatPct(effectiveTauxEntree)}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(dossier.montant)} × {formatPct(effectiveTauxEntree)}</p>
                     </>
                   ) : null}
                 </div>
@@ -303,29 +303,29 @@ export function CommissionPanel({
               </div>
               {dossier.produit_nom && dossier.compagnie_nom && (
                 <p className="text-xs text-gray-400 pt-1 border-t border-gray-100">
-                  {dossier.produit_nom} Ã· {dossier.compagnie_nom} Ã· {dossier.financement || '-'}
+                  {dossier.produit_nom} · {dossier.compagnie_nom} · {dossier.financement || '-'}
                 </p>
               )}
             </div>
           )}
         </div>
 
-        {/* Encours trimestriel Ã¢ÂÂ uniquement pour PE, CAPI LUX, CAV LUX */}
+        {/* Encours trimestriel â uniquement pour PE, CAPI LUX, CAV LUX */}
         {dossierHasEncours && (effectiveTauxGestion || quarterlyEncoursCommission !== null) && (
           <div className="border-t border-gray-200 pt-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3 flex items-center gap-1">
               <TrendingUp size={13} />
-              Sur encours (rÃÂ©munÃÂ©ration trimestrielle)
+              Sur encours (rémunération trimestrielle)
             </p>
             {isConsultant ? (
               partConsultantEncours !== null ? (
                 <div className="bg-green-50 rounded-lg p-4">
-                  <p className="text-sm text-green-700">Votre part estimÃÂ©e / trimestre</p>
+                  <p className="text-sm text-green-700">Votre part estimée / trimestre</p>
                   <p className="text-2xl font-bold text-green-900 mt-1">
                     {formatCurrency(partConsultantEncours)}
                   </p>
                   <p className="text-xs text-green-600 mt-1">
-                    Taux gestion : {formatPct(effectiveTauxGestion)} Ã· Encours : {formatCurrency(dossier.montant)}
+                    Taux gestion : {formatPct(effectiveTauxGestion)} · Encours : {formatCurrency(dossier.montant)}
                   </p>
                 </div>
               ) : effectiveTauxGestion ? (
@@ -347,8 +347,8 @@ export function CommissionPanel({
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {tauxGestion && dossier.taux_gestion && (Math.abs(dossier.taux_gestion - tauxGestion) > 0.00001)
-                        ? `Grille : ${formatPct(tauxGestion)} Ã¢ÂÂ AppliquÃÂ© : ${formatPct(dossier.taux_gestion)}`
-                        : `Taux appliquÃÂ© : ${formatPct(effectiveTauxGestion)}`
+                        ? `Grille : ${formatPct(tauxGestion)} â Appliqué : ${formatPct(dossier.taux_gestion)}`
+                        : `Taux appliqué : ${formatPct(effectiveTauxGestion)}`
                       }
                     </p>
                   </div>
@@ -372,7 +372,7 @@ export function CommissionPanel({
         {/* Status note for non-finalised */}
         {dossier.statut !== 'client_finalise' && (
           <p className="text-xs text-amber-600 bg-amber-50 rounded p-2">
-            Ã¢Â  Dossier non finalisÃÂ© Ã¢ÂÂ ces montants sont des estimations basÃÂ©es sur le montant actuel.
+            â  Dossier non finalisé â ces montants sont des estimations basées sur le montant actuel.
           </p>
         )}
       </CardContent>
