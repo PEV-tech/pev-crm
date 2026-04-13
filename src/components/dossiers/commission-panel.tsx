@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Award, Pencil, Save, X, Loader2, TrendingUp } from 'lucide-react'
+import { Award, Pencil, Save, X, Loader2, TrendingUp, Plus } from 'lucide-react'
 import { formatCurrency } from '@/lib/formatting'
 
 const formatPct = (value: number | null | undefined): string => {
@@ -40,6 +40,21 @@ interface CommissionPanelProps {
   editApporteurExt: boolean
   editApporteurExtNom: string
   editApporteurExtTaux: string
+  apporteurs?: { id: string; nom: string; prenom: string; taux_commission: number }[]
+  editApporteurId?: string
+  editApporteurTaux?: string
+  showNewApporteurModal?: boolean
+  newApporteurNom?: string
+  newApporteurPrenom?: string
+  newApporteurTauxDefaut?: string
+  savingNewApporteur?: boolean
+  onEditApporteurIdChange?: (v: string) => void
+  onEditApporteurTauxChange?: (v: string) => void
+  onShowNewApporteurModalChange?: (v: boolean) => void
+  onNewApporteurNomChange?: (v: string) => void
+  onNewApporteurPrenomChange?: (v: string) => void
+  onNewApporteurTauxDefautChange?: (v: string) => void
+  onCreateApporteur?: () => void
 }
 
 export function CommissionPanel({
@@ -68,6 +83,21 @@ export function CommissionPanel({
   editApporteurExt,
   editApporteurExtNom,
   editApporteurExtTaux,
+  apporteurs = [],
+  editApporteurId = '',
+  editApporteurTaux = '',
+  showNewApporteurModal = false,
+  newApporteurNom = '',
+  newApporteurPrenom = '',
+  newApporteurTauxDefaut = '',
+  savingNewApporteur = false,
+  onEditApporteurIdChange,
+  onEditApporteurTauxChange,
+  onShowNewApporteurModalChange,
+  onNewApporteurNomChange,
+  onNewApporteurPrenomChange,
+  onNewApporteurTauxDefautChange,
+  onCreateApporteur,
 }: CommissionPanelProps) {
   return (
     <Card>
@@ -166,21 +196,34 @@ export function CommissionPanel({
                 {editApporteurExt && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-sm font-medium text-gray-700 block mb-1">Nom de l'apporteur</label>
-                      <Input
-                        type="text"
-                        value={editApporteurExtNom}
-                        onChange={(e) => onEditApporteurExtNomChange(e.target.value)}
-                        placeholder="Nom de l'apporteur"
-                        className="w-full"
-                      />
+                      <label className="text-sm font-medium text-gray-700 block mb-1">Apporteur</label>
+                      <div className="flex gap-1">
+                        <select
+                          value={editApporteurId}
+                          onChange={(e) => {
+                            onEditApporteurIdChange?.(e.target.value)
+                            const found = apporteurs.find(a => a.id === e.target.value)
+                            if (found && found.taux_commission > 0) onEditApporteurTauxChange?.((found.taux_commission * 100).toFixed(2))
+                          }}
+                          className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+                        >
+                          <option value="">— Sélectionner —</option>
+                          {apporteurs.map(a => (
+                            <option key={a.id} value={a.id}>{a.prenom} {a.nom}</option>
+                          ))}
+                        </select>
+                        <button type="button" onClick={() => onShowNewApporteurModalChange?.(true)}
+                          className="p-1.5 rounded-lg border border-gray-200 hover:bg-indigo-50 text-indigo-600" title="Créer">
+                          <Plus size={14} />
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700 block mb-1">Taux apporteur (%)</label>
                       <Input
                         type="number"
-                        value={editApporteurExtTaux}
-                        onChange={(e) => onEditApporteurExtTauxChange(e.target.value)}
+                        value={editApporteurId ? editApporteurTaux : editApporteurExtTaux}
+                        onChange={(e) => editApporteurId ? onEditApporteurTauxChange?.(e.target.value) : onEditApporteurExtTauxChange(e.target.value)}
                         placeholder="30"
                         step="0.01"
                         min="0"
@@ -346,5 +389,40 @@ export function CommissionPanel({
         )}
       </CardContent>
     </Card>
+
+      {showNewApporteurModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => onShowNewApporteurModalChange?.(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">Nouvel apporteur</h3>
+              <button onClick={() => onShowNewApporteurModalChange?.(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Prénom</label>
+                  <Input value={newApporteurPrenom} onChange={(e) => onNewApporteurPrenomChange?.(e.target.value)} placeholder="Prénom" className="w-full" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Nom</label>
+                  <Input value={newApporteurNom} onChange={(e) => onNewApporteurNomChange?.(e.target.value)} placeholder="Nom" className="w-full" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Taux habituel (%) — optionnel</label>
+                <Input type="number" value={newApporteurTauxDefaut} onChange={(e) => onNewApporteurTauxDefautChange?.(e.target.value)} placeholder="ex: 20" step="0.01" min="0" max="100" className="w-full" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button className="flex-1 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" onClick={() => onShowNewApporteurModalChange?.(false)}>Annuler</button>
+                <button className="flex-1 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-1"
+                  onClick={onCreateApporteur} disabled={savingNewApporteur || !newApporteurNom.trim() || !newApporteurPrenom.trim()}>
+                  {savingNewApporteur ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  Créer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
   )
-}
+  }
