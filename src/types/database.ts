@@ -675,21 +675,23 @@ export type Database = {
       grilles_commissionnement: {
         Row: {
           id: string
-          taux: number
+          taux_remuneration: number
           ca_min: number
           ca_max: number | null
-          created_at: string
+          label: string | null
         }
         Insert: {
           id?: string
-          taux: number
+          taux_remuneration: number
           ca_min: number
           ca_max?: number | null
+          label?: string | null
         }
         Update: {
-          taux?: number
+          taux_remuneration?: number
           ca_min?: number
           ca_max?: number | null
+          label?: string | null
         }
         Relationships: []
       }

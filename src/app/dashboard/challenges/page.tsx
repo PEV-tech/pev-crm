@@ -34,29 +34,15 @@ export default function ChallengesPage() {
       setLoading(true)
       const supabase = createClient()
       // Use SECURITY DEFINER RPC to get cross-consultant ranking data
-      // (v_dossiers_complets is filtered by RLS per consultant)
-      const [classementRes, consultantsRes] = await Promise.all([
-        supabase.rpc('get_classement', { p_annee: selectedYear }),
-        supabase
-          .from('consultants')
-          .select('nom, prenom, role')
-          .in('role', ['consultant', 'manager']),
-      ])
-
+      // get_classement() includes ALL consultants (even those with 0 collecte)
+      const classementRes = await supabase.rpc('get_classement', { p_annee: selectedYear })
       const classementData = classementRes.data || []
-      const allConsultants = consultantsRes.data || []
 
       const map: Record<string, { nom: string; prenom: string; collecte: number; nbDossiers: number }> = {}
-      allConsultants.forEach((c: any) => {
-        if (!c.prenom) return
-        const key = `${c.prenom} ${c.nom || ''}`.trim()
-        if (!map[key]) map[key] = { nom: c.nom || '', prenom: c.prenom, collecte: 0, nbDossiers: 0 }
-      })
-
       classementData.forEach((d: any) => {
-        if (!d.consultant_nom || d.consultant_nom.toLowerCase() === 'back office') return
+        if (!d.consultant_prenom) return
         const key = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-        if (!map[key]) map[key] = { nom: d.consultant_nom, prenom: d.consultant_prenom || '', collecte: 0, nbDossiers: 0 }
+        if (!map[key]) map[key] = { nom: d.consultant_nom || '', prenom: d.consultant_prenom || '', collecte: 0, nbDossiers: 0 }
         map[key].collecte = Number(d.collecte) || 0
         map[key].nbDossiers = Number(d.nb_dossiers) || 0
       })

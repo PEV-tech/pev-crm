@@ -11,9 +11,10 @@ import { formatCurrency } from '@/lib/formatting'
 
 interface GrilleTier {
   id: string
-  taux: number
+  taux_remuneration: number
   ca_min: number
   ca_max: number | null
+  label?: string
 }
 
 interface CommissionGrilleProps {
@@ -68,7 +69,7 @@ export function CommissionGrille({ consultantId, consultantNom, dossiers }: Comm
 
     for (let i = 0; i < tiers.length; i++) {
       const t = tiers[i]
-      if (rollingCA >= t.ca_min && (t.ca_max === null || rollingCA < t.ca_max)) {
+      if (rollingCA >= t.ca_min && (t.ca_max === null || rollingCA <= t.ca_max)) {
         currentTier = t
         nextTier = i < tiers.length - 1 ? tiers[i + 1] : null
         break
@@ -109,7 +110,7 @@ export function CommissionGrille({ consultantId, consultantNom, dossiers }: Comm
           <div>
             <p className="text-xs text-gray-500 font-medium">Taux actuel</p>
             <p className="text-3xl font-bold text-emerald-700">
-              {currentTier ? `${(currentTier.taux * 100).toFixed(0)}%` : '-'}
+              {currentTier ? `${(currentTier.taux_remuneration * 100).toFixed(0)}%` : '-'}
             </p>
           </div>
           <div className="text-right">
@@ -122,8 +123,8 @@ export function CommissionGrille({ consultantId, consultantNom, dossiers }: Comm
         <div className="space-y-2">
           {tiers.map((t, i) => {
             const isActive = currentTier?.id === t.id
-            const isPast = currentTier ? t.ca_min < currentTier.ca_min : false
-            const isFuture = currentTier ? t.ca_min > currentTier.ca_min : true
+            const isPast = currentTier ? t.ca_min < (currentTier.ca_min ?? 0) : false
+            const isFuture = currentTier ? t.ca_min > (currentTier.ca_min ?? 0) : true
 
             return (
               <div
@@ -143,12 +144,12 @@ export function CommissionGrille({ consultantId, consultantNom, dossiers }: Comm
                     ? 'bg-gray-300 text-white'
                     : 'bg-gray-100 text-gray-500'
                 }`}>
-                  {(t.taux * 100).toFixed(0)}%
+                  {(t.taux_remuneration * 100).toFixed(0)}%
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className={`text-sm font-medium ${isActive ? 'text-emerald-800' : 'text-gray-700'}`}>
-                      Palier {(t.taux * 100).toFixed(0)}%
+                      Palier {(t.taux_remuneration * 100).toFixed(0)}%
                     </span>
                     {isActive && (
                       <Badge variant="success" className="text-[10px]">Actuel</Badge>
@@ -181,7 +182,7 @@ export function CommissionGrille({ consultantId, consultantNom, dossiers }: Comm
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-amber-800">
-                Prochain palier : {(nextTier.taux * 100).toFixed(0)}%
+                Prochain palier : {(nextTier.taux_remuneration * 100).toFixed(0)}%
               </p>
               <p className="text-xs text-amber-600">
                 Il vous manque <span className="font-bold">{formatCurrency(gapToNext)}</span> de CA pour passer au palier suivant
