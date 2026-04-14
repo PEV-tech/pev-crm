@@ -314,8 +314,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         return
       }
     }
-    if (editApporteurExt && editApporteurExtTaux) {
-      const tauxApVal = parseFloat(editApporteurExtTaux)
+    const effectiveTauxApporteur = editApporteurId ? editApporteurTaux : editApporteurExtTaux
+    if (editApporteurExt && effectiveTauxApporteur) {
+      const tauxApVal = parseFloat(effectiveTauxApporteur)
       if (isNaN(tauxApVal) || tauxApVal < 0 || tauxApVal > 100) {
         setSaveError('Le taux apporteur doit être compris entre 0 et 100%')
         return
@@ -334,10 +335,11 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         if (dossier.montant && dossier.montant > 0) {
           updateData.commission_brute = dossier.montant * tauxEntreeDecimal
 
-          // Deduct apporteur ext share
+          // Deduct apporteur ext share — use dropdown taux if apporteur selected, else legacy field
           let commissionNette = updateData.commission_brute
-          if (editApporteurExt && editApporteurExtTaux) {
-            const tauxApporteur = parseFloat(editApporteurExtTaux) / 100
+          const effectiveApporteurTaux = editApporteurId ? editApporteurTaux : editApporteurExtTaux
+          if (editApporteurExt && effectiveApporteurTaux) {
+            const tauxApporteur = parseFloat(effectiveApporteurTaux) / 100
             updateData.rem_apporteur_ext = updateData.commission_brute * tauxApporteur
             commissionNette = updateData.commission_brute - updateData.rem_apporteur_ext
           } else {
@@ -366,7 +368,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         apporteur_id: editApporteurExt && editApporteurId ? editApporteurId : null,
         taux_apporteur_ext: editApporteurExt && editApporteurTaux ? parseFloat(editApporteurTaux) / 100 : 0,
       }
-      await supabase.from('dossiers').update(apporteurUpdate).eq('id', dossier.id)
+      const { error: apporteurError } = await supabase.from('dossiers').update(apporteurUpdate).eq('id', dossier.id)
+      if (apporteurError) throw apporteurError
 
       // Upsert commissions: update if exists, insert if not
       const { data: existingCommission } = await supabase
