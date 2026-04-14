@@ -206,7 +206,7 @@ function NewDossierContent() {
           compagnie_id: formData.compagnieId || null,
           montant: parseFloat(formData.montant),
           financement: (formData.financement as any) || null,
-          date_operation: formData.dateOperation,
+          date_operation: formData.dateOperation || null,
           date_signature: formData.dateSignature || null,
           mode_detention: (formData.modeDetention || null) as any,
           statut: formData.statut as any,
