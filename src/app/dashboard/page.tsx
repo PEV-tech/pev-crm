@@ -333,7 +333,7 @@ export default function DashboardPage() {
       )}
 
       {/* Content Grid */}
-      <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} allFinalisedDossiers={allFinalisedDossiers} totalDossiers={totalDossiersCount} />
+      <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} allFinalisedDossiers={allFinalisedDossiers} totalDossiers={totalDossiersCount} isManager={isManager} />
     </div>
   )
 }

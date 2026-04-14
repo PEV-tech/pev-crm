@@ -27,11 +27,25 @@ interface PendingInvoice extends Record<string, unknown> {
   date_facture?: string | null
 }
 
+interface ConsultantBreakdown {
+  nom: string
+  montant: number
+  dossiers: number
+  commission: number
+}
+
+interface MonthData {
+  name: string
+  collecte: number
+  breakdown: ConsultantBreakdown[]
+}
+
 interface DashboardClientProps {
   recentDossiers: VDossiersComplets[]
   pendingInvoices: PendingInvoice[]
   allFinalisedDossiers?: VDossiersComplets[]
   totalDossiers?: number
+  isManager?: boolean
 }
 
 const monthLabels = [
@@ -39,47 +53,76 @@ const monthLabels = [
   'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc',
 ]
 
-const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number }> }) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; payload?: MonthData }>; label?: string }) => {
   if (active && payload && payload[0]) {
-    const value = payload[0].value
+    const data = payload[0].payload as MonthData | undefined
+    const total = payload[0].value
     const formatted = new Intl.NumberFormat('fr-FR', {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 0,
-    }).format(value)
+    }).format(total)
+
+    const breakdown = data?.breakdown || []
+
     return (
-      <div className="bg-white p-2 border border-gray-300 rounded shadow-lg text-sm text-gray-900">
-        {formatted}
+      <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-xl text-sm min-w-[220px]">
+        <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-100">
+          <span className="font-semibold text-gray-700">{label}</span>
+          <span className="font-bold text-indigo-700">{formatted}</span>
+        </div>
+        {breakdown.length > 0 ? (
+          <div className="space-y-1.5">
+            {breakdown.map((c, i) => (
+              <div key={i} className="flex justify-between items-center text-xs">
+                <span className="text-gray-600 truncate mr-3">{c.nom} <span className="text-gray-400">({c.dossiers})</span></span>
+                <span className="font-medium text-gray-900 whitespace-nowrap">{formatCurrency(c.montant)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 italic">Aucune opération</p>
+        )}
       </div>
     )
   }
   return null
 }
 
-export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedDossiers = [], totalDossiers }: DashboardClientProps) {
-  // Calculate collecte by month using ALL finalized dossiers (not just recent 5)
+export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedDossiers = [], totalDossiers, isManager }: DashboardClientProps) {
+  // Calculate collecte by month with per-consultant breakdown
   const collecteParMois = useMemo(() => {
     const monthlyData: Record<number, number> = {}
+    const monthlyBreakdown: Record<number, Record<string, ConsultantBreakdown>> = {}
 
-    // Initialize all months to 0
     for (let i = 0; i < 12; i++) {
       monthlyData[i] = 0
+      monthlyBreakdown[i] = {}
     }
 
-    // Use all finalized dossiers for accurate monthly breakdown
     const source = allFinalisedDossiers.length > 0 ? allFinalisedDossiers : recentDossiers
     source.forEach((dossier) => {
       if (dossier.date_operation) {
         const date = new Date(dossier.date_operation)
         const month = date.getMonth()
-        monthlyData[month] += dossier.montant || 0
+        const montant = dossier.montant || 0
+        monthlyData[month] += montant
+
+        // Build per-consultant breakdown
+        const consultantName = `${dossier.consultant_prenom || ''} ${dossier.consultant_nom || ''}`.trim() || 'Inconnu'
+        if (!monthlyBreakdown[month][consultantName]) {
+          monthlyBreakdown[month][consultantName] = { nom: consultantName, montant: 0, dossiers: 0, commission: 0 }
+        }
+        monthlyBreakdown[month][consultantName].montant += montant
+        monthlyBreakdown[month][consultantName].dossiers += 1
+        monthlyBreakdown[month][consultantName].commission += dossier.commission_brute || 0
       }
     })
 
-    // Transform to recharts format
     return monthLabels.map((label, index) => ({
       name: label,
       collecte: monthlyData[index],
+      breakdown: Object.values(monthlyBreakdown[index]).sort((a, b) => b.montant - a.montant),
     }))
   }, [allFinalisedDossiers, recentDossiers])
   const dossiersColumns: ColumnDefinition<VDossiersComplets>[] = [
