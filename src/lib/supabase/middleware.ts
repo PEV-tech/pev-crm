@@ -3,8 +3,8 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { Database } from '@/types/database'
 
 // Routes restricted to manager and back_office roles
+// Note: /dashboard/remunerations is accessible to all roles (consultants see filtered view)
 const MANAGER_ROUTES = [
-  '/dashboard/remunerations',
   '/dashboard/encaissements',
   '/dashboard/parametres',
 ]
