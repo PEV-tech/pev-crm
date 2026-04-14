@@ -145,7 +145,7 @@ function NewDossierContent() {
         query = query.neq('id', existingClientId)
       }
       const { data, error } = await query
-      console.log('Co-titulaire search: results=' + (data?.length ?? 'null') + ' error=' + JSON.stringify(error) + ' first=' + JSON.stringify(data?.[0] || null))
+      // debug removed
       setCoTitulaireResults((data || []) as ClientInfo[])
       setCoTitulaireSearching(false)
     }, 300)
