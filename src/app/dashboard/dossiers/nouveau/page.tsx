@@ -136,12 +136,16 @@ function NewDossierContent() {
     const timer = setTimeout(async () => {
       setCoTitulaireSearching(true)
       const term = `%${coTitulaireSearch}%`
-      const { data } = await supabase
+      let query = supabase
         .from('clients')
         .select('id, nom, prenom, pays, ville, email, telephone')
         .or(`nom.ilike.${term},prenom.ilike.${term}`)
-        .neq('id', existingClientId || '')
         .limit(6)
+      if (existingClientId) {
+        query = query.neq('id', existingClientId)
+      }
+      const { data, error } = await query
+      console.log('Co-titulaire search:', { term, results: data?.length, error })
       setCoTitulaireResults((data || []) as ClientInfo[])
       setCoTitulaireSearching(false)
     }, 300)
