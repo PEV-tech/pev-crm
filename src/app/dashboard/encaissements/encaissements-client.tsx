@@ -130,6 +130,29 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
   }
 }
 
+// ───── Convert encaissement record (from DB trigger) to RemEntry ─────
+
+function encaissementToRemEntry(e: any): RemEntry {
+  const stephane = isStephane(e.consultant_nom)
+  const france = isFrance(e.client_pays)
+  const remConsultant = Number(e.rem_consultant || 0)
+
+  return {
+    id: e.id || e.dossier_id || `enc-${Math.random()}`,
+    mois: e.mois || 'INCONNU',
+    label: e.label || '',
+    net_cabinet: Number(e.commission_brute || 0),
+    pool_plus: Number(e.part_pool_plus || 0),
+    thelo: Number(e.part_thelo || 0),
+    maxine: Number(e.part_maxine || 0),
+    steph_fr: stephane && france ? remConsultant : 0,
+    steph_asie: stephane && !france ? remConsultant : 0,
+    consultant: !stephane ? remConsultant : 0,
+    mathias: 0,
+    part_cabinet: Number(e.part_cabinet || 0),
+  }
+}
+
 // ───── Drill-down types ─────
 
 type ColKey = 'maxine' | 'thelo' | 'pool_plus' | 'pool' | 'steph_fr' | 'steph_asie' | 'consultant' | 'part_cabinet' | 'net_cabinet'
@@ -161,7 +184,7 @@ interface DrillDownInfo {
 // ───── Component ─────
 
 interface EncaissementsClientProps {
-  initialData: RemEntry[]
+  initialData: any[] // Raw encaissement records from DB trigger
   role?: string
   facturesPaid?: VDossiersComplets[]
 }
@@ -177,21 +200,24 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     setExpandedMonths(prev => ({ ...prev, [mois]: !prev[mois] }))
   }
 
-  // Merge encaissements_rem with computed facturesPaid entries
-  // encaissements_rem may not include recent dossiers (e.g. paid this month)
+  // Merge encaissements (from DB trigger) with computed facturesPaid entries
+  // encaissements may not include very recent dossiers if trigger hasn't fired yet
   const data: RemEntry[] = React.useMemo(() => {
-    if (initialData.length === 0) return facturesPaid.map(factureToRemEntry)
-    if (facturesPaid.length === 0) return initialData
+    // Convert encaissement records from DB to display format
+    const encEntries = initialData.map(encaissementToRemEntry)
 
-    // Build set of dossier IDs already covered by encaissements_rem
-    const existingIds = new Set(initialData.map(e => e.id))
+    if (encEntries.length === 0) return facturesPaid.map(factureToRemEntry)
+    if (facturesPaid.length === 0) return encEntries
 
-    // Compute entries from facturesPaid that are NOT already in initialData
+    // Build set of dossier IDs already covered by encaissements table
+    const existingDossierIds = new Set(initialData.map((e: any) => e.dossier_id))
+
+    // Add entries from facturesPaid that are NOT yet in encaissements
     const extraEntries = facturesPaid
-      .filter(f => f.id && !existingIds.has(f.id))
+      .filter(f => f.id && !existingDossierIds.has(f.id))
       .map(factureToRemEntry)
 
-    return [...initialData, ...extraEntries]
+    return [...encEntries, ...extraEntries]
   }, [initialData, facturesPaid])
 
   // Drill-down: show dossiers for a given column, optionally filtered by month

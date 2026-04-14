@@ -31,12 +31,12 @@ export function RemunerationsClientWrapper() {
         // (RLS restricts these tables to manager role only — back_office will get empty results)
         if (isManager) {
           const [remRes, cagnotteRes] = await Promise.all([
-            supabase.from('encaissements_rem').select('*') as any,
+            supabase.from('encaissements').select('part_maxine, part_thelo') as any,
             supabase.from('manager_cagnotte').select('*'),
           ])
           if (remRes.data && remRes.data.length > 0) {
             const totals = remRes.data.reduce(
-              (acc: { maxine: number; thelo: number }, e: any) => ({ maxine: acc.maxine + Number(e.maxine || 0), thelo: acc.thelo + Number(e.thelo || 0) }),
+              (acc: { maxine: number; thelo: number }, e: any) => ({ maxine: acc.maxine + Number(e.part_maxine || 0), thelo: acc.thelo + Number(e.part_thelo || 0) }),
               { maxine: 0, thelo: 0 }
             )
             setRemTotals(totals)
