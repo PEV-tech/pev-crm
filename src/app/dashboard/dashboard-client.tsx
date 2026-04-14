@@ -31,6 +31,7 @@ interface DashboardClientProps {
   recentDossiers: VDossiersComplets[]
   pendingInvoices: PendingInvoice[]
   allFinalisedDossiers?: VDossiersComplets[]
+  totalDossiers?: number
 }
 
 const monthLabels = [
@@ -55,7 +56,7 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<
   return null
 }
 
-export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedDossiers = [] }: DashboardClientProps) {
+export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedDossiers = [], totalDossiers }: DashboardClientProps) {
   // Calculate collecte by month using ALL finalized dossiers (not just recent 5)
   const collecteParMois = useMemo(() => {
     const monthlyData: Record<number, number> = {}
@@ -190,7 +191,7 @@ export function DashboardClient({ recentDossiers, pendingInvoices, allFinalisedD
             <CardTitle className="text-base">Total dossiers</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-gray-900">{recentDossiers.length}</p>
+            <p className="text-3xl font-bold text-gray-900">{totalDossiers ?? recentDossiers.length}</p>
           </CardContent>
         </Card>
 

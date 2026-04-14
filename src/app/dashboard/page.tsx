@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [objectif, setObjectif] = useState<{ objectif: number; collecte: number } | null>(null)
   const [projection, setProjection] = useState<number | null>(null)
   const [relancesCount, setRelancesCount] = useState(0)
+  const [totalDossiersCount, setTotalDossiersCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const timedOut = useLoadingTimeout(loading, 15000)
 
@@ -82,6 +83,7 @@ export default function DashboardPage() {
 
       setStats({ collecte, caGenere, pipelineEnCours, dossiersFinalisés })
       setAllFinalisedDossiers(finalised)
+      setTotalDossiersCount(filteredDossiers.length)
       setRelancesCount(relCount)
 
       // Projection: (collecte YTD / months elapsed) * 12
@@ -90,20 +92,19 @@ export default function DashboardPage() {
         setProjection((collecte / monthsElapsed) * 12)
       }
 
-      // Consultant ranking (single sort)
+      // Consultant ranking: use SECURITY DEFINER RPC to see all consultants
       if (!isManager && fullName) {
+        const { data: classementData } = await supabase.rpc('get_classement', { p_annee: 2026 })
         const rankings: Record<string, number> = {}
-        dossiers.forEach((d: any) => {
-          if (d.statut === 'client_finalise') {
-            const name = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
-            if (name) rankings[name] = (rankings[name] || 0) + (d.montant || 0)
-          }
+        ;(classementData || []).forEach((d: any) => {
+          const name = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+          if (name) rankings[name] = Number(d.collecte) || 0
         })
         const sorted = Object.entries(rankings).sort((a, b) => b[1] - a[1])
         const rank = sorted.findIndex(([name]) => name === fullName) + 1
         const aboveEntry = rank > 1 ? sorted[rank - 2] : null
         setConsultantRank({
-          rank,
+          rank: rank || 1,
           totalConsultants: sorted.length,
           ecart: aboveEntry ? aboveEntry[1] - (rankings[fullName] || 0) + 1 : null,
         })
@@ -332,7 +333,7 @@ export default function DashboardPage() {
       )}
 
       {/* Content Grid */}
-      <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} allFinalisedDossiers={allFinalisedDossiers} />
+      <DashboardClient recentDossiers={recentDossiers} pendingInvoices={pendingInvoices} allFinalisedDossiers={allFinalisedDossiers} totalDossiers={totalDossiersCount} />
     </div>
   )
 }
