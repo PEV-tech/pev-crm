@@ -12,7 +12,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Edit, Save, X, Loader2, Trash2, ExternalLink, Heart } from 'lucide-react'
+import { ArrowLeft, Edit, Save, X, Loader2, Trash2, ExternalLink, Heart, Search } from 'lucide-react'
 import { DocumentChecklist } from '@/components/shared/document-checklist'
 import { ClientRelances } from '@/components/shared/client-relances'
 import { CommissionPanel } from '@/components/dossiers/commission-panel'
@@ -84,6 +84,12 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [editDateEntreeRelation, setEditDateEntreeRelation] = React.useState<string>('')
   const [editDateSignature, setEditDateSignature] = React.useState<string>('')
   const [editModeDetention, setEditModeDetention] = React.useState<string>('')
+  // Co-titulaire
+  const [coTitulaire, setCoTitulaire] = React.useState<{ id: string; nom: string; prenom: string | null } | null>(null)
+  const [coTitulaireSearch, setCoTitulaireSearch] = React.useState('')
+  const [coTitulaireResults, setCoTitulaireResults] = React.useState<{ id: string; nom: string; prenom: string | null }[]>([])
+  const [linkedPartners, setLinkedPartners] = React.useState<{ id: string; nom: string; prenom: string | null }[]>([])
+  const [coTitulaireChanged, setCoTitulaireChanged] = React.useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type EditFormType = Record<string, any>
 
@@ -154,6 +160,29 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             setEditTauxGestion((data.taux_gestion * 100).toFixed(2))
           }
 
+          // Initialize co-titulaire from view data
+          if (data.co_titulaire_id && (data as any).co_titulaire_nom) {
+            setCoTitulaire({ id: data.co_titulaire_id, nom: (data as any).co_titulaire_nom, prenom: (data as any).co_titulaire_prenom })
+          }
+          // Fetch linked partners for the client
+          if (data.client_id) {
+            const { data: relations } = await supabase
+              .from('client_relations')
+              .select('*')
+              .or(`client_id_1.eq.${data.client_id},client_id_2.eq.${data.client_id}`)
+            if (relations && relations.length > 0) {
+              const partnerIds = relations
+                .filter((r: any) => ['concubinage', 'marie', 'pacse'].includes(r.type_relation))
+                .map((r: any) => r.client_id_1 === data.client_id ? r.client_id_2 : r.client_id_1)
+              if (partnerIds.length > 0) {
+                const { data: partners } = await supabase
+                  .from('clients')
+                  .select('id, nom, prenom')
+                  .in('id', partnerIds)
+                if (partners) setLinkedPartners(partners as any)
+              }
+            }
+          }
           // Initialize apporteur ext fields
           setEditApporteurExt(!!data.has_apporteur_ext)
           setEditApporteurExtNom(data.apporteur_ext_nom || '')
@@ -208,6 +237,25 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     }
   }, [isEditing, editForm.produit_id, editForm.compagnie_id, tauxMap])
 
+  // Co-titulaire search
+  React.useEffect(() => {
+    if (coTitulaireSearch.length < 2) { setCoTitulaireResults([]); return }
+    const timer = setTimeout(async () => {
+      const term = `%${coTitulaireSearch}%`
+      let query = supabase
+        .from('clients')
+        .select('id, nom, prenom')
+        .or(`nom.ilike.${term},prenom.ilike.${term}`)
+        .limit(6)
+      if (dossier?.client_id) {
+        query = query.neq('id', dossier.client_id)
+      }
+      const { data } = await query
+      setCoTitulaireResults((data || []) as any)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [coTitulaireSearch, dossier?.client_id, supabase])
+
   const editEstimatedCommission = React.useMemo(() => {
     if (autoTaux === null || !editForm.montant) return null
     return parseFloat(editForm.montant) * autoTaux
@@ -223,7 +271,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     setSaveError('')
     try {
       // 1. Update dossier fields (only columns that exist on dossiers table)
-      const { error: dossierError } = await supabase.from('dossiers').update({
+      const dossierUpdate: Record<string, any> = {
         statut: editForm.statut,
         montant: parseFloat(editForm.montant) || 0,
         financement: editForm.financement || null,
@@ -234,7 +282,12 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         date_entree_en_relation: editForm.date_entree_en_relation || null,
         date_signature: editForm.date_signature || null,
         mode_detention: editForm.mode_detention || null,
-      }).eq('id', id)
+      }
+      // Include co_titulaire_id if changed
+      if (coTitulaireChanged) {
+        dossierUpdate.co_titulaire_id = coTitulaire?.id || null
+      }
+      const { error: dossierError } = await supabase.from('dossiers').update(dossierUpdate).eq('id', id)
 
       if (dossierError) { setSaveError(dossierError.message); setSaving(false); return }
 
@@ -287,7 +340,16 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
 
       // Refresh view data
       const { data } = await supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle()
-      if (data) setDossier(data as VDossiersComplets)
+      if (data) {
+        setDossier(data as VDossiersComplets)
+        // Refresh co-titulaire display from refreshed data
+        if (data.co_titulaire_id && (data as any).co_titulaire_nom) {
+          setCoTitulaire({ id: data.co_titulaire_id, nom: (data as any).co_titulaire_nom, prenom: (data as any).co_titulaire_prenom })
+        } else {
+          setCoTitulaire(null)
+        }
+      }
+      setCoTitulaireChanged(false)
       setIsEditing(false)
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Erreur lors de la sauvegarde'
@@ -674,16 +736,60 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Co-titulaire banner */}
-              {dossier.co_titulaire_id && (dossier as any).co_titulaire_nom && (
+              {/* Co-titulaire section */}
+              {isEditing ? (
+                <div className="p-3 bg-pink-50 border border-pink-200 rounded-lg space-y-2">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Heart size={12} className="text-pink-400" /> Co-titulaire (opération conjointe)
+                  </p>
+                  {coTitulaire ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">{coTitulaire.prenom} {coTitulaire.nom}</span>
+                      <button type="button" onClick={() => { setCoTitulaire(null); setCoTitulaireChanged(true) }}
+                        className="p-0.5 hover:bg-pink-100 rounded"><X size={14} className="text-gray-400" /></button>
+                    </div>
+                  ) : (
+                    <>
+                      {linkedPartners.filter(p => p.id !== coTitulaire?.id).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {linkedPartners.map(p => (
+                            <button key={p.id} type="button"
+                              onClick={() => { setCoTitulaire(p); setCoTitulaireChanged(true); setCoTitulaireSearch('') }}
+                              className="text-xs px-2 py-1 bg-white border border-pink-200 rounded-full hover:bg-pink-100 transition-colors">
+                              {p.prenom} {p.nom}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="relative">
+                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input type="text" placeholder="Rechercher un co-titulaire..."
+                          value={coTitulaireSearch} onChange={(e) => setCoTitulaireSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-pink-400 focus:border-pink-400" />
+                      </div>
+                      {coTitulaireResults.length > 0 && (
+                        <div className="border border-gray-200 rounded bg-white max-h-32 overflow-y-auto">
+                          {coTitulaireResults.map(c => (
+                            <button key={c.id} type="button"
+                              onClick={() => { setCoTitulaire(c); setCoTitulaireChanged(true); setCoTitulaireSearch(''); setCoTitulaireResults([]) }}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-pink-50 transition-colors">
+                              {c.prenom} {c.nom}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : coTitulaire ? (
                 <div className="flex items-center gap-2 p-3 bg-pink-50 border border-pink-200 rounded-lg mb-2">
                   <Heart size={16} className="text-pink-400 shrink-0" />
                   <span className="text-sm text-gray-600">Opération conjointe avec</span>
-                  <Link href={`/dashboard/clients/${dossier.co_titulaire_id}`} className="text-sm font-semibold text-indigo-600 hover:underline">
-                    {(dossier as any).co_titulaire_prenom} {(dossier as any).co_titulaire_nom}
+                  <Link href={`/dashboard/clients/${coTitulaire.id}`} className="text-sm font-semibold text-indigo-600 hover:underline">
+                    {coTitulaire.prenom} {coTitulaire.nom}
                   </Link>
                 </div>
-              )}
+              ) : null}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
