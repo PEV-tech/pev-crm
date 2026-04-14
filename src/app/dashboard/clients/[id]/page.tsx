@@ -413,11 +413,11 @@ export default function ClientDetailPage() {
         })
         setEditNotesValue(clientData.commentaires || '')
 
-        // Fetch all dossiers for this client via view
+        // Fetch all dossiers for this client (as titulaire or co-titulaire) via view
         const { data: dossierData } = await supabase
           .from('v_dossiers_complets')
           .select('*')
-          .eq('client_id', clientId)
+          .or(`client_id.eq.${clientId},co_titulaire_id.eq.${clientId}`)
           .order('date_operation', { ascending: false })
 
         // Deduplicate dossiers (safety net)

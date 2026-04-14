@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/select'
 import { Produit, Compagnie, Consultant, TauxProduitCompagnie } from '@/types/database'
 import { useUser } from '@/hooks/use-user'
 import Link from 'next/link'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Heart, X, Search } from 'lucide-react'
 
 interface FormData {
   nom: string; prenom: string; pays: string; ville: string; email: string; telephone: string
@@ -44,6 +44,12 @@ function NewDossierContent() {
   const [loadingData, setLoadingData] = React.useState(true)
   const [existingClient, setExistingClient] = React.useState<ClientInfo | null>(null)
   const [existingClientId, setExistingClientId] = React.useState<string | null>(null)
+  // Co-titulaire state
+  const [coTitulaire, setCoTitulaire] = React.useState<ClientInfo | null>(null)
+  const [coTitulaireSearch, setCoTitulaireSearch] = React.useState('')
+  const [coTitulaireResults, setCoTitulaireResults] = React.useState<ClientInfo[]>([])
+  const [coTitulaireSearching, setCoTitulaireSearching] = React.useState(false)
+  const [linkedPartners, setLinkedPartners] = React.useState<ClientInfo[]>([])
   const [formData, setFormData] = React.useState<FormData>({
     nom: '', prenom: '', pays: '', ville: '', email: '', telephone: '', produitId: '', compagnieId: '',
     montant: '', financement: 'cash',
@@ -102,6 +108,46 @@ function NewDossierContent() {
     if (consultant?.id) setFormData(prev => ({ ...prev, consultantId: prev.consultantId || consultant.id }))
   }, [consultant])
 
+  // Fetch linked partners (couple/famille) when client is known
+  React.useEffect(() => {
+    if (!existingClientId) { setLinkedPartners([]); return }
+    const fetchPartners = async () => {
+      const { data: relations } = await supabase
+        .from('client_relations')
+        .select('*')
+        .or(`client_id_1.eq.${existingClientId},client_id_2.eq.${existingClientId}`)
+      if (!relations || relations.length === 0) return
+      const partnerIds = relations
+        .filter((r: any) => ['concubinage', 'marie', 'pacse'].includes(r.type_relation))
+        .map((r: any) => r.client_id_1 === existingClientId ? r.client_id_2 : r.client_id_1)
+      if (partnerIds.length === 0) return
+      const { data: partners } = await supabase
+        .from('clients')
+        .select('id, nom, prenom, pays, ville, email, telephone')
+        .in('id', partnerIds)
+      if (partners) setLinkedPartners(partners as ClientInfo[])
+    }
+    fetchPartners()
+  }, [existingClientId, supabase])
+
+  // Search co-titulaire
+  React.useEffect(() => {
+    if (coTitulaireSearch.length < 2) { setCoTitulaireResults([]); return }
+    const timer = setTimeout(async () => {
+      setCoTitulaireSearching(true)
+      const term = `%${coTitulaireSearch}%`
+      const { data } = await supabase
+        .from('clients')
+        .select('id, nom, prenom, pays, ville, email, telephone')
+        .or(`nom.ilike.${term},prenom.ilike.${term}`)
+        .neq('id', existingClientId || '')
+        .limit(6)
+      setCoTitulaireResults((data || []) as ClientInfo[])
+      setCoTitulaireSearching(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [coTitulaireSearch, existingClientId, supabase])
+
   // Auto taux lookup when produit + compagnie change
   React.useEffect(() => {
     if (formData.produitId && formData.compagnieId) {
@@ -150,6 +196,7 @@ function NewDossierContent() {
       const { data: dossierData, error: dossierError } = await supabase
         .from('dossiers').insert({
           client_id: clientIdForDossier,
+          co_titulaire_id: coTitulaire?.id || null,
           consultant_id: formData.consultantId,
           produit_id: formData.produitId || null,
           compagnie_id: formData.compagnieId || null,
@@ -275,6 +322,75 @@ function NewDossierContent() {
                   </div>
                 </div>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Co-titulaire (opération conjointe) */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Heart size={18} className="text-pink-500" />
+              Co-titulaire (opération conjointe)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {coTitulaire ? (
+              <div className="flex items-center gap-3 p-3 bg-pink-50 border border-pink-200 rounded-lg">
+                <Heart size={16} className="text-pink-400 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-900">{coTitulaire.prenom} {coTitulaire.nom}</p>
+                  {coTitulaire.email && <p className="text-xs text-gray-500">{coTitulaire.email}</p>}
+                </div>
+                <button type="button" onClick={() => setCoTitulaire(null)} className="p-1 hover:bg-pink-100 rounded transition-colors">
+                  <X size={14} className="text-gray-400 hover:text-red-500" />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {linkedPartners.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Partenaire lié</p>
+                    {linkedPartners.map(p => (
+                      <button key={p.id} type="button" onClick={() => setCoTitulaire(p)}
+                        className="w-full flex items-center gap-2 p-2.5 text-left bg-pink-50 border border-pink-200 rounded-lg hover:bg-pink-100 transition-colors">
+                        <Heart size={14} className="text-pink-400 shrink-0" />
+                        <span className="text-sm font-medium text-gray-900">{p.prenom} {p.nom}</span>
+                        <span className="text-xs text-pink-600 ml-auto">Sélectionner</span>
+                      </button>
+                    ))}
+                    <div className="relative my-2">
+                      <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+                      <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-gray-400">ou rechercher un autre client</span></div>
+                    </div>
+                  </div>
+                )}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher un co-titulaire..."
+                    value={coTitulaireSearch}
+                    onChange={(e) => setCoTitulaireSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-pink-400 focus:border-pink-400"
+                  />
+                </div>
+                {coTitulaireSearching && <p className="text-xs text-gray-400">Recherche...</p>}
+                {coTitulaireResults.length > 0 && (
+                  <div className="border border-gray-200 rounded bg-white max-h-40 overflow-y-auto">
+                    {coTitulaireResults.map(c => (
+                      <button key={c.id} type="button"
+                        onClick={() => { setCoTitulaire(c); setCoTitulaireSearch(''); setCoTitulaireResults([]) }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-pink-50 transition-colors">
+                        {c.prenom} {c.nom}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!coTitulaire && linkedPartners.length === 0 && (
+                  <p className="text-xs text-gray-400 italic">Optionnel — sélectionnez un co-titulaire pour une opération conjointe (couple marié, pacsé, etc.)</p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

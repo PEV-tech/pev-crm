@@ -205,6 +205,7 @@ export type Database = {
           has_apporteur_ext: boolean
           apporteur_ext_nom: string | null
           taux_apporteur_ext: number | null
+          co_titulaire_id: string | null
           created_at: string
           updated_at: string
         }
@@ -229,6 +230,7 @@ export type Database = {
           has_apporteur_ext?: boolean
           apporteur_ext_nom?: string | null
           taux_apporteur_ext?: number | null
+          co_titulaire_id?: string | null
         }
         Update: {
           client_id?: string
@@ -250,6 +252,7 @@ export type Database = {
           has_apporteur_ext?: boolean
           apporteur_ext_nom?: string | null
           taux_apporteur_ext?: number | null
+          co_titulaire_id?: string | null
         }
         Relationships: []
       }
@@ -788,6 +791,9 @@ export type Database = {
           preco: boolean | null
           lm: boolean | null
           rm: boolean | null
+          co_titulaire_id: string | null
+          co_titulaire_nom: string | null
+          co_titulaire_prenom: string | null
           consultant_id: string | null
           consultant_nom: string | null
           consultant_prenom: string | null

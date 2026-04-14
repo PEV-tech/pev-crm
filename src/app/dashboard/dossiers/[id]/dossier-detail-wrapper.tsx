@@ -12,7 +12,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Edit, Save, X, Loader2, Trash2, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Edit, Save, X, Loader2, Trash2, ExternalLink, Heart } from 'lucide-react'
 import { DocumentChecklist } from '@/components/shared/document-checklist'
 import { ClientRelances } from '@/components/shared/client-relances'
 import { CommissionPanel } from '@/components/dossiers/commission-panel'
@@ -674,6 +674,17 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Co-titulaire banner */}
+              {dossier.co_titulaire_id && (dossier as any).co_titulaire_nom && (
+                <div className="flex items-center gap-2 p-3 bg-pink-50 border border-pink-200 rounded-lg mb-2">
+                  <Heart size={16} className="text-pink-400 shrink-0" />
+                  <span className="text-sm text-gray-600">Opération conjointe avec</span>
+                  <Link href={`/dashboard/clients/${dossier.co_titulaire_id}`} className="text-sm font-semibold text-indigo-600 hover:underline">
+                    {(dossier as any).co_titulaire_prenom} {(dossier as any).co_titulaire_nom}
+                  </Link>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-gray-500">Client</p>
