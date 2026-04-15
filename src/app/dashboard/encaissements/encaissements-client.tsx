@@ -84,6 +84,13 @@ function isStephane(consultantNom: string | null): boolean {
   return n.includes('stéphane') || n.includes('stephane') || n.includes('steph')
 }
 
+function isMaxine(prenom: string | null): boolean {
+  return (prenom || '').toLowerCase().trim().includes('maxine')
+}
+function isThelo(prenom: string | null): boolean {
+  const n = (prenom || '').toLowerCase().trim()
+  return n.includes('th\u00e9lo') || n.includes('thelo')
+}
 function isFrance(clientPays: string | null): boolean {
   if (!clientPays) return true // default to FR if unknown
   const p = clientPays.toUpperCase().trim()
@@ -108,54 +115,41 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
     (f.produit_nom ? ` — ${f.produit_nom}` : '')
 
   const stephane = isStephane(f.consultant_prenom)
+  const maxineM = isMaxine(f.consultant_prenom)
+  const theloM = isThelo(f.consultant_prenom)
   const france = isFrance(f.client_pays)
 
-  // Derive correct split from known rule structure:
-  //   Rule 6 (65%): consultant 65%, pool 10%, cabinet 25%
-  //   Rule 7 (50%): consultant 50%, pool 25%, cabinet 25%
-  //   Rule 8 (30%): consultant 30%, pool 40%, cabinet 30%
-  //   Stéphane (50%): steph 50%, pool 25%, cabinet 25%
-  //   Pool client (0%): pool 70%, cabinet 30%
-  let remConsultant = 0
-  let cabinetShare = 0
-  let poolTotal = 0
-  let steph_fr = 0
-  let steph_asie = 0
-  let consultant = 0
+  // Commission rules via consultant_prenom:
+  let steph_fr = 0, steph_asie = 0, consultant = 0
+  let pp = 0, th = 0, mx = 0, cabinetShare = 0
 
   if (stephane) {
-    remConsultant = commBrute * 0.50
+    const s = commBrute * 0.50
+    steph_fr = france ? s : 0; steph_asie = !france ? s : 0
+    pp = commBrute * 8.3 / 100; th = pp; mx = pp
     cabinetShare = commBrute * 0.25
-    poolTotal = commBrute * 0.25
-    steph_fr = france ? remConsultant : 0
-    steph_asie = !france ? remConsultant : 0
-  } else if (tauxConsultant <= 0) {
-    // Rule 3: Pool client — 70% pool, 30% cabinet
+  } else if (maxineM) {
+    mx = commBrute * 0.50; th = commBrute * 0.10; pp = commBrute * 0.10
     cabinetShare = commBrute * 0.30
-    poolTotal = commBrute * 0.70
+  } else if (theloM) {
+    th = commBrute * 0.50; mx = commBrute * 0.10; pp = commBrute * 0.10
+    cabinetShare = commBrute * 0.30
+  } else if (tauxConsultant <= 0) {
+    pp = commBrute * 23.3 / 100; th = pp; mx = pp
+    cabinetShare = commBrute * 0.30
   } else {
-    // Rules 6, 7, 8: tier consultant
-    remConsultant = commBrute * tauxConsultant
-    // Cabinet: 30% for rule 8 (taux ≤ 35%), 25% otherwise
+    consultant = commBrute * tauxConsultant
     cabinetShare = commBrute * (tauxConsultant <= 0.35 ? 0.30 : 0.25)
-    poolTotal = Math.max(0, commBrute - remConsultant - cabinetShare)
-    consultant = remConsultant
+    const pool = Math.max(0, commBrute - consultant - cabinetShare)
+    pp = pool / 3; th = pool / 3; mx = pool / 3
   }
-
-  const poolThird = poolTotal / 3
 
   return {
     id: f.id || `f-${Math.random()}`,
-    mois,
-    label,
+    mois, label,
     net_cabinet: commBrute,
-    pool_plus: poolThird,
-    thelo: poolThird,
-    maxine: poolThird,
-    steph_fr,
-    steph_asie,
-    consultant,
-    mathias: 0,
+    pool_plus: pp, thelo: th, maxine: mx,
+    steph_fr, steph_asie, consultant, mathias: 0,
     part_cabinet: cabinetShare,
   }
 }
