@@ -164,7 +164,7 @@ function encaissementToRemEntry(e: any): RemEntry {
   return {
     id: e.id || e.dossier_id || `enc-${Math.random()}`,
     mois: e.mois || 'INCONNU',
-    label: e.label || '',
+    label: (e.produit_nom && e.produit_nom.toUpperCase() === 'SCPI' && e.compagnie_nom) ? (e.label || '').replace(/\s*\u2014\s*SCPI\s*$/, ` \u2014 ${e.compagnie_nom}`) : (e.label || ''),
     net_cabinet: Number(e.commission_brute || 0),
     pool_plus: Number(e.part_pool_plus || 0),
     thelo: Number(e.part_thelo || 0),
@@ -224,25 +224,8 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     setExpandedMonths(prev => ({ ...prev, [mois]: !prev[mois] }))
   }
 
-  // Merge encaissements (from DB trigger) with computed facturesPaid entries
-  // encaissements may not include very recent dossiers if trigger hasn't fired yet
-  const data: RemEntry[] = React.useMemo(() => {
-    // Convert encaissement records from DB to display format
-    const factEntries = facturesPaid.map(f => { const entry = factureToRemEntry(f); const enc = initialData.find((x: any) => x.dossier_id === f.id); if (entry.mois === 'INCONNU' && enc) entry.mois = enc.mois; return entry; })
-
-    if (factEntries.length === 0) return initialData.map(encaissementToRemEntry)
-    if (initialData.length === 0) return factEntries
-
-    // Build set of dossier IDs already covered by encaissements table
-    const factDossierIds = new Set(facturesPaid.map(f => f.id).filter(Boolean))
-
-    // Add entries from facturesPaid that are NOT yet in encaissements
-    const extraEntries = initialData
-      .filter((e: any) => !factDossierIds.has(e.dossier_id))
-      .map(encaissementToRemEntry)
-
-    return [...factEntries, ...extraEntries]
-  }, [initialData, facturesPaid])
+  // Encaissements table = authoritative source. No merge with facturesPaid to avoid double-counting.
+    const data: RemEntry[] = React.useMemo(() => { if (initialData.length > 0) return initialData.map(encaissementToRemEntry); return facturesPaid.map(f => factureToRemEntry(f)) }, [initialData, facturesPaid])
 
   // Drill-down: show dossiers for a given column, optionally filtered by month
   const openDrillDown = (col: ColKey, mois?: string) => {
