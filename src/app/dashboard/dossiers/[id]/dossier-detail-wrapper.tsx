@@ -188,7 +188,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           setEditApporteurExtNom(data.apporteur_ext_nom || '')
           setEditApporteurExtTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
           // Initialize apporteur (table)
-          setEditApporteurId((data as any).apporteur_id || '')
+          setEditApporteurId(data.apporteur_id || '')
           setEditApporteurTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
 
           // Fetch grille taux for entry + encours commission (LUX/PE)
@@ -468,7 +468,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         setEditApporteurExt(!!data.has_apporteur_ext)
         setEditApporteurExtNom(data.apporteur_ext_nom || '')
         setEditApporteurExtTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
-        setEditApporteurId((data as any).apporteur_id || '')
+        setEditApporteurId(data.apporteur_id || '')
         setEditApporteurTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
       }
 
@@ -587,7 +587,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   // Nom apporteur résolu
   const apporteurNomResolu = React.useMemo(() => {
     if (!dossier?.has_apporteur_ext) return null
-    const apporteurId = (dossier as any).apporteur_id
+    const apporteurId = dossier?.apporteur_id
     if (apporteurId) {
       const found = apporteurs.find(a => a.id === apporteurId)
       if (found) return `${found.prenom} ${found.nom}`
