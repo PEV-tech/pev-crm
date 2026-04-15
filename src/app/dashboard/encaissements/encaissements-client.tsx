@@ -112,7 +112,7 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
   }
 
   const label = `${f.client_prenom || ''} ${f.client_nom || ''}`.trim() +
-    (f.produit_nom ? ` — ${f.produit_nom}` : '')
+    ((f.produit_nom && f.produit_nom.toUpperCase() !== 'SCPI' ? f.produit_nom : (f.compagnie_nom || f.produit_nom)) ? ` — ${(f.produit_nom && f.produit_nom.toUpperCase() !== 'SCPI') ? f.produit_nom : (f.compagnie_nom || f.produit_nom)}` : '')
 
   const stephane = isStephane(f.consultant_prenom)
   const maxineM = isMaxine(f.consultant_prenom)
@@ -228,7 +228,7 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
   // encaissements may not include very recent dossiers if trigger hasn't fired yet
   const data: RemEntry[] = React.useMemo(() => {
     // Convert encaissement records from DB to display format
-    const factEntries = facturesPaid.map(factureToRemEntry)
+    const factEntries = facturesPaid.map(f => { const entry = factureToRemEntry(f); const enc = initialData.find((x: any) => x.dossier_id === f.id); if (entry.mois === 'INCONNU' && enc) entry.mois = enc.mois; return entry; })
 
     if (factEntries.length === 0) return initialData.map(encaissementToRemEntry)
     if (initialData.length === 0) return factEntries
