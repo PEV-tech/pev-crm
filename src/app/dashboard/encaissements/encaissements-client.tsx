@@ -107,7 +107,7 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
   const label = `${f.client_prenom || ''} ${f.client_nom || ''}`.trim() +
     (f.produit_nom ? ` — ${f.produit_nom}` : '')
 
-  const stephane = isStephane(f.consultant_nom)
+  const stephane = isStephane(f.consultant_prenom)
   const france = isFrance(f.client_pays)
 
   // Derive correct split from known rule structure:
@@ -163,7 +163,7 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
 // ───── Convert encaissement record (from DB trigger) to RemEntry ─────
 
 function encaissementToRemEntry(e: any): RemEntry {
-  const stephane = isStephane(e.consultant_nom)
+  const stephane = isStephane(e.consultant_prenom)
   const france = isFrance(e.client_pays)
   const remConsultant = Number(e.rem_consultant || 0)
 
