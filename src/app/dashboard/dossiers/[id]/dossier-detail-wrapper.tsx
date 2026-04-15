@@ -624,21 +624,22 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         created_by: currentUser?.id || null,
       }).select().single()
       if (error) throw error
-      setApporteurs(prev => [...prev, data as any].sort((a: any, b: any) => a.nom.localeCompare(b.nom)))
-      setEditApporteurId((data as any).id)
-      if ((data as any).taux_commission > 0) setEditApporteurTaux(((data as any).taux_commission * 100).toFixed(2))
+      setApporteurs(prev => [...prev, newAp].sort((a: any, b: any) => a.nom.localeCompare(b.nom)))
+      setEditApporteurId(newAp.id)
+      if (newAp.taux_commission > 0) setEditApporteurTaux((newAp.taux_commission * 100).toFixed(2))
       setShowNewApporteurModal(false)
       setNewApporteurNom('')
       setNewApporteurPrenom('')
       setNewApporteurTauxDefaut('')
       // Auto-save: link new apporteur to dossier immediately
       if (dossier?.id) {
-        const nomComplet = (data as any).prenom + ' ' + (data as any).nom
+        const newAp = data as { id: string; prenom: string; nom: string; taux_commission: number }
+        const nomComplet = newAp.prenom + ' ' + newAp.nom
         await supabase.from('dossiers').update({
           has_apporteur_ext: true,
-          apporteur_id: (data as any).id,
+          apporteur_id: newAp.id,
           apporteur_ext_nom: nomComplet,
-          taux_apporteur_ext: (data as any).taux_commission || 0,
+          taux_apporteur_ext: newAp.taux_commission || 0,
         }).eq('id', dossier.id)
         const { data: refreshed } = await supabase.from('v_dossiers_complets').select('*').eq('id', dossier.id).limit(1).maybeSingle()
         if (refreshed) setDossier(refreshed as VDossiersComplets)
