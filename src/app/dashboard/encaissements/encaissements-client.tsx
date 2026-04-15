@@ -92,12 +92,9 @@ function isFrance(clientPays: string | null): boolean {
 
 function factureToRemEntry(f: VDossiersComplets): RemEntry {
   const commBrute = Number(f.commission_brute || 0)
-  const remApporteur = Number(f.rem_apporteur || 0)
-  const partCabinet = Number(f.part_cabinet || 0)
-
-  // POOL = what's left after consultant + cabinet
-  const poolTotal = Math.max(0, commBrute - remApporteur - partCabinet)
-  const poolThird = poolTotal / 3
+  // Use taux_remuneration to correctly back-calculate pool share
+  // NOTE: part_cabinet in DB = commBrute - rem_consultant (pool included), can't use it directly
+  const tauxConsultant = Number(f.taux_remuneration || 0)
 
   // Determine month from date_facture
   let mois = 'INCONNU'
@@ -110,9 +107,42 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
   const label = `${f.client_prenom || ''} ${f.client_nom || ''}`.trim() +
     (f.produit_nom ? ` — ${f.produit_nom}` : '')
 
-  // Determine who gets rem_apporteur
   const stephane = isStephane(f.consultant_nom)
   const france = isFrance(f.client_pays)
+
+  // Derive correct split from known rule structure:
+  //   Rule 6 (65%): consultant 65%, pool 10%, cabinet 25%
+  //   Rule 7 (50%): consultant 50%, pool 25%, cabinet 25%
+  //   Rule 8 (30%): consultant 30%, pool 40%, cabinet 30%
+  //   Stéphane (50%): steph 50%, pool 25%, cabinet 25%
+  //   Pool client (0%): pool 70%, cabinet 30%
+  let remConsultant = 0
+  let cabinetShare = 0
+  let poolTotal = 0
+  let steph_fr = 0
+  let steph_asie = 0
+  let consultant = 0
+
+  if (stephane) {
+    remConsultant = commBrute * 0.50
+    cabinetShare = commBrute * 0.25
+    poolTotal = commBrute * 0.25
+    steph_fr = france ? remConsultant : 0
+    steph_asie = !france ? remConsultant : 0
+  } else if (tauxConsultant <= 0) {
+    // Rule 3: Pool client — 70% pool, 30% cabinet
+    cabinetShare = commBrute * 0.30
+    poolTotal = commBrute * 0.70
+  } else {
+    // Rules 6, 7, 8: tier consultant
+    remConsultant = commBrute * tauxConsultant
+    // Cabinet: 30% for rule 8 (taux ≤ 35%), 25% otherwise
+    cabinetShare = commBrute * (tauxConsultant <= 0.35 ? 0.30 : 0.25)
+    poolTotal = Math.max(0, commBrute - remConsultant - cabinetShare)
+    consultant = remConsultant
+  }
+
+  const poolThird = poolTotal / 3
 
   return {
     id: f.id || `f-${Math.random()}`,
@@ -122,11 +152,11 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
     pool_plus: poolThird,
     thelo: poolThird,
     maxine: poolThird,
-    steph_fr: stephane && france ? remApporteur : 0,
-    steph_asie: stephane && !france ? remApporteur : 0,
-    consultant: !stephane ? remApporteur : 0,
+    steph_fr,
+    steph_asie,
+    consultant,
     mathias: 0,
-    part_cabinet: partCabinet,
+    part_cabinet: cabinetShare,
   }
 }
 
