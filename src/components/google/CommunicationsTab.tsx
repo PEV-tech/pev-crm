@@ -64,6 +64,7 @@ export default function CommunicationsTab({ clientEmail, clientName, driveUrl, c
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const supabase = createClient()
   const lastName = clientName?.split(' ').pop() || clientName
+  const driveFallbackUrl = `https://drive.google.com/drive/search?q=${encodeURIComponent(clientName)}`
 
   async function importEmailToJournal(message: GmailMessage) {
     if (!clientId || !currentUserNom) return
