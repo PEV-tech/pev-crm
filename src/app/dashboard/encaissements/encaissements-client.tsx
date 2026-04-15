@@ -228,20 +228,20 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
   // encaissements may not include very recent dossiers if trigger hasn't fired yet
   const data: RemEntry[] = React.useMemo(() => {
     // Convert encaissement records from DB to display format
-    const encEntries = initialData.map(encaissementToRemEntry)
+    const factEntries = facturesPaid.map(factureToRemEntry)
 
-    if (encEntries.length === 0) return facturesPaid.map(factureToRemEntry)
-    if (facturesPaid.length === 0) return encEntries
+    if (factEntries.length === 0) return initialData.map(encaissementToRemEntry)
+    if (initialData.length === 0) return factEntries
 
     // Build set of dossier IDs already covered by encaissements table
-    const existingDossierIds = new Set(initialData.map((e: any) => e.dossier_id))
+    const factDossierIds = new Set(facturesPaid.map(f => f.id).filter(Boolean))
 
     // Add entries from facturesPaid that are NOT yet in encaissements
-    const extraEntries = facturesPaid
-      .filter(f => f.id && !existingDossierIds.has(f.id))
-      .map(factureToRemEntry)
+    const extraEntries = initialData
+      .filter((e: any) => !factDossierIds.has(e.dossier_id))
+      .map(encaissementToRemEntry)
 
-    return [...encEntries, ...extraEntries]
+    return [...factEntries, ...extraEntries]
   }, [initialData, facturesPaid])
 
   // Drill-down: show dossiers for a given column, optionally filtered by month
