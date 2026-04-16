@@ -1111,10 +1111,15 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       const immobilier = data.patrimoine_immobilier || []
 
       // Detect if detention means community (50/50 split)
+      // If detention is not specified, fall back to régime matrimonial
       const isCommunaute = (detention: string | undefined | null): boolean => {
-        if (!detention) return false
-        const d = detention.toLowerCase().trim()
-        return /^(cte|communaut[ée]|commun|50\s*\/\s*50|50\s*%?\s*[-\/]\s*50\s*%?)$/.test(d)
+        const d = (detention || '').toLowerCase().trim()
+        if (d) {
+          return /^(cte|communaut[ée]|commun|50\s*\/\s*50|50\s*%?\s*[-\/]\s*50\s*%?)$/.test(d)
+        }
+        // No detention specified: check régime matrimonial
+        const regime = (data.regime_matrimonial || '').toLowerCase().trim()
+        return /^(cte|communaut[ée]|commun)/.test(regime)
       }
 
       // Format currency with 50% annotation when communauté
