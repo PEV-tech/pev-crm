@@ -351,20 +351,37 @@ export default function ClientDetailPage() {
 
                   // Merge shared fields from titulaire (matrimonial, enfants, objectifs, immobilier, emprunts, fiscalité)
                   // These are household-level, not individual
-                  const sharedFromTitulaire = data.titulaire || {}
+                  const shared = data.titulaire || {}
+
+                  // Filter produits financiers: keep only client's own + shared (CTE/commun/empty)
+                  const clientFirstName = (personData.prenom || client.prenom || '').toLowerCase().trim()
+                  const otherFirstName = personData === data.conjoint
+                    ? (data.titulaire?.prenom || '').toLowerCase().trim()
+                    : (data.conjoint?.prenom || '').toLowerCase().trim()
+                  const allProduits = shared.produits_financiers || personData.produits_financiers || []
+                  const filteredProduits = allProduits.filter((p: any) => {
+                    const det = (p.detenteur || '').toLowerCase().trim()
+                    if (!det) return true // no detenteur = include
+                    if (det === 'cte' || det === 'commun' || det === 'les deux') return true
+                    if (det === clientFirstName) return true
+                    if (det === otherFirstName) return false // other person's product
+                    return true // unknown detenteur = include
+                  })
+
                   const merged = {
                     ...personData,
-                    situation_matrimoniale: personData.situation_matrimoniale || sharedFromTitulaire.situation_matrimoniale,
-                    regime_matrimonial: personData.regime_matrimonial || sharedFromTitulaire.regime_matrimonial,
-                    nombre_enfants: personData.nombre_enfants ?? sharedFromTitulaire.nombre_enfants,
-                    enfants_details: personData.enfants_details || sharedFromTitulaire.enfants_details,
-                    patrimoine_immobilier: personData.patrimoine_immobilier || sharedFromTitulaire.patrimoine_immobilier,
-                    emprunts: personData.emprunts || sharedFromTitulaire.emprunts,
-                    impot_revenu_n: personData.impot_revenu_n ?? sharedFromTitulaire.impot_revenu_n,
-                    impot_revenu_n1: personData.impot_revenu_n1 ?? sharedFromTitulaire.impot_revenu_n1,
-                    impot_revenu_n2: personData.impot_revenu_n2 ?? sharedFromTitulaire.impot_revenu_n2,
-                    objectifs_client: personData.objectifs_client || sharedFromTitulaire.objectifs_client,
-                    total_revenus_annuel: personData.total_revenus_annuel ?? sharedFromTitulaire.total_revenus_annuel,
+                    situation_matrimoniale: personData.situation_matrimoniale || shared.situation_matrimoniale,
+                    regime_matrimonial: personData.regime_matrimonial || shared.regime_matrimonial,
+                    nombre_enfants: personData.nombre_enfants ?? shared.nombre_enfants,
+                    enfants_details: personData.enfants_details || shared.enfants_details,
+                    patrimoine_immobilier: personData.patrimoine_immobilier || shared.patrimoine_immobilier,
+                    produits_financiers: filteredProduits,
+                    emprunts: personData.emprunts || shared.emprunts,
+                    impot_revenu_n: personData.impot_revenu_n ?? shared.impot_revenu_n,
+                    impot_revenu_n1: personData.impot_revenu_n1 ?? shared.impot_revenu_n1,
+                    impot_revenu_n2: personData.impot_revenu_n2 ?? shared.impot_revenu_n2,
+                    objectifs_client: personData.objectifs_client || shared.objectifs_client,
+                    total_revenus_annuel: personData.total_revenus_annuel ?? shared.total_revenus_annuel,
                   }
 
                   kycRef.current.populateFromKyc(merged)
