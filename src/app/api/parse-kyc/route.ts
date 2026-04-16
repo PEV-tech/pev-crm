@@ -953,7 +953,14 @@ function parseKYCDocx(html: string): ParsedKYC {
   if (regimeMatch) {
     let regime = regimeMatch[1].trim()
     regime = regime.replace(/^[\*\s]+/, '').trim()
-    if (regime.length > 1) titulaire.regime_matrimonial = regime
+    if (regime.length > 1) {
+      titulaire.regime_matrimonial = regime
+      // If régime matrimonial is set but situation matrimoniale is not,
+      // infer "marié" since a régime matrimonial implies marriage
+      if (!titulaire.situation_matrimoniale) {
+        titulaire.situation_matrimoniale = 'marie'
+      }
+    }
   }
 
   // ═══ TABLE 3: ENFANTS ═══
