@@ -11,6 +11,8 @@ const RELATION_TYPES = [
   { value: 'concubinage', label: 'Concubinage' },
   { value: 'marie', label: 'Marié(e)' },
   { value: 'pacse', label: 'Pacsé(e)' },
+  { value: 'divorce', label: 'Divorcé(e)' },
+  { value: 'veuf', label: 'Veuf(ve)' },
   { value: 'enfant', label: 'Enfant' },
   { value: 'parent', label: 'Parent' },
 ]
@@ -19,6 +21,8 @@ const RELATION_LABELS: Record<string, string> = {
   concubinage: 'Concubinage',
   marie: 'Marié(e)',
   pacse: 'Pacsé(e)',
+  divorce: 'Divorcé(e)',
+  veuf: 'Veuf(ve)',
   enfant: 'Enfant',
   parent: 'Parent',
 }
@@ -27,6 +31,8 @@ const RELATION_COLORS: Record<string, string> = {
   concubinage: 'bg-pink-100 text-pink-700',
   marie: 'bg-rose-100 text-rose-700',
   pacse: 'bg-purple-100 text-purple-700',
+  divorce: 'bg-orange-100 text-orange-700',
+  veuf: 'bg-gray-100 text-gray-700',
   enfant: 'bg-blue-100 text-blue-700',
   parent: 'bg-amber-100 text-amber-700',
 }

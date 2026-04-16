@@ -183,26 +183,33 @@ function parseTable(
 
 /**
  * Extract two-column values (Monsieur and Madame side by side)
+ * Enhanced: tries multiple patterns and looks at the next line too
  */
 function extractTwoColumnValue(
   text: string,
   label: string
 ): { titulaire: string | null; conjoint: string | null } {
-  const regex = new RegExp(`${label}[:\\s]*([^\\n]*)`, 'i')
-  const match = text.match(regex)
+  // Try matching with colon or spaces after label
+  const patterns = [
+    new RegExp(`${label}\\s*[:：]?\\s*([^\\n]*)`, 'i'),
+    new RegExp(`${label}\\s*[:：]?\\s*\\n([^\\n]*)`, 'i'),
+  ]
 
-  if (!match || !match[1]) {
-    return { titulaire: null, conjoint: null }
-  }
+  for (const regex of patterns) {
+    const match = text.match(regex)
+    if (!match || !match[1]) continue
 
-  const valueLine = match[1].trim()
-  // Try to split by finding two distinct values
-  const parts = valueLine.split(/\s{2,}/).filter(p => p.trim())
+    const valueLine = match[1].trim()
+    if (!valueLine) continue
 
-  if (parts.length >= 2) {
-    return { titulaire: parts[0].trim(), conjoint: parts[1].trim() }
-  } else if (parts.length === 1) {
-    return { titulaire: parts[0].trim(), conjoint: null }
+    // Try to split by finding two distinct values (2+ spaces or tab)
+    const parts = valueLine.split(/\s{2,}|\t/).filter(p => p.trim())
+
+    if (parts.length >= 2) {
+      return { titulaire: parts[0].trim(), conjoint: parts[1].trim() }
+    } else if (parts.length === 1 && parts[0].trim()) {
+      return { titulaire: parts[0].trim(), conjoint: null }
+    }
   }
 
   return { titulaire: null, conjoint: null }
@@ -216,86 +223,97 @@ function parseKYCText(pdfText: string): ParsedKYC {
   const conjoint: KYCData = { titre: 'madame' }
 
   // ETAT CIVIL ET COORDONNEES
-  const noms = extractTwoColumnValue(pdfText, 'Nom')
+  const noms = extractTwoColumnValue(pdfText, 'Nom(?!\\s+de\\s+jeune)')
   titulaire.nom = noms.titulaire
   conjoint.nom = noms.conjoint
 
-  const prenoms = extractTwoColumnValue(pdfText, 'Prénom')
+  const prenoms = extractTwoColumnValue(pdfText, 'Pr[ée]nom')
   titulaire.prenom = prenoms.titulaire
   conjoint.prenom = prenoms.conjoint
 
-  const nomJFille = extractTwoColumnValue(pdfText, "Nom de jeune fille|Nom d'époux")
+  const nomJFille = extractTwoColumnValue(pdfText, "Nom de jeune fille|Nom d'[ée]poux|Nom d'usage")
   titulaire.nom_jeune_fille = nomJFille.titulaire || null
   conjoint.nom_jeune_fille = nomJFille.conjoint || null
 
   // Parse dates - look for date pattern DD/MM/YYYY
-  const dateMatch = pdfText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(?:à|Lieu|\(|\d+)/g)
-  if (dateMatch && dateMatch.length >= 2) {
-    titulaire.date_naissance = parseDate(dateMatch[0])
-    conjoint.date_naissance = parseDate(dateMatch[1])
-  } else {
-    const dateVals = extractTwoColumnValue(pdfText, 'Date de naissance')
-    titulaire.date_naissance = parseDate(dateVals.titulaire)
-    conjoint.date_naissance = parseDate(dateVals.conjoint)
+  const dateVals = extractTwoColumnValue(pdfText, 'Date de naissance|N[ée]\\(e\\) le|Date naissance')
+  titulaire.date_naissance = parseDate(dateVals.titulaire)
+  conjoint.date_naissance = parseDate(dateVals.conjoint)
+
+  // If dates not found via label, try looking for date patterns in text
+  if (!titulaire.date_naissance) {
+    const dateMatch = pdfText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)
+    if (dateMatch && dateMatch.length >= 1) {
+      titulaire.date_naissance = parseDate(dateMatch[0])
+      if (dateMatch.length >= 2) {
+        conjoint.date_naissance = parseDate(dateMatch[1])
+      }
+    }
   }
 
   // Lieu de naissance
-  const lieuMatch = pdfText.match(/(?:à|Lieu de naissance)[:\s]+([^\n]*)\s+([^\n]*)(?:\n|$)/i)
-  if (lieuMatch) {
-    titulaire.lieu_naissance = lieuMatch[1]?.trim() || null
-    conjoint.lieu_naissance = lieuMatch[2]?.trim() || null
-  }
+  const lieuVals = extractTwoColumnValue(pdfText, 'Lieu de naissance|N[ée]\\(e\\) [àa]|Ville de naissance')
+  titulaire.lieu_naissance = lieuVals.titulaire
+  conjoint.lieu_naissance = lieuVals.conjoint
 
   // Nationalité
-  const nat = extractTwoColumnValue(pdfText, 'Nationalité')
+  const nat = extractTwoColumnValue(pdfText, 'Nationalit[ée]')
   titulaire.nationalite = nat.titulaire
   conjoint.nationalite = nat.conjoint
 
   // Résidence fiscale
-  const resFiscale = extractTwoColumnValue(pdfText, 'Résidence fiscale')
+  const resFiscale = extractTwoColumnValue(pdfText, 'R[ée]sidence fiscale|Pays de r[ée]sidence fiscale')
   titulaire.residence_fiscale = resFiscale.titulaire
   conjoint.residence_fiscale = resFiscale.conjoint
 
   // NIF
-  const nif = extractTwoColumnValue(pdfText, 'NIF|N° d\'identité')
+  const nif = extractTwoColumnValue(pdfText, "NIF|N° d'identification|Num[ée]ro d'identification|N° identification fiscale")
   titulaire.nif = nif.titulaire
   conjoint.nif = nif.conjoint
 
-  // Adresse
-  const addrMatch = pdfText.match(/(?:Adresse|ADRESSE)[:\s]*([^\n]+(?:\n[^\n]+)?)/i)
+  // Adresse — try multi-line capture
+  const addrMatch = pdfText.match(/(?:Adresse|ADRESSE)[:\s]*\n?([^\n]+(?:\n(?![A-Z][a-z])[^\n]+)*)/i)
   if (addrMatch) {
-    titulaire.adresse = addrMatch[1].trim()
+    titulaire.adresse = addrMatch[1].trim().replace(/\n/g, ', ')
   }
 
   // Propriétaire / Locataire
-  const proprio = extractTwoColumnValue(pdfText, 'Propriétaire|Locataire')
-  if (proprio.titulaire) {
-    const val = proprio.titulaire.toLowerCase()
-    titulaire.proprietaire_locataire = val.includes('proprio') ? 'proprietaire' : 'locataire'
+  const proprioMatch = pdfText.match(/(?:Propri[ée]taire|Locataire)[:\s]*([^\n]*)/i)
+  if (proprioMatch) {
+    const val = proprioMatch[0].toLowerCase()
+    if (val.includes('propri')) {
+      titulaire.proprietaire_locataire = 'proprietaire'
+    } else if (val.includes('locataire')) {
+      titulaire.proprietaire_locataire = 'locataire'
+    }
   }
 
   // Téléphone
-  const tel = extractTwoColumnValue(pdfText, 'Téléphone|Phone')
+  const tel = extractTwoColumnValue(pdfText, 'T[ée]l[ée]phone|Phone|Portable|Mobile')
   titulaire.telephone = tel.titulaire
   conjoint.telephone = tel.conjoint
 
   // Email
-  const email = extractTwoColumnValue(pdfText, 'Email|E-mail|Mail')
+  const email = extractTwoColumnValue(pdfText, 'Email|E-mail|Mail|Courriel')
   titulaire.email = email.titulaire
   conjoint.email = email.conjoint
 
   // SITUATION FAMILIALE
-  const sitFam = extractTwoColumnValue(pdfText, 'Situation matrimoniale|Situation familiale')
+  const sitFam = extractTwoColumnValue(pdfText, 'Situation matrimoniale|Situation familiale|Statut matrimonial')
   if (sitFam.titulaire) {
     const val = sitFam.titulaire.toLowerCase()
-    if (val.includes('marie') || val.includes('marié')) {
+    if (val.includes('mari') || val.includes('marié')) {
       titulaire.situation_matrimoniale = 'marie'
-    } else if (val.includes('celibataire')) {
+    } else if (val.includes('c[ée]libataire') || val.includes('celibataire') || val.includes('célibataire')) {
       titulaire.situation_matrimoniale = 'celibataire'
-    } else if (val.includes('divorce')) {
+    } else if (val.includes('divorc')) {
       titulaire.situation_matrimoniale = 'divorce'
-    } else if (val.includes('veuf')) {
+    } else if (val.includes('veuf') || val.includes('veuve')) {
       titulaire.situation_matrimoniale = 'veuf'
+    } else if (val.includes('pacs')) {
+      titulaire.situation_matrimoniale = 'pacse'
+    } else if (val.includes('concubin')) {
+      titulaire.situation_matrimoniale = 'concubinage'
     }
   }
 
@@ -312,36 +330,36 @@ function parseKYCText(pdfText: string): ParsedKYC {
   titulaire.enfants_details = enfantDetails.titulaire
 
   // SITUATION PROFESSIONNELLE
-  const prof = extractTwoColumnValue(pdfText, 'Profession')
+  const prof = extractTwoColumnValue(pdfText, 'Profession|Activit[ée] professionnelle')
   titulaire.profession = prof.titulaire
   conjoint.profession = prof.conjoint
 
-  const statut = extractTwoColumnValue(pdfText, 'Statut professionnel|Statut')
+  const statut = extractTwoColumnValue(pdfText, 'Statut professionnel|Statut|Cat[ée]gorie socio')
   titulaire.statut_professionnel = statut.titulaire
   conjoint.statut_professionnel = statut.conjoint
 
-  const empl = extractTwoColumnValue(pdfText, 'Employeur|Entreprise')
+  const empl = extractTwoColumnValue(pdfText, 'Employeur|Entreprise|Soci[ée]t[ée]')
   titulaire.employeur = empl.titulaire
   conjoint.employeur = empl.conjoint
 
-  const dateEmpl = extractTwoColumnValue(pdfText, 'Date de début|Début emploi')
+  const dateEmpl = extractTwoColumnValue(pdfText, 'Date de d[ée]but|D[ée]but emploi|Depuis|En poste depuis')
   titulaire.date_debut_emploi = dateEmpl.titulaire
   conjoint.date_debut_emploi = dateEmpl.conjoint
 
   // FLUX (Revenus)
-  const revProNet = extractTwoColumnValue(pdfText, 'Revenus professionnels nets?|Revenu net')
+  const revProNet = extractTwoColumnValue(pdfText, 'Revenus? professionnels? nets?|Revenu net|Salaire net|Revenus? nets? annuels?')
   titulaire.revenus_pro_net = parseNumber(revProNet.titulaire)
   conjoint.revenus_pro_net = parseNumber(revProNet.conjoint)
 
-  const revFonc = extractTwoColumnValue(pdfText, 'Revenus fonciers')
+  const revFonc = extractTwoColumnValue(pdfText, 'Revenus? fonciers?|Revenus? locatifs?')
   titulaire.revenus_fonciers = parseNumber(revFonc.titulaire)
   conjoint.revenus_fonciers = parseNumber(revFonc.conjoint)
 
-  const autRev = extractTwoColumnValue(pdfText, 'Autres revenus')
+  const autRev = extractTwoColumnValue(pdfText, 'Autres revenus|Revenus divers|Pensions?')
   titulaire.autres_revenus = parseNumber(autRev.titulaire)
   conjoint.autres_revenus = parseNumber(autRev.conjoint)
 
-  const totRev = extractTwoColumnValue(pdfText, 'Total revenus annuels|Revenus totaux')
+  const totRev = extractTwoColumnValue(pdfText, 'Total revenus annuels|Revenus? totaux?|Total des revenus')
   titulaire.total_revenus_annuel = parseNumber(totRev.titulaire)
 
   // IMMOBILIER D'USAGE
@@ -519,10 +537,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Log extracted text for debugging
+    console.log('=== PDF TEXT EXTRACTED ===')
+    console.log(pdfText.substring(0, 2000))
+    console.log('=========================')
+
     // Parse the extracted text
     const parsed = parseKYCText(pdfText)
 
-    return NextResponse.json(parsed, { status: 200 })
+    return NextResponse.json({ ...parsed, _debug_text_preview: pdfText.substring(0, 500) }, { status: 200 })
   } catch (error) {
     console.error('KYC parse error:', error)
     return NextResponse.json(

@@ -91,36 +91,55 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       setEditData(initialData)
     }, [client])
 
-    // Expose populateFromKyc via ref
+    // Expose populateFromKyc via ref — auto-saves after populating
     React.useImperativeHandle(
       ref,
       () => ({
-        populateFromKyc: (data: any) => {
+        populateFromKyc: async (data: any) => {
+          // Map titre value to display format
+          let titreValue = data.titre
+          if (titreValue === 'monsieur') titreValue = 'Monsieur'
+          else if (titreValue === 'madame') titreValue = 'Madame'
+
+          // Map situation_matrimoniale to display format
+          let sitMatri = data.situation_matrimoniale
+          const sitMap: Record<string, string> = {
+            marie: 'Marié(e)', celibataire: 'Célibataire', divorce: 'Divorcé(e)',
+            veuf: 'Veuf(ve)', pacse: 'Pacsé(e)', concubinage: 'Concubinage',
+          }
+          if (sitMatri && sitMap[sitMatri]) sitMatri = sitMap[sitMatri]
+
+          // Map proprietaire_locataire to display format
+          let proprio = data.proprietaire_locataire
+          if (proprio === 'proprietaire') proprio = 'Propriétaire'
+          else if (proprio === 'locataire') proprio = 'Locataire'
+
           const mappedData: EditState = {
-            titre: data.titre,
-            nom_jeune_fille: data.nom_de_jeune_fille,
-            date_naissance: data.date_de_naissance,
-            lieu_naissance: data.lieu_de_naissance,
+            titre: titreValue,
+            nom_jeune_fille: data.nom_jeune_fille,
+            date_naissance: data.date_naissance,
+            lieu_naissance: data.lieu_naissance,
             nationalite: data.nationalite,
             residence_fiscale: data.residence_fiscale,
-            nif: data.num_identification_fiscale,
+            nif: data.nif,
             adresse: data.adresse,
-            proprietaire_locataire: data.proprietaire_locataire,
-            situation_matrimoniale: data.situation_matrimoniale,
+            proprietaire_locataire: proprio,
+            situation_matrimoniale: sitMatri,
             regime_matrimonial: data.regime_matrimonial,
             nombre_enfants: data.nombre_enfants,
-            enfants_details: data.details_enfants,
+            enfants_details: data.enfants_details,
             profession: data.profession,
-            statut_professionnel: data.statut_emploi,
+            statut_professionnel: data.statut_professionnel,
             employeur: data.employeur,
-            date_debut_emploi: data.depuis,
-            revenus_pro_net: data.revenus_professionnels,
+            date_debut_emploi: data.date_debut_emploi,
+            revenus_pro_net: data.revenus_pro_net,
             revenus_fonciers: data.revenus_fonciers,
             autres_revenus: data.autres_revenus,
+            total_revenus_annuel: data.total_revenus_annuel,
             impot_revenu_n: data.impot_revenu_n,
             impot_revenu_n1: data.impot_revenu_n1,
             impot_revenu_n2: data.impot_revenu_n2,
-            objectifs_client: data.objectifs,
+            objectifs_client: data.objectifs_client,
             patrimoine_immobilier: data.patrimoine_immobilier || [],
             produits_financiers: data.produits_financiers || [],
             patrimoine_divers: data.patrimoine_divers || [],
@@ -128,9 +147,60 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           }
           setEditData(mappedData)
           setIsEditMode(true)
+
+          // Auto-save after populating
+          if (!client.id) return
+          try {
+            const updatePayload: any = {
+              titre: mappedData.titre,
+              nom_jeune_fille: mappedData.nom_jeune_fille,
+              date_naissance: mappedData.date_naissance,
+              lieu_naissance: mappedData.lieu_naissance,
+              nationalite: mappedData.nationalite,
+              residence_fiscale: mappedData.residence_fiscale,
+              nif: mappedData.nif,
+              adresse: mappedData.adresse,
+              proprietaire_locataire: mappedData.proprietaire_locataire,
+              situation_matrimoniale: mappedData.situation_matrimoniale,
+              regime_matrimonial: mappedData.regime_matrimonial,
+              nombre_enfants: mappedData.nombre_enfants,
+              enfants_details: mappedData.enfants_details,
+              profession: mappedData.profession,
+              statut_professionnel: mappedData.statut_professionnel,
+              employeur: mappedData.employeur,
+              date_debut_emploi: mappedData.date_debut_emploi,
+              revenus_pro_net: mappedData.revenus_pro_net,
+              revenus_fonciers: mappedData.revenus_fonciers,
+              autres_revenus: mappedData.autres_revenus,
+              total_revenus_annuel: mappedData.total_revenus_annuel,
+              impot_revenu_n: mappedData.impot_revenu_n,
+              impot_revenu_n1: mappedData.impot_revenu_n1,
+              impot_revenu_n2: mappedData.impot_revenu_n2,
+              objectifs_client: mappedData.objectifs_client,
+              patrimoine_immobilier: mappedData.patrimoine_immobilier,
+              produits_financiers: mappedData.produits_financiers,
+              patrimoine_divers: mappedData.patrimoine_divers,
+              emprunts: mappedData.emprunts,
+              kyc_uploaded_at: new Date().toISOString(),
+            }
+
+            const { error } = await supabase
+              .from('clients')
+              .update(updatePayload)
+              .eq('id', client.id)
+
+            if (!error) {
+              setIsEditMode(false)
+              if (onUpdate) onUpdate()
+            } else {
+              console.error('Auto-save error:', error)
+            }
+          } catch (e) {
+            console.error('Auto-save exception:', e)
+          }
         },
       }),
-      []
+      [client.id, supabase, onUpdate]
     )
 
     const toggleSection = (section: SectionKey) => {
@@ -299,6 +369,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <option value="">Sélectionner</option>
                         <option value="Monsieur">Monsieur</option>
                         <option value="Madame">Madame</option>
+                        <option value="Autre">Autre</option>
                       </select>
                     </div>
                     <div>
@@ -841,6 +912,18 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         (data.revenus_fonciers || 0) +
         (data.autres_revenus || 0)
 
+      // Taux d'endettement = total échéances emprunts mensuelles / revenus mensuels
+      const empruntsArr = data.emprunts || []
+      const totalEcheancesMensuelles = empruntsArr.reduce(
+        (sum: number, e: any) => sum + (e.echeance || 0),
+        0
+      )
+      const revenusMensuels = totalRevenus / 12
+      const tauxEndettement =
+        revenusMensuels > 0
+          ? Math.round((totalEcheancesMensuelles / revenusMensuels) * 10000) / 100
+          : 0
+
       return (
         <div className="border-b border-gray-200 last:border-b-0">
           <button
@@ -925,6 +1008,18 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       {formatCurrency(totalRevenus)}
                     </p>
                   </div>
+
+                  {tauxEndettement > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs font-semibold text-gray-600">
+                        Taux d'endettement
+                      </p>
+                      <p className={`text-sm font-bold mt-1 ${tauxEndettement > 35 ? 'text-red-600' : tauxEndettement > 25 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {tauxEndettement}%
+                        {tauxEndettement > 35 && ' ⚠️ Élevé'}
+                      </p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -959,6 +1054,18 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       {formatCurrency(totalRevenus)}
                     </p>
                   </div>
+
+                  {tauxEndettement > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs font-semibold text-gray-600">
+                        Taux d'endettement
+                      </p>
+                      <p className={`text-sm font-bold ${tauxEndettement > 35 ? 'text-red-600' : tauxEndettement > 25 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {tauxEndettement}%
+                        {tauxEndettement > 35 && ' ⚠️ Élevé'}
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -973,6 +1080,24 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       const isExpanded = expandedSections.has(section)
       const immobilier = data.patrimoine_immobilier || []
 
+      // Auto-calculate CRD: capital restant dû basé sur valeur acq, date acq, taux crédit, durée crédit
+      const computeCRD = (row: any): number | null => {
+        const { valeur_acq, date_acq, taux_credit, duree_credit } = row
+        if (!valeur_acq || !date_acq || !taux_credit || !duree_credit) return null
+        const tauxMensuel = (taux_credit / 100) / 12
+        const nbMoisTotal = duree_credit * 12
+        const dateAcq = new Date(date_acq)
+        const now = new Date()
+        const moisEcoules = (now.getFullYear() - dateAcq.getFullYear()) * 12 + (now.getMonth() - dateAcq.getMonth())
+        if (moisEcoules <= 0) return valeur_acq
+        if (moisEcoules >= nbMoisTotal) return 0
+        // Mensualité = P * r / (1 - (1+r)^-n)
+        const mensualite = valeur_acq * tauxMensuel / (1 - Math.pow(1 + tauxMensuel, -nbMoisTotal))
+        // CRD après k mois = P * (1+r)^k - mensualite * ((1+r)^k - 1) / r
+        const crd = valeur_acq * Math.pow(1 + tauxMensuel, moisEcoules) - mensualite * (Math.pow(1 + tauxMensuel, moisEcoules) - 1) / tauxMensuel
+        return Math.max(0, Math.round(crd))
+      }
+
       const addImmobilierRow = () => {
         setEditData({
           ...editData,
@@ -983,6 +1108,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
               date_acq: '',
               valeur_acq: 0,
               valeur_actuelle: 0,
+              taux_credit: 0,
+              duree_credit: 0,
               crd: 0,
               charges: 0,
             },
@@ -1000,6 +1127,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       const updateImmobilierRow = (index: number, field: string, value: any) => {
         const updated = [...immobilier]
         updated[index] = { ...updated[index], [field]: value }
+        // Auto-calculate CRD when relevant fields change
+        if (['valeur_acq', 'date_acq', 'taux_credit', 'duree_credit'].includes(field)) {
+          const calculatedCRD = computeCRD(updated[index])
+          if (calculatedCRD !== null) {
+            updated[index].crd = calculatedCRD
+          }
+        }
         setEditData({ ...editData, patrimoine_immobilier: updated })
       }
 
@@ -1043,6 +1177,12 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             </th>
                             <th className="text-right py-1 px-1 font-semibold">
                               Actuelle
+                            </th>
+                            <th className="text-right py-1 px-1 font-semibold">
+                              Taux %
+                            </th>
+                            <th className="text-right py-1 px-1 font-semibold">
+                              Durée (ans)
                             </th>
                             <th className="text-right py-1 px-1 font-semibold">CRD</th>
                             <th className="text-right py-1 px-1 font-semibold">
@@ -1109,6 +1249,37 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                               <td className="py-1 px-1">
                                 <input
                                   type="number"
+                                  step="0.01"
+                                  placeholder="ex: 1.5"
+                                  value={row.taux_credit || ''}
+                                  onChange={e =>
+                                    updateImmobilierRow(
+                                      idx,
+                                      'taux_credit',
+                                      parseFloat(e.target.value) || 0
+                                    )
+                                  }
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                />
+                              </td>
+                              <td className="py-1 px-1">
+                                <input
+                                  type="number"
+                                  placeholder="ex: 20"
+                                  value={row.duree_credit || ''}
+                                  onChange={e =>
+                                    updateImmobilierRow(
+                                      idx,
+                                      'duree_credit',
+                                      parseInt(e.target.value) || 0
+                                    )
+                                  }
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                />
+                              </td>
+                              <td className="py-1 px-1">
+                                <input
+                                  type="number"
                                   value={row.crd}
                                   onChange={e =>
                                     updateImmobilierRow(
@@ -1117,7 +1288,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                       parseFloat(e.target.value) || 0
                                     )
                                   }
-                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-gray-50"
+                                  title="Calculé automatiquement si valeur acq., date, taux et durée renseignés"
                                 />
                               </td>
                               <td className="py-1 px-1">
