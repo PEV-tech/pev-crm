@@ -140,10 +140,39 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             impot_revenu_n1: data.impot_revenu_n1,
             impot_revenu_n2: data.impot_revenu_n2,
             objectifs_client: data.objectifs_client,
-            patrimoine_immobilier: data.patrimoine_immobilier || [],
-            produits_financiers: data.produits_financiers || [],
+            // Remap immobilier fields: parser uses valeur_acquisition/date_acquisition,
+            // CRM uses valeur_acq/date_acq
+            patrimoine_immobilier: (data.patrimoine_immobilier || []).map((item: any) => ({
+              designation: item.designation || '',
+              date_acq: item.date_acq || item.date_acquisition || '',
+              valeur_acq: item.valeur_acq ?? item.valeur_acquisition ?? 0,
+              valeur_actuelle: item.valeur_actuelle ?? 0,
+              taux_credit: item.taux_credit ?? 0,
+              duree_credit: item.duree_credit ?? 0,
+              crd: item.crd ?? 0,
+              charges: item.charges ?? 0,
+            })),
+            produits_financiers: (data.produits_financiers || []).map((item: any) => ({
+              designation: item.designation || '',
+              detenteur: item.detenteur || '',
+              valeur: item.valeur ?? 0,
+              date_ouverture: item.date_ouverture || '',
+              versements_reguliers: item.versements_reguliers ?? 0,
+              rendement: item.rendement ?? 0,
+            })),
             patrimoine_divers: data.patrimoine_divers || [],
-            emprunts: data.emprunts || [],
+            // Remap emprunt fields: parser uses montant_emprunte/date_souscription,
+            // CRM uses montant/date
+            emprunts: (data.emprunts || []).map((item: any) => ({
+              designation: item.designation || '',
+              etablissement: item.etablissement || '',
+              montant: item.montant ?? item.montant_emprunte ?? 0,
+              date: item.date || item.date_souscription || '',
+              duree: item.duree ?? '',
+              taux: item.taux ?? 0,
+              crd: item.crd ?? 0,
+              echeance: item.echeance ?? '',
+            })),
           }
           setEditData(mappedData)
           setIsEditMode(true)
