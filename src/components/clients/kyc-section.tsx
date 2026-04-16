@@ -1211,6 +1211,14 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                 Patrimoine immobilier
               </h3>
             </div>
+            {!isEditMode && immobilier.length > 0 && (
+              <span className="text-sm font-bold text-indigo-600">
+                {formatCurrency(immobilier.reduce((sum, row) => {
+                  const val = row.valeur_actuelle ?? 0
+                  return sum + (isCommunaute(row.detention) ? Math.round(val / 2) : val)
+                }, 0))}
+              </span>
+            )}
           </button>
 
           {isExpanded && (
@@ -1526,6 +1534,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                 Produits financiers
               </h3>
             </div>
+            {!isEditMode && produits.length > 0 && (
+              <span className="text-sm font-bold text-indigo-600">
+                {formatCurrency(produits.reduce((sum, row) => sum + (row.valeur ?? 0), 0))}
+              </span>
+            )}
           </button>
 
           {isExpanded && (
