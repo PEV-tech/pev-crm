@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
 
 // Dynamic import to handle pdf-parse in Node.js environment
 let pdfParse: any
 
 try {
-  // Try to use pdf-parse if available
   pdfParse = require('pdf-parse')
 } catch {
-  // Fallback: if pdf-parse is not installed, we'll try pdfjs-dist
   pdfParse = null
 }
 
@@ -78,24 +74,21 @@ interface ParsedKYC {
 }
 
 /**
- * Parse a number from various formats
- * "120000" → 120000
- * "376 kEUR" → 376000
- * "200k€" → 200000
- * "98k€" → 98000
+ * Parse a number from various formats found in KYC PDFs
+ * "120000" → 120000, "376 kEUR" → 376000, "200k€" → 200000
+ * "600k€" → 600000, "28.5k€" → 28500, "0.7%" → 0.7
  */
 function parseNumber(value: string | null | undefined): number | null {
   if (!value || typeof value !== 'string') return null
-
   const trimmed = value.trim()
-  if (!trimmed) return null
+  if (!trimmed || trimmed === '-' || trimmed.toLowerCase() === 'n/a') return null
 
-  // Remove common currency symbols and separators
   let normalized = trimmed
-    .replace(/€|EUR|\s+/g, '')
-    .replace(/,/g, '.') // Handle European decimal comma
+    .replace(/€|EUR/gi, '')
+    .replace(/\s+/g, '')
+    .replace(/%$/, '')
+    .replace(/,/g, '.')
 
-  // Handle 'k' or 'K' suffix (thousands)
   if (/k$/i.test(normalized)) {
     const num = parseFloat(normalized.replace(/k$/i, ''))
     return isNaN(num) ? null : Math.round(num * 1000)
@@ -106,367 +99,609 @@ function parseNumber(value: string | null | undefined): number | null {
 }
 
 /**
- * Parse a date in various formats
- * "04/06/1978" → "1978-06-04"
- * "1978-06-04" → "1978-06-04"
+ * Parse a date: "04/06/1978" → "1978-06-04"
  */
 function parseDate(value: string | null | undefined): string | null {
   if (!value || typeof value !== 'string') return null
-
-  const trimmed = value.trim()
-  if (!trimmed) return null
-
-  // Try DD/MM/YYYY format (French standard)
-  const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (ddmmyyyyMatch) {
-    const [, day, month, year] = ddmmyyyyMatch
+  const match = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (match) {
+    const [, day, month, year] = match
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
+  const isoMatch = value.match(/(\d{4})-(\d{2})-(\d{2})/)
+  return isoMatch ? isoMatch[0] : null
+}
 
-  // Try YYYY-MM-DD format
-  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (isoMatch) {
-    return trimmed
+/**
+ * Get all non-empty lines from text
+ */
+function getLines(text: string): string[] {
+  return text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+}
+
+/**
+ * Find the line index containing a pattern
+ */
+function findLineIndex(lines: string[], pattern: RegExp, startFrom = 0): number {
+  for (let i = startFrom; i < lines.length; i++) {
+    if (pattern.test(lines[i])) return i
   }
-
-  return null
+  return -1
 }
 
 /**
- * Extract text between two delimiters
+ * Get the next N non-empty values after a label line
+ * The PDF format puts label on one line, then values on subsequent lines
  */
-function extractBetween(
-  text: string,
-  startPattern: string | RegExp,
-  endPattern: string | RegExp
-): string | null {
-  const startRegex = typeof startPattern === 'string' ? new RegExp(startPattern, 'i') : startPattern
-  const endRegex = typeof endPattern === 'string' ? new RegExp(endPattern, 'i') : endPattern
+function getValuesAfterLabel(lines: string[], labelIdx: number, count = 2): string[] {
+  const results: string[] = []
+  // First check if value is on the SAME line as label
+  const labelLine = lines[labelIdx]
 
-  const startMatch = text.search(startRegex)
-  if (startMatch === -1) return null
-
-  const startIdx = text.indexOf('\n', startMatch) + 1
-  const endMatch = text.search(endRegex)
-  if (endMatch === -1 || endMatch <= startIdx) return null
-
-  return text.substring(startIdx, endMatch).trim()
+  for (let i = labelIdx + 1; i < lines.length && results.length < count; i++) {
+    const line = lines[i].trim()
+    // Stop if we hit another known section header or label
+    if (/^(Nom|Prénom|Date|Nationalité|Résidence|Numéro|Adresse|Propriétaire|Téléphone|SITUATION|VOS|FLUX|IMMOBILIER|PRODUITS|DIVERS|EMPRUNTS|FISCALITE|OBJECTIFS|AVERTISSEMENT)/i.test(line)) break
+    if (line.length > 0 && line !== '-') {
+      results.push(line)
+    } else if (line === '-') {
+      results.push('')
+    }
+  }
+  return results
 }
 
 /**
- * Parse a table from PDF text (lines separated by newlines)
+ * Extract text between two section headers
  */
-function parseTable(
-  text: string,
-  columnCount: number
-): Array<Record<string, string | null>> {
-  const lines = text.split('\n').filter(l => l.trim())
-  const result: Array<Record<string, string | null>> = []
+function extractSection(text: string, startPattern: RegExp, endPattern: RegExp): string {
+  const startMatch = text.search(startPattern)
+  if (startMatch === -1) return ''
+
+  // Find end of the start line
+  const afterStart = text.indexOf('\n', startMatch)
+  if (afterStart === -1) return ''
+
+  const endMatch = text.substring(afterStart).search(endPattern)
+  if (endMatch === -1) {
+    return text.substring(afterStart).trim()
+  }
+  return text.substring(afterStart, afterStart + endMatch).trim()
+}
+
+/**
+ * Parse table rows: splits by 2+ spaces, returns arrays of cells
+ * Skips header rows (containing "Désignation") and total rows
+ */
+function parseTableRows(sectionText: string, minCols: number): string[][] {
+  const lines = getLines(sectionText)
+  const rows: string[][] = []
 
   for (const line of lines) {
-    // Simple heuristic: split by multiple spaces or tabs
-    const cells = line.split(/\s{2,}|\t/).filter(c => c.trim())
-    if (cells.length >= columnCount) {
-      result.push({
-        col0: cells[0] || null,
-        col1: cells[1] || null,
-        col2: cells[2] || null,
-        col3: cells[3] || null,
-        col4: cells[4] || null,
-        col5: cells[5] || null,
-      })
+    // Skip headers, totals, and empty-looking lines
+    if (/d[ée]signation|d[ée]tenteur|[ée]tablissement|montant emprunté|date.*souscription/i.test(line)) continue
+    if (/^TOTAL/i.test(line)) continue
+    if (/^MB$/i.test(line)) continue
+    if (/^(Charges|Valeur|Date|Rendement|Durée|Taux|CRD|Montant)/i.test(line) && line.split(/\s{2,}/).length <= 2) continue
+
+    const cells = line.split(/\s{2,}|\t/).map(c => c.trim()).filter(c => c.length > 0)
+    if (cells.length >= minCols) {
+      rows.push(cells)
     }
   }
-
-  return result
+  return rows
 }
 
-/**
- * Extract two-column values (Monsieur and Madame side by side)
- * Enhanced: tries multiple patterns and looks at the next line too
- */
-function extractTwoColumnValue(
-  text: string,
-  label: string
-): { titulaire: string | null; conjoint: string | null } {
-  // Try matching with colon or spaces after label
-  const patterns = [
-    new RegExp(`${label}\\s*[:：]?\\s*([^\\n]*)`, 'i'),
-    new RegExp(`${label}\\s*[:：]?\\s*\\n([^\\n]*)`, 'i'),
-  ]
-
-  for (const regex of patterns) {
-    const match = text.match(regex)
-    if (!match || !match[1]) continue
-
-    const valueLine = match[1].trim()
-    if (!valueLine) continue
-
-    // Try to split by finding two distinct values (2+ spaces or tab)
-    const parts = valueLine.split(/\s{2,}|\t/).filter(p => p.trim())
-
-    if (parts.length >= 2) {
-      return { titulaire: parts[0].trim(), conjoint: parts[1].trim() }
-    } else if (parts.length === 1 && parts[0].trim()) {
-      return { titulaire: parts[0].trim(), conjoint: null }
-    }
-  }
-
-  return { titulaire: null, conjoint: null }
-}
 
 /**
- * Main KYC parser
+ * Main KYC parser — designed for the "Ethique et Patrimoine" KYC format
+ *
+ * PDF text structure (from pdf-parse):
+ * - ETAT CIVIL: Label on one line, Monsieur value on next, Madame on next
+ *   BUT some fields (Profession, Statut, Depuis, Employeur) have label+values on SAME line
+ * - "Date, lieu de naissance": "DD/MM/YYYY à Lieu (dept)" — combined field
+ * - SITUATION MATRIMONIALE: checkbox "X Marié(e)" style on one line
+ * - Tables: designation on one line, numeric values on next line (not same line!)
+ *   Except EMPRUNTS which has all values on one line per row
+ * - Produits financiers: name on one line, value on next, spans page breaks
+ * - Fiscalité: single line "N (year): amount  N-1: amount  N-2: amount"
+ *
+ * IMPORTANT: pdf-parse extracts text with inconsistent spacing.
+ * Single spaces may appear between column values that were in separate PDF columns.
+ * We use context-aware parsing instead of relying on space-based splitting.
  */
 function parseKYCText(pdfText: string): ParsedKYC {
   const titulaire: KYCData = { titre: 'monsieur' }
   const conjoint: KYCData = { titre: 'madame' }
+  const lines = getLines(pdfText)
 
-  // ETAT CIVIL ET COORDONNEES
-  const noms = extractTwoColumnValue(pdfText, 'Nom(?!\\s+de\\s+jeune)')
-  titulaire.nom = noms.titulaire
-  conjoint.nom = noms.conjoint
+  // ═══ ETAT CIVIL ═══
+  // The PDF uses a two-column layout (Monsieur / Madame).
+  // pdf-parse extracts labels on their own line, then values on subsequent lines.
+  // When the titulaire cell is empty, the conjoint value appears directly after the label.
 
-  const prenoms = extractTwoColumnValue(pdfText, 'Pr[ée]nom')
-  titulaire.prenom = prenoms.titulaire
-  conjoint.prenom = prenoms.conjoint
+  // Nom
+  const nomIdx = findLineIndex(lines, /^Nom$/i)
+  if (nomIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, nomIdx, 2)
+    titulaire.nom = vals[0] || null
+    conjoint.nom = vals[1] || null
+  }
 
-  const nomJFille = extractTwoColumnValue(pdfText, "Nom de jeune fille|Nom d'[ée]poux|Nom d'usage")
-  titulaire.nom_jeune_fille = nomJFille.titulaire || null
-  conjoint.nom_jeune_fille = nomJFille.conjoint || null
+  // Nom de jeune fille — titulaire cell is usually empty
+  // The raw text goes: "Nom de jeune fille" → (empty for Mr) → "Salaun" (for Mme)
+  // Since getValuesAfterLabel skips empty lines, the first value IS the conjoint's
+  const njfIdx = findLineIndex(lines, /nom de jeune fille/i)
+  if (njfIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, njfIdx, 1)
+    // NJF is almost always for the conjoint (maiden name)
+    conjoint.nom_jeune_fille = vals[0] || null
+    titulaire.nom_jeune_fille = null
+  }
 
-  // Parse dates - look for date pattern DD/MM/YYYY
-  const dateVals = extractTwoColumnValue(pdfText, 'Date de naissance|N[ée]\\(e\\) le|Date naissance')
-  titulaire.date_naissance = parseDate(dateVals.titulaire)
-  conjoint.date_naissance = parseDate(dateVals.conjoint)
+  // Prénom
+  const prenomIdx = findLineIndex(lines, /^Pr[ée]nom$/i)
+  if (prenomIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, prenomIdx, 2)
+    titulaire.prenom = vals[0] || null
+    conjoint.prenom = vals[1] || null
+  }
 
-  // If dates not found via label, try looking for date patterns in text
-  if (!titulaire.date_naissance) {
-    const dateMatch = pdfText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)
-    if (dateMatch && dateMatch.length >= 1) {
-      titulaire.date_naissance = parseDate(dateMatch[0])
-      if (dateMatch.length >= 2) {
-        conjoint.date_naissance = parseDate(dateMatch[1])
+  // Date, lieu de naissance — format: "DD/MM/YYYY à Lieu (dept)"
+  const dateLieuIdx = findLineIndex(lines, /date.*lieu.*naissance|date.*naissance/i)
+  if (dateLieuIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, dateLieuIdx, 2)
+    for (let v = 0; v < vals.length; v++) {
+      const person = v === 0 ? titulaire : conjoint
+      const line = vals[v]
+      const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{4})/)
+      if (dateMatch) {
+        person.date_naissance = parseDate(dateMatch[1])
+      }
+      // Extract lieu: after "à" or after the date
+      const lieuMatch = line.match(/(?:à|a)\s+(.+?)(?:\s*$)/) || line.match(/\d{4}\s+(.+)/)
+      if (lieuMatch) {
+        person.lieu_naissance = lieuMatch[1].trim()
       }
     }
   }
 
-  // Lieu de naissance
-  const lieuVals = extractTwoColumnValue(pdfText, 'Lieu de naissance|N[ée]\\(e\\) [àa]|Ville de naissance')
-  titulaire.lieu_naissance = lieuVals.titulaire
-  conjoint.lieu_naissance = lieuVals.conjoint
-
-  // Nationalité
-  const nat = extractTwoColumnValue(pdfText, 'Nationalit[ée]')
-  titulaire.nationalite = nat.titulaire
-  conjoint.nationalite = nat.conjoint
-
-  // Résidence fiscale
-  const resFiscale = extractTwoColumnValue(pdfText, 'R[ée]sidence fiscale|Pays de r[ée]sidence fiscale')
-  titulaire.residence_fiscale = resFiscale.titulaire
-  conjoint.residence_fiscale = resFiscale.conjoint
-
-  // NIF
-  const nif = extractTwoColumnValue(pdfText, "NIF|N° d'identification|Num[ée]ro d'identification|N° identification fiscale")
-  titulaire.nif = nif.titulaire
-  conjoint.nif = nif.conjoint
-
-  // Adresse — try multi-line capture
-  const addrMatch = pdfText.match(/(?:Adresse|ADRESSE)[:\s]*\n?([^\n]+(?:\n(?![A-Z][a-z])[^\n]+)*)/i)
-  if (addrMatch) {
-    titulaire.adresse = addrMatch[1].trim().replace(/\n/g, ', ')
+  // Fallback: find dates in text if label-based approach failed
+  if (!titulaire.date_naissance) {
+    const allDates = pdfText.match(/\d{1,2}\/\d{1,2}\/\d{4}/g)
+    if (allDates && allDates.length >= 1) {
+      titulaire.date_naissance = parseDate(allDates[0])
+      if (allDates.length >= 2) conjoint.date_naissance = parseDate(allDates[1])
+    }
   }
 
-  // Propriétaire / Locataire
-  const proprioMatch = pdfText.match(/(?:Propri[ée]taire|Locataire)[:\s]*([^\n]*)/i)
-  if (proprioMatch) {
-    const val = proprioMatch[0].toLowerCase()
-    if (val.includes('propri')) {
+  // Nationalité — may have 1 value (shared) or 2 values
+  const natIdx = findLineIndex(lines, /^Nationalit[ée]$/i)
+  if (natIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, natIdx, 2)
+    titulaire.nationalite = vals[0] || null
+    conjoint.nationalite = vals[1] || vals[0] || null
+  }
+
+  // Résidence fiscale — may have 1 value (shared) or 2 values
+  const rfIdx = findLineIndex(lines, /^R[ée]sidence fiscale$/i)
+  if (rfIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, rfIdx, 2)
+    titulaire.residence_fiscale = vals[0] || null
+    conjoint.residence_fiscale = vals[1] || vals[0] || null
+  }
+
+  // NIF
+  const nifIdx = findLineIndex(lines, /num[ée]ro d'identification|^NIF$/i)
+  if (nifIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, nifIdx, 2)
+    titulaire.nif = (vals[0] && vals[0] !== '-') ? vals[0] : null
+    conjoint.nif = (vals[1] && vals[1] !== '-') ? vals[1] : null
+  }
+
+  // Adresse
+  const addrIdx = findLineIndex(lines, /^Adresse$/i)
+  if (addrIdx >= 0) {
+    const addrParts: string[] = []
+    for (let i = addrIdx + 1; i < lines.length && addrParts.length < 3; i++) {
+      const l = lines[i]
+      if (/^(Propriétaire|Locataire|Téléphone)/i.test(l)) break
+      if (l.length > 0) addrParts.push(l)
+    }
+    titulaire.adresse = addrParts.join(', ') || null
+  }
+
+  // Propriétaire / Locataire — value often on same line as label
+  const proprioIdx = findLineIndex(lines, /Propri[ée]taire.*Locataire|Locataire.*Propri[ée]taire/i)
+  if (proprioIdx >= 0) {
+    const val = lines[proprioIdx].toLowerCase()
+    if (/propri[ée]taire\s*$/.test(val)) {
       titulaire.proprietaire_locataire = 'proprietaire'
-    } else if (val.includes('locataire')) {
+    } else if (/locataire\s*$/.test(val)) {
       titulaire.proprietaire_locataire = 'locataire'
+    } else {
+      const nextLine = lines[proprioIdx + 1]?.toLowerCase() || ''
+      if (nextLine.includes('propri')) titulaire.proprietaire_locataire = 'proprietaire'
+      else if (nextLine.includes('locataire')) titulaire.proprietaire_locataire = 'locataire'
     }
   }
 
   // Téléphone
-  const tel = extractTwoColumnValue(pdfText, 'T[ée]l[ée]phone|Phone|Portable|Mobile')
-  titulaire.telephone = tel.titulaire
-  conjoint.telephone = tel.conjoint
+  const telIdx = findLineIndex(lines, /^T[ée]l[ée]phone$/i)
+  if (telIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, telIdx, 2)
+    titulaire.telephone = vals[0] || null
+    conjoint.telephone = vals[1] || null
+  }
 
   // Email
-  const email = extractTwoColumnValue(pdfText, 'Email|E-mail|Mail|Courriel')
-  titulaire.email = email.titulaire
-  conjoint.email = email.conjoint
+  const mailIdx = findLineIndex(lines, /^(Adresse\s+mail|Email|E-mail|Mail)$/i)
+  if (mailIdx >= 0) {
+    const vals = getValuesAfterLabel(lines, mailIdx, 2)
+    titulaire.email = vals[0] || null
+    conjoint.email = vals[1] || null
+  }
 
-  // SITUATION FAMILIALE
-  const sitFam = extractTwoColumnValue(pdfText, 'Situation matrimoniale|Situation familiale|Statut matrimonial')
-  if (sitFam.titulaire) {
-    const val = sitFam.titulaire.toLowerCase()
-    if (val.includes('mari') || val.includes('marié')) {
+  // ═══ SITUATION FAMILIALE ═══
+
+  // Situation matrimoniale — checkbox format: "X Marié(e)"
+  // The line contains all options: "Célibataire Concubinage Pacsé(e) X Marié(e) Veuf(ve) Divorcé(e)"
+  const sitMatriLine = pdfText.match(/C[ée]libataire.*Concubinage.*Pacs[ée].*Mari[ée].*Veuf.*Divorc[ée]/i)
+  if (sitMatriLine) {
+    const line = sitMatriLine[0]
+    if (/X\s*Mari[ée]\(?e?\)?/i.test(line)) {
       titulaire.situation_matrimoniale = 'marie'
-    } else if (val.includes('c[ée]libataire') || val.includes('celibataire') || val.includes('célibataire')) {
+    } else if (/X\s*C[ée]libataire/i.test(line)) {
       titulaire.situation_matrimoniale = 'celibataire'
-    } else if (val.includes('divorc')) {
-      titulaire.situation_matrimoniale = 'divorce'
-    } else if (val.includes('veuf') || val.includes('veuve')) {
-      titulaire.situation_matrimoniale = 'veuf'
-    } else if (val.includes('pacs')) {
-      titulaire.situation_matrimoniale = 'pacse'
-    } else if (val.includes('concubin')) {
+    } else if (/X\s*Concubinage/i.test(line)) {
       titulaire.situation_matrimoniale = 'concubinage'
+    } else if (/X\s*Pacs[ée]\(?e?\)?/i.test(line)) {
+      titulaire.situation_matrimoniale = 'pacse'
+    } else if (/X\s*Veuf/i.test(line)) {
+      titulaire.situation_matrimoniale = 'veuf'
+    } else if (/X\s*Divorc[ée]\(?e?\)?/i.test(line)) {
+      titulaire.situation_matrimoniale = 'divorce'
     }
   }
 
-  // Régime matrimonial
-  const regime = extractTwoColumnValue(pdfText, 'Régime matrimonial')
-  titulaire.regime_matrimonial = regime.titulaire
+  // Régime matrimonial — value on next line, often starts with "*"
+  const regimeIdx = findLineIndex(lines, /R[ée]gime matrimonial/i)
+  if (regimeIdx >= 0) {
+    for (let i = regimeIdx + 1; i < Math.min(regimeIdx + 4, lines.length); i++) {
+      const l = lines[i]
+      if (/^(ENFANTS|Nombre|\d+\s*enfants?)/i.test(l)) break
+      if (l.startsWith('*')) {
+        titulaire.regime_matrimonial = l.replace(/^\*\s*/, '').trim()
+        break
+      } else if (l.length > 2 && !/^(MB|DOCUMENT|Paraphes)/i.test(l)) {
+        titulaire.regime_matrimonial = l.replace(/^\*\s*/, '').trim()
+        break
+      }
+    }
+  }
 
-  // Nombre d'enfants
-  const nbEnfants = extractTwoColumnValue(pdfText, 'Nombre d\'enfants|Enfants')
-  titulaire.nombre_enfants = nbEnfants.titulaire ? parseInt(nbEnfants.titulaire, 10) || null : null
+  // Enfants
+  const enfantsMatch = pdfText.match(/(\d+)\s*enfants?\s*:?\s*\n?([\s\S]*?)(?=\n\s*\n|\nMB|\nSITUATION|\nVOS)/i)
+  if (enfantsMatch) {
+    titulaire.nombre_enfants = parseInt(enfantsMatch[1], 10)
+    const agesText = enfantsMatch[2].trim()
+    const ages = agesText.match(/\d+\s*ans/g)
+    if (ages) {
+      titulaire.enfants_details = ages.join(', ')
+    }
+  }
 
-  // Détails enfants
-  const enfantDetails = extractTwoColumnValue(pdfText, 'Âges|Details enfants')
-  titulaire.enfants_details = enfantDetails.titulaire
+  // ═══ SITUATION PROFESSIONNELLE ═══
+  // Format: label + values on SAME line, e.g. "Profession Senior Director CMO"
+  // Two-column values separated by spaces — but column boundary is unknown.
+  // Strategy: for Statut/Depuis, values are short and repeated patterns.
+  // For Profession/Employeur, we use Employeur to disambiguate.
 
-  // SITUATION PROFESSIONNELLE
-  const prof = extractTwoColumnValue(pdfText, 'Profession|Activit[ée] professionnelle')
-  titulaire.profession = prof.titulaire
-  conjoint.profession = prof.conjoint
+  // First parse Statut (short values like "CDI CDI" or "TNS CDI")
+  const statutIdx = findLineIndex(lines, /^Statut\s+/i)
+  if (statutIdx >= 0) {
+    const statutLine = lines[statutIdx].replace(/^Statut\s+/i, '').trim()
+    // Split known status values: CDI, CDD, TNS, Fonctionnaire, Retraité, etc.
+    const statusMatch = statutLine.match(/^(\S+(?:\s+\S+)?)\s+(\S+(?:\s+\S+)?)$/)
+    if (statusMatch) {
+      titulaire.statut_professionnel = statusMatch[1].trim()
+      conjoint.statut_professionnel = statusMatch[2].trim()
+    } else {
+      titulaire.statut_professionnel = statutLine || null
+    }
+  }
 
-  const statut = extractTwoColumnValue(pdfText, 'Statut professionnel|Statut|Cat[ée]gorie socio')
-  titulaire.statut_professionnel = statut.titulaire
-  conjoint.statut_professionnel = statut.conjoint
+  // Depuis — format "Avril 2008 Avril 2016" or "2008 2016"
+  const depuisIdx = findLineIndex(lines, /^Depuis\s+/i)
+  if (depuisIdx >= 0) {
+    const depuisLine = lines[depuisIdx].replace(/^Depuis\s+/i, '').trim()
+    // Split at the boundary between two date-like values (Month Year Month Year)
+    const datesPairMatch = depuisLine.match(/^(.+?\d{4})\s+(.+?\d{4})$/)
+    if (datesPairMatch) {
+      titulaire.date_debut_emploi = datesPairMatch[1].trim()
+      conjoint.date_debut_emploi = datesPairMatch[2].trim()
+    } else {
+      titulaire.date_debut_emploi = depuisLine || null
+    }
+  }
 
-  const empl = extractTwoColumnValue(pdfText, 'Employeur|Entreprise|Soci[ée]t[ée]')
-  titulaire.employeur = empl.titulaire
-  conjoint.employeur = empl.conjoint
+  // Employeur — e.g. "Employeur CIC CIB Centric Software"
+  // When no double-space separator, store entire value as titulaire
+  // (can't reliably determine where Mr's employer ends and Mme's begins)
+  const emplIdx = findLineIndex(lines, /^Employeur\s+/i)
+  if (emplIdx >= 0) {
+    const emplLine = lines[emplIdx].replace(/^Employeur\s+/i, '').trim()
+    const parts = emplLine.split(/\s{2,}/)
+    if (parts.length >= 2) {
+      titulaire.employeur = parts[0].trim()
+      conjoint.employeur = parts.slice(1).join(' ').trim()
+    } else {
+      // Store whole value — user can manually fix the split in the CRM
+      titulaire.employeur = emplLine || null
+    }
+  }
 
-  const dateEmpl = extractTwoColumnValue(pdfText, 'Date de d[ée]but|D[ée]but emploi|Depuis|En poste depuis')
-  titulaire.date_debut_emploi = dateEmpl.titulaire
-  conjoint.date_debut_emploi = dateEmpl.conjoint
+  // Profession — e.g. "Profession Senior Director CMO"
+  const profIdx = findLineIndex(lines, /^Profession\s+/i)
+  if (profIdx >= 0) {
+    const profLine = lines[profIdx].replace(/^Profession\s+/i, '').trim()
+    const parts = profLine.split(/\s{2,}/)
+    if (parts.length >= 2) {
+      titulaire.profession = parts[0].trim()
+      conjoint.profession = parts.slice(1).join(' ').trim()
+    } else {
+      // Store whole value — user can manually fix the split
+      titulaire.profession = profLine || null
+    }
+  }
 
-  // FLUX (Revenus)
-  const revProNet = extractTwoColumnValue(pdfText, 'Revenus? professionnels? nets?|Revenu net|Salaire net|Revenus? nets? annuels?')
-  titulaire.revenus_pro_net = parseNumber(revProNet.titulaire)
-  conjoint.revenus_pro_net = parseNumber(revProNet.conjoint)
+  // ═══ FLUX (Revenus) ═══
+  // Revenue section: multi-line label then values.
+  // "120000 205000" — numbers separated by single space.
+  // We need to find lines that contain only numbers after the revenue label.
 
-  const revFonc = extractTwoColumnValue(pdfText, 'Revenus? fonciers?|Revenus? locatifs?')
-  titulaire.revenus_fonciers = parseNumber(revFonc.titulaire)
-  conjoint.revenus_fonciers = parseNumber(revFonc.conjoint)
+  const revSection = extractSection(pdfText, /FLUX|VOS RESSOURCES/i, /VOS BIENS|IMMOBILIER/i)
+  if (revSection) {
+    const revLines = getLines(revSection)
 
-  const autRev = extractTwoColumnValue(pdfText, 'Autres revenus|Revenus divers|Pensions?')
-  titulaire.autres_revenus = parseNumber(autRev.titulaire)
-  conjoint.autres_revenus = parseNumber(autRev.conjoint)
+    // Find the line with just numbers after "imposable)" or revenue label
+    for (let i = 0; i < revLines.length; i++) {
+      const line = revLines[i]
+      // Look for a line that's just numbers (revenue values)
+      if (/^\d{4,}/.test(line.trim()) && !/^(20[12]\d|19\d{2})$/.test(line.trim())) {
+        // This is likely the revenue line: "120000 205000"
+        const nums = line.trim().split(/\s+/).map(v => parseNumber(v)).filter(n => n !== null)
+        if (nums.length >= 1 && !titulaire.revenus_pro_net) {
+          titulaire.revenus_pro_net = nums[0]
+          if (nums.length >= 2) conjoint.revenus_pro_net = nums[1]
+        }
+        break
+      }
+    }
 
-  const totRev = extractTwoColumnValue(pdfText, 'Total revenus annuels|Revenus? totaux?|Total des revenus')
-  titulaire.total_revenus_annuel = parseNumber(totRev.titulaire)
+    // Revenus fonciers
+    const revFoncIdx = revLines.findIndex(l => /revenus?\s*fonciers?/i.test(l))
+    if (revFoncIdx >= 0) {
+      // Value might be on same line or next line
+      const sameLine = revLines[revFoncIdx].replace(/revenus?\s*fonciers?\s*/i, '').trim()
+      if (sameLine && sameLine.toLowerCase() !== 'n/a') {
+        titulaire.revenus_fonciers = parseNumber(sameLine)
+      } else if (revFoncIdx + 1 < revLines.length) {
+        const nextVal = revLines[revFoncIdx + 1].trim()
+        if (nextVal && nextVal.toLowerCase() !== 'n/a' && /\d/.test(nextVal)) {
+          titulaire.revenus_fonciers = parseNumber(nextVal)
+        }
+      }
+    }
 
-  // IMMOBILIER D'USAGE
-  const immobilierSection = extractBetween(
+    // Total revenus — "TOTAL REVENUS :   27000/ mois    325000/ an"
+    const totalRevLine = revLines.find(l => /TOTAL\s*REVENUS/i.test(l))
+    if (totalRevLine) {
+      const annualMatch = totalRevLine.match(/([\d.,]+k?)\s*\/\s*an/i)
+      if (annualMatch) {
+        titulaire.total_revenus_annuel = parseNumber(annualMatch[1])
+      } else {
+        const nums = totalRevLine.match(/[\d.,]+k?(?:€|EUR)?/gi)
+        if (nums) {
+          const parsed = nums.map(n => parseNumber(n)).filter(n => n !== null && n > 10000)
+          if (parsed.length > 0) titulaire.total_revenus_annuel = parsed[parsed.length - 1]
+        }
+      }
+    }
+  }
+
+  // ═══ PATRIMOINE IMMOBILIER ═══
+  // Format: designation on one line, then values on next line
+  // e.g. "Résidence principale\n2021 915000 1200000 600155"
+  const immoSection = extractSection(
     pdfText,
-    'IMMOBILIER D\'USAGE|IMMOBILIER',
-    'PRODUITS FINANCIERS|DIVERS|EMPRUNTS'
+    /IMMOBILIER D[''\u2019]USAGE|PATRIMOINE IMMOBILIER/i,
+    /PRODUITS FINANCIERS|BANCAIRES|ASSURANCE|DIVERS/i
   )
-  if (immobilierSection) {
-    const immobLines = immobilierSection.split('\n').filter(l => l.trim())
+  if (immoSection) {
+    const immoLines = getLines(immoSection)
     const patrimoine: KYCData['patrimoine_immobilier'] = []
 
-    for (const line of immobLines) {
-      // Try to parse designation and values from line
-      const cells = line.split(/\s{2,}/).filter(c => c.trim())
-      if (cells.length >= 2) {
-        patrimoine.push({
-          designation: cells[0] || null,
-          date_acquisition: cells[1] || null,
-          valeur_acquisition: cells[2] ? parseNumber(cells[2]) : null,
-          valeur_actuelle: cells[3] ? parseNumber(cells[3]) : null,
-          crd: cells[4] ? parseNumber(cells[4]) : null,
-          charges: cells[5] ? parseNumber(cells[5]) : null,
-        })
+    for (let i = 0; i < immoLines.length; i++) {
+      const line = immoLines[i]
+      // Skip headers, totals, page artifacts
+      if (/d[ée]signation|^TOTAL|^MB$|^DOCUMENT|^Paraphes|^\d+$/i.test(line)) continue
+      if (/^(Charges|Valeur|Date|CRD|associ)/i.test(line)) continue
+
+      // A designation line contains text (not starting with a number/year pattern)
+      // Followed by a values line that starts with a year or numbers
+      if (!/^\d/.test(line) && line.length > 2) {
+        // Look at next line for numeric values
+        const nextLine = immoLines[i + 1]?.trim() || ''
+        if (/^\d/.test(nextLine)) {
+          const nums = nextLine.split(/\s+/)
+          patrimoine.push({
+            designation: line,
+            date_acquisition: nums[0] || null,
+            valeur_acquisition: parseNumber(nums[1]),
+            valeur_actuelle: parseNumber(nums[2]),
+            crd: parseNumber(nums[3]),
+            charges: parseNumber(nums[4]),
+          })
+          i++ // Skip the values line
+        }
       }
     }
-    if (patrimoine.length > 0) {
-      titulaire.patrimoine_immobilier = patrimoine
-    }
+    if (patrimoine.length > 0) titulaire.patrimoine_immobilier = patrimoine
   }
 
-  // PRODUITS FINANCIERS / BANCAIRES / ASSURANCE-VIE
-  const prodFinSection = extractBetween(
-    pdfText,
-    'PRODUITS FINANCIERS|BANCAIRES|ASSURANCE-VIE',
-    'DIVERS|EMPRUNTS|FISCALITE|OBJECTIFS'
-  )
-  if (prodFinSection) {
-    const prodLines = prodFinSection.split('\n').filter(l => l.trim())
+  // ═══ PRODUITS FINANCIERS ═══
+  // Format: product name on one line, value on next line (or near it)
+  // Spans page breaks (MB, page number, DOCUMENT CONFIDENTIEL, Paraphes)
+  // e.g. "CAV Fr Cardif\n\n376 kEUR"
+  const prodStart = pdfText.search(/PRODUITS FINANCIERS|BANCAIRES|ASSURANCE-VIE/i)
+  const diversStart = pdfText.search(/\nDIVERS\s/i)
+  if (prodStart >= 0) {
+    const prodEnd = diversStart >= 0 ? diversStart : pdfText.search(/VOS DETTES|EMPRUNTS/i)
+    const prodText = prodEnd >= 0
+      ? pdfText.substring(prodStart, prodEnd)
+      : pdfText.substring(prodStart, prodStart + 2000)
+
+    // Clean out page break artifacts
+    const cleanProd = prodText
+      .replace(/MB\s*\n/g, '\n')
+      .replace(/\d+\s*\nDOCUMENT STRICTEMENT CONFIDENTIEL\s*\n/gi, '\n')
+      .replace(/Paraphes\s*:\s*\n/gi, '\n')
+
+    const prodLines = getLines(cleanProd)
     const produits: KYCData['produits_financiers'] = []
 
-    for (const line of prodLines) {
-      const cells = line.split(/\s{2,}/).filter(c => c.trim())
-      if (cells.length >= 1) {
+    for (let i = 0; i < prodLines.length; i++) {
+      const line = prodLines[i]
+      // Skip headers
+      if (/d[ée]signation|d[ée]tenteur|^TOTAL|^PRODUITS|^BANCAIRES|^ASSURANCE|^Valeur$|^Date$|^Versements|^r[ée]guliers|^Rendement|^d'ouverture$|^ouverture$|^r[ée]guli/i.test(line)) continue
+
+      // A product name: text that doesn't look like a pure value
+      if (!/^\d/.test(line) && !/^[\d.,]+\s*k?(?:€|EUR)/i.test(line) && line.length > 2) {
+        // Look ahead for a value
+        let value: number | null = null
+        for (let j = i + 1; j < Math.min(i + 3, prodLines.length); j++) {
+          const valLine = prodLines[j].trim()
+          const parsed = parseNumber(valLine)
+          if (parsed !== null && parsed > 0) {
+            value = parsed
+            break
+          }
+        }
         produits.push({
-          designation: cells[0] || null,
-          detenteur: cells[1] || null,
-          valeur: cells[2] ? parseNumber(cells[2]) : null,
-          date_ouverture: cells[3] || null,
-          versements_reguliers: cells[4] ? parseNumber(cells[4]) : null,
-          rendement: cells[5] ? parseNumber(cells[5]) : null,
+          designation: line,
+          detenteur: null,
+          valeur: value,
+          date_ouverture: null,
+          versements_reguliers: null,
+          rendement: null,
         })
       }
     }
-    if (produits.length > 0) {
-      titulaire.produits_financiers = produits
-    }
+    if (produits.length > 0) titulaire.produits_financiers = produits
   }
 
-  // EMPRUNTS ET CHARGES
-  const empruntsSection = extractBetween(
+  // ═══ EMPRUNTS ═══
+  // Format: all values on one line, space-separated
+  // "RP SG  760000  2021 20  0.7% 600k€ 3441"
+  // Problem: inconsistent spacing. We parse by recognizing value patterns.
+  const empSection = extractSection(
     pdfText,
-    'EMPRUNTS|CRÉDITS|DETTES',
-    'FISCALITE|OBJECTIFS|OBSERVATIONS|$'
+    /EMPRUNTS ET CHARGES|EMPRUNTS/i,
+    /VOTRE FISCALIT[EÉ]|FISCALIT[EÉ]|OBJECTIFS/i
   )
-  if (empruntsSection) {
-    const empLines = empruntsSection.split('\n').filter(l => l.trim())
+  if (empSection) {
+    const empLines = getLines(empSection)
     const emprunts: KYCData['emprunts'] = []
 
     for (const line of empLines) {
-      const cells = line.split(/\s{2,}/).filter(c => c.trim())
-      if (cells.length >= 1) {
-        emprunts.push({
-          designation: cells[0] || null,
-          etablissement: cells[1] || null,
-          montant_emprunte: cells[2] ? parseNumber(cells[2]) : null,
-          date_souscription: cells[3] || null,
-          duree: cells[4] ? parseInt(cells[4], 10) || null : null,
-          taux: cells[5] ? parseFloat(cells[5]) || null : null,
-          crd: cells[6] ? parseNumber(cells[6]) : null,
-          echeance: cells[7] ? parseNumber(cells[7]) : null,
-        })
+      // Skip headers, totals
+      if (/d[ée]signation|[ée]tablissement|montant|^TOTAL|^EMPRUNTS|souscription|Dur[ée]e|^Taux|^CRD|l'[ée]ch[ée]ance|pr[êe]teur/i.test(line)) continue
+      if (/^MB$/i.test(line)) continue
+
+      // Match emprunt lines: they contain a % sign (taux) and numbers
+      if (/%/.test(line) || (/\d{4}/.test(line) && /\d{2,}/.test(line))) {
+        // Parse the line by extracting known patterns
+        // Pattern: designation  etablissement  montant  date  duree  taux%  CRD  echeance
+        // Use regex to extract from the whole line
+        const match = line.match(
+          /^(.+?)\s{2,}(\d[\d\s]*?\d)\s+(\d{4})\s+(\d+)\s+([\d.,]+%?)\s+([\d.,]+k?€?)\s+(\d+)\s*$/
+        )
+        if (match) {
+          const [, desigEtab, montant, annee, duree, taux, crd, echeance] = match
+          // Split designation and établissement
+          const desigParts = desigEtab.split(/\s{2,}/)
+          emprunts.push({
+            designation: desigParts[0]?.trim() || null,
+            etablissement: desigParts[1]?.trim() || desigParts[0]?.trim() || null,
+            montant_emprunte: parseNumber(montant.replace(/\s/g, '')),
+            date_souscription: annee,
+            duree: parseInt(duree, 10) || null,
+            taux: parseFloat(taux.replace('%', '').replace(',', '.')) || null,
+            crd: parseNumber(crd),
+            echeance: parseNumber(echeance),
+          })
+        } else {
+          // Fallback: split by any whitespace and try to assign columns
+          const tokens = line.split(/\s+/).filter(t => t.length > 0)
+          if (tokens.length >= 4) {
+            // Find the year token (4 digits, 19xx or 20xx)
+            const yearIdx = tokens.findIndex(t => /^(19|20)\d{2}$/.test(t))
+            if (yearIdx >= 2) {
+              const designation = tokens.slice(0, yearIdx - 2).join(' ')
+              const etablissement = tokens[yearIdx - 2]
+              const montant = tokens[yearIdx - 1]
+              const annee = tokens[yearIdx]
+              const duree = tokens[yearIdx + 1]
+              const taux = tokens[yearIdx + 2]
+              const crd = tokens[yearIdx + 3]
+              const echeance = tokens[yearIdx + 4]
+              emprunts.push({
+                designation: designation || tokens[0] || null,
+                etablissement: etablissement || null,
+                montant_emprunte: parseNumber(montant),
+                date_souscription: annee || null,
+                duree: duree ? parseInt(duree, 10) || null : null,
+                taux: taux ? parseFloat(taux.replace('%', '').replace(',', '.')) || null : null,
+                crd: parseNumber(crd),
+                echeance: parseNumber(echeance),
+              })
+            }
+          }
+        }
       }
     }
-    if (emprunts.length > 0) {
-      titulaire.emprunts = emprunts
+    if (emprunts.length > 0) titulaire.emprunts = emprunts
+  }
+
+  // ═══ FISCALITÉ ═══
+  // Format: "Impôt sur revenu  :   N (2025) :  485k€  N- 1 :   52k€     N- 2 :67k€"
+  const fiscLine = pdfText.match(/Imp[ôo]t sur (?:le )?revenu[^:]*:([^\n]+)/i)
+  if (fiscLine) {
+    const fiscText = fiscLine[1]
+    const nMatch = fiscText.match(/N\s*\([^)]*\)\s*:?\s*([\d.,]+k?€?)/i)
+    if (nMatch) titulaire.impot_revenu_n = parseNumber(nMatch[1])
+
+    const n1Match = fiscText.match(/N\s*-\s*1\s*:?\s*([\d.,]+k?€?)/i)
+    if (n1Match) titulaire.impot_revenu_n1 = parseNumber(n1Match[1])
+
+    const n2Match = fiscText.match(/N\s*-\s*2\s*:?\s*([\d.,]+k?€?)/i)
+    if (n2Match) titulaire.impot_revenu_n2 = parseNumber(n2Match[1])
+  }
+
+  // ═══ OBJECTIFS CLIENT ═══
+  const objMatch = pdfText.match(/Objectifs?\s*principaux?\s*:?\s*([^\n]+)/i)
+  if (objMatch) {
+    titulaire.objectifs_client = objMatch[1].trim()
+  } else {
+    const objMatch2 = pdfText.match(/OBJECTIFS?\s*CLIENT[S]?\s*\n+([^\n]+)/i)
+    if (objMatch2 && !objMatch2[1].match(/^MB$/)) {
+      titulaire.objectifs_client = objMatch2[1].trim()
     }
   }
 
-  // FISCALITE
-  const fiscMatch = pdfText.match(/(?:Impôt sur le revenu|IR)\s+([^\n]*)\s+([^\n]*)/i)
-  if (fiscMatch) {
-    titulaire.impot_revenu_n = parseNumber(fiscMatch[1])
-    titulaire.impot_revenu_n1 = parseNumber(fiscMatch[2])
-  }
-
-  const fisc2 = extractTwoColumnValue(pdfText, 'Impôt année N-2')
-  titulaire.impot_revenu_n2 = parseNumber(fisc2.titulaire)
-
-  // OBJECTIFS CLIENT
-  const objMatch = pdfText.match(/(?:Objectifs|Objectif client|OBJECTIFS)[:\s]*([^\n]+(?:\n[^\n]+)?)/i)
-  if (objMatch) {
-    titulaire.objectifs_client = objMatch[1].trim()
-  }
-
-  // KYC Date Signature
-  const sigMatch = pdfText.match(/(?:Date|Signature)[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/i)
+  // ═══ DATE SIGNATURE ═══
+  const sigMatch = pdfText.match(/(?:Sign[ée]\s+[àa]|le)\s+.*?(\d{1,2}\/\d{1,2}\/\d{4})/i)
   if (sigMatch) {
     titulaire.kyc_date_signature = parseDate(sigMatch[1])
   }
@@ -496,14 +731,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Read file as buffer
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
     let pdfText = ''
 
     if (pdfParse) {
-      // Use pdf-parse if available
       try {
         const data = await pdfParse(buffer)
         pdfText = data.text || ''
@@ -515,19 +748,10 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // Fallback: try to use pdfjs-dist via Node.js
-      try {
-        // This would require additional setup; for now, return error
-        return NextResponse.json(
-          { error: 'Le module de traitement PDF n\'est pas disponible. Veuillez installer pdf-parse.' },
-          { status: 500 }
-        )
-      } catch (err) {
-        return NextResponse.json(
-          { error: 'Impossible de traiter le PDF' },
-          { status: 500 }
-        )
-      }
+      return NextResponse.json(
+        { error: 'Le module de traitement PDF n\'est pas disponible.' },
+        { status: 500 }
+      )
     }
 
     if (!pdfText || pdfText.trim().length === 0) {
@@ -537,15 +761,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log extracted text for debugging
-    console.log('=== PDF TEXT EXTRACTED ===')
-    console.log(pdfText.substring(0, 2000))
-    console.log('=========================')
-
-    // Parse the extracted text
     const parsed = parseKYCText(pdfText)
 
-    return NextResponse.json({ ...parsed, _debug_text_preview: pdfText.substring(0, 500) }, { status: 200 })
+    return NextResponse.json(parsed, { status: 200 })
   } catch (error) {
     console.error('KYC parse error:', error)
     return NextResponse.json(
