@@ -1179,10 +1179,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const fileName = file.name.toLowerCase()
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const fileName = (file.name || '').toLowerCase()
+
+    // Detect file type by extension, MIME type, OR magic bytes
+    // Magic bytes: PDF starts with "%PDF" (25504446), DOCX/ZIP starts with "PK" (504B)
+    const isPKZip = buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4B
+    const isPdfMagic = buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
+
     const isDocx = fileName.endsWith('.docx') ||
-      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    const isPdf = fileName.endsWith('.pdf') || file.type === 'application/pdf'
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      (isPKZip && !fileName.endsWith('.pdf'))
+    const isPdf = fileName.endsWith('.pdf') || file.type === 'application/pdf' || isPdfMagic
 
     if (!isDocx && !isPdf) {
       return NextResponse.json(
@@ -1191,12 +1200,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-
     let parsed: ParsedKYC
 
-    if (isDocx) {
+    if (isDocx && !isPdfMagic) {
       // ═══ DOCX PARSING (preferred — structured tables) ═══
       if (!mammoth) {
         return NextResponse.json(
