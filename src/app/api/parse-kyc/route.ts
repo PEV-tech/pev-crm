@@ -851,11 +851,23 @@ function parseKYCDocx(html: string): ParsedKYC {
   // 3 columns: Label | Monsieur | Madame
   const etatCivil = findTable(tables, /^(Titre|Nom)$/i) || findTable(tables, /ETAT CIVIL|COORDONN/i)
   if (etatCivil) {
-    // Parse titre from header row
+    // Parse titre from the "Titre" row
+    // Values like "MONSIEUR / MADAME" mean the template wasn't filled — both could be monsieur
+    // We detect the actual gender: "MONSIEUR" alone = monsieur, "MADAME" alone = madame
+    // "MONSIEUR / MADAME" = ambiguous, default to 'monsieur' (can be corrected by user)
     const titreRow = etatCivil.find(r => /^Titre$/i.test(r[0]))
     if (titreRow) {
-      if (/monsieur/i.test(titreRow[1] || '')) titulaire.titre = 'monsieur'
-      if (/madame/i.test(titreRow[1] || '')) titulaire.titre = 'madame'
+      const t1 = (titreRow[1] || '').toLowerCase()
+      const t2 = (titreRow[2] || '').toLowerCase()
+      // Titulaire
+      if (t1.includes('monsieur') && !t1.includes('madame')) titulaire.titre = 'monsieur'
+      else if (t1.includes('madame') && !t1.includes('monsieur')) titulaire.titre = 'madame'
+      // else: ambiguous "monsieur / madame" → keep default 'monsieur'
+
+      // Conjoint
+      if (t2.includes('madame') && !t2.includes('monsieur')) conjoint.titre = 'madame'
+      else if (t2.includes('monsieur') && !t2.includes('madame')) conjoint.titre = 'monsieur'
+      else conjoint.titre = 'monsieur' // both ambiguous → default monsieur
     }
 
     titulaire.nom = getRowValue(etatCivil, /^Nom$/i, 1)
@@ -933,13 +945,13 @@ function parseKYCDocx(html: string): ParsedKYC {
     }
   }
 
-  // Régime matrimonial — may be in table or in text between tables
-  const regimeMatch = fullText.match(/R[ée]gime matrimonial\*?\s*:?\s*([^\n.—–-]+)/i)
-    || fullText.match(/R[ée]gime matrimonial\*?\s+(\S[^\n.]*)/i)
+  // Régime matrimonial — appears in text between tables
+  // Format: "Régime matrimonial* CTE" followed by "ENFANTS" or other section
+  // Must stop before any section header (ENFANTS, SITUATION, VOS, ---TABLE---)
+  const regimeMatch = fullText.match(/R[ée]gime matrimonial\*?\s*:?\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s'',()]*?)(?:\s+ENFANTS|\s+SITUATION|\s+VOS|\s+---TABLE---|\s*$)/i)
   if (regimeMatch) {
     let regime = regimeMatch[1].trim()
-    // Clean up: remove leading * or table markers
-    regime = regime.replace(/^[\*\s]+/, '').replace(/---TABLE---.*/, '').trim()
+    regime = regime.replace(/^[\*\s]+/, '').trim()
     if (regime.length > 1) titulaire.regime_matrimonial = regime
   }
 

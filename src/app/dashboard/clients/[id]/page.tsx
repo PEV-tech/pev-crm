@@ -329,7 +329,45 @@ export default function ClientDetailPage() {
             ) : (
               <>
                 <KYCUpload onDataParsed={(data) => {
-                  if (kycRef.current) kycRef.current.populateFromKyc(data.titulaire)
+                  if (!kycRef.current) return
+                  // Determine which person (titulaire or conjoint) matches this client
+                  // by comparing last names (nom)
+                  const clientNom = (client.nom || '').toLowerCase().trim()
+                  const clientPrenom = (client.prenom || '').toLowerCase().trim()
+                  const tNom = (data.titulaire?.nom || '').toLowerCase().trim()
+                  const cNom = (data.conjoint?.nom || '').toLowerCase().trim()
+                  const tPrenom = (data.titulaire?.prenom || '').toLowerCase().trim()
+                  const cPrenom = (data.conjoint?.prenom || '').toLowerCase().trim()
+
+                  let personData = data.titulaire // default
+                  if (clientNom && cNom && clientNom === cNom) {
+                    // Last name matches conjoint
+                    if (!tNom || clientNom !== tNom || clientPrenom === cPrenom) {
+                      personData = data.conjoint
+                    }
+                  } else if (clientPrenom && cPrenom && clientPrenom === cPrenom && clientNom !== tNom) {
+                    personData = data.conjoint
+                  }
+
+                  // Merge shared fields from titulaire (matrimonial, enfants, objectifs, immobilier, emprunts, fiscalité)
+                  // These are household-level, not individual
+                  const sharedFromTitulaire = data.titulaire || {}
+                  const merged = {
+                    ...personData,
+                    situation_matrimoniale: personData.situation_matrimoniale || sharedFromTitulaire.situation_matrimoniale,
+                    regime_matrimonial: personData.regime_matrimonial || sharedFromTitulaire.regime_matrimonial,
+                    nombre_enfants: personData.nombre_enfants ?? sharedFromTitulaire.nombre_enfants,
+                    enfants_details: personData.enfants_details || sharedFromTitulaire.enfants_details,
+                    patrimoine_immobilier: personData.patrimoine_immobilier || sharedFromTitulaire.patrimoine_immobilier,
+                    emprunts: personData.emprunts || sharedFromTitulaire.emprunts,
+                    impot_revenu_n: personData.impot_revenu_n ?? sharedFromTitulaire.impot_revenu_n,
+                    impot_revenu_n1: personData.impot_revenu_n1 ?? sharedFromTitulaire.impot_revenu_n1,
+                    impot_revenu_n2: personData.impot_revenu_n2 ?? sharedFromTitulaire.impot_revenu_n2,
+                    objectifs_client: personData.objectifs_client || sharedFromTitulaire.objectifs_client,
+                    total_revenus_annuel: personData.total_revenus_annuel ?? sharedFromTitulaire.total_revenus_annuel,
+                  }
+
+                  kycRef.current.populateFromKyc(merged)
                 }} />
                 <Button size="sm" variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setShowDeleteClientConfirm(true)}>
                   <Trash2 size={14} />Supprimer le client
