@@ -1110,6 +1110,28 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       const isExpanded = expandedSections.has(section)
       const immobilier = data.patrimoine_immobilier || []
 
+      // Detect if detention means community (50/50 split)
+      const isCommunaute = (detention: string | undefined | null): boolean => {
+        if (!detention) return false
+        const d = detention.toLowerCase().trim()
+        return /^(cte|communaut[ée]|commun|50\s*\/\s*50|50\s*%?\s*[-\/]\s*50\s*%?)$/.test(d)
+      }
+
+      // Format currency with 50% annotation when communauté
+      const formatImmoValue = (value: number | undefined | null, detention: string | undefined | null): React.ReactNode => {
+        if (value === undefined || value === null || value === 0) return formatCurrency(0)
+        if (isCommunaute(detention)) {
+          const half = Math.round(value / 2)
+          return (
+            <span>
+              {formatCurrency(half)}
+              <span className="text-[10px] text-gray-400 ml-1">(50% de {formatCurrency(value)})</span>
+            </span>
+          )
+        }
+        return formatCurrency(value)
+      }
+
       // Auto-calculate CRD: capital restant dû basé sur valeur acq, date acq, taux crédit, durée crédit
       const computeCRD = (row: any): number | null => {
         const { valeur_acq, date_acq, taux_credit, duree_credit } = row
@@ -1419,19 +1441,19 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                 {row.date_acq || '-'}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatCurrency(row.valeur_acq)}
+                                {formatImmoValue(row.valeur_acq, row.detention)}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatCurrency(row.valeur_actuelle)}
+                                {formatImmoValue(row.valeur_actuelle, row.detention)}
                               </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {row.detention || '-'}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatCurrency(row.crd)}
+                                {formatImmoValue(row.crd, row.detention)}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatCurrency(row.charges)}
+                                {formatImmoValue(row.charges, row.detention)}
                               </td>
                             </tr>
                           ))}
