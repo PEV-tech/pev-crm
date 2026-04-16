@@ -90,8 +90,14 @@ function parseNumber(value: string | null | undefined): number | null {
   const trimmed = value.trim()
   if (!trimmed || trimmed === '-' || trimmed.toLowerCase() === 'n/a') return null
 
+  // mammoth sometimes renders € as "C" at end of number strings (e.g. "125 000C")
+  // Also strip annotations like "(99K fixe, 66K bonus)" keeping only the main number
   let normalized = trimmed
-    .replace(/€|EUR/gi, '')
+    .replace(/\s*\(.*?\)\s*/g, '') // Remove parenthetical annotations
+    .replace(/€/g, '')
+    .replace(/EUR/gi, '')
+    .replace(/(\d)\s*C(\/mois|\/an)?\s*$/i, '$1') // "125 000C" → "125 000", "2200C/mois" → "2200"
+    .replace(/(\d)\s*K\s*C\s*$/i, '$1K') // "900KC" → "900K"
     .replace(/\s+/g, '')
     .replace(/%$/, '')
     .replace(/,/g, '.')
@@ -778,7 +784,7 @@ function extractTextBetweenTables(html: string): string {
 }
 
 /**
- * Find a table whose first row/cell contains a matching label
+ * Find a table whose cells contain a matching label
  */
 function findTable(tables: string[][][], pattern: RegExp): string[][] | null {
   for (const table of tables) {
@@ -786,6 +792,23 @@ function findTable(tables: string[][][], pattern: RegExp): string[][] | null {
       for (const cell of row) {
         if (pattern.test(cell)) return table
       }
+    }
+  }
+  return null
+}
+
+/**
+ * Find a table by its HEADER ROW column names.
+ * This is more reliable than searching for section titles which may be
+ * in paragraphs between tables rather than in the tables themselves.
+ */
+function findTableByHeaders(tables: string[][][], requiredPatterns: RegExp[]): string[][] | null {
+  for (const table of tables) {
+    // Check first 2 rows (header might be row 0 or row 1 if row 0 is a section title)
+    for (let r = 0; r < Math.min(2, table.length); r++) {
+      const row = table[r]
+      const matchCount = requiredPatterns.filter(p => row.some(cell => p.test(cell))).length
+      if (matchCount >= requiredPatterns.length) return table
     }
   }
   return null
@@ -954,6 +977,7 @@ function parseKYCDocx(html: string): ParsedKYC {
   }
 
   // ═══ TABLE 5: FLUX / REVENUS ═══
+  // In some formats, FLUX is part of the same table as SITUATION PROFESSIONNELLE
   const fluxTable = findTable(tables, /^FLUX$/i) || findTable(tables, /Revenus professionnels/i)
   if (fluxTable) {
     const revPro1 = getRowValue(fluxTable, /revenus?\s*professionnels?/i, 1)
@@ -969,11 +993,12 @@ function parseKYCDocx(html: string): ParsedKYC {
     const autres1 = getRowValue(fluxTable, /autres?\s*revenus?/i, 1)
     if (autres1) titulaire.autres_revenus = parseNumber(autres1)
 
-    // Total revenus — may have "36 000 €/ mois    433 000 €/ an"
+    // Total revenus — formats: "36 000 €/ mois" + "433 000 €/ an" or "433 000 C/ an"
     const totalRow = fluxTable.find(r => /TOTAL\s*REVENUS/i.test(r[0]))
     if (totalRow) {
       const totalText = totalRow.slice(1).join(' ')
-      const annualMatch = totalText.match(/([\d\s.,]+)\s*€?\s*\/?\s*an/i)
+      // Look for annual amount: "433 000 €/ an" or "433 000C/ an" or "325000/ an"
+      const annualMatch = totalText.match(/([\d\s.,]+)\s*[€C]?\s*\/?\s*an/i)
       if (annualMatch) {
         titulaire.total_revenus_annuel = parseNumber(annualMatch[1].replace(/\s/g, ''))
       }
@@ -982,7 +1007,9 @@ function parseKYCDocx(html: string): ParsedKYC {
 
   // ═══ TABLE 6: IMMOBILIER D'USAGE ═══
   // Columns: Désignation | Date d'acquisition | Valeur d'acquisition | Valeur actuelle | (Détention) | CRD | Charges
-  const immoTable = findTable(tables, /IMMOBILIER/i) || findTable(tables, /D[ée]signation.*lieu/i)
+  // Identified by having BOTH "Valeur d'acquisition" AND "Valeur actuelle" in the header
+  const immoTable = findTableByHeaders(tables, [/valeur.*acqui/i, /valeur.*actuelle/i])
+    || findTable(tables, /IMMOBILIER/i)
   if (immoTable) {
     const patrimoine: KYCData['patrimoine_immobilier'] = []
     // Find header row to determine column order
@@ -998,11 +1025,14 @@ function parseKYCDocx(html: string): ParsedKYC {
 
     for (let i = (headerIdx >= 0 ? headerIdx + 1 : 1); i < immoTable.length; i++) {
       const row = immoTable[i]
-      if (/^TOTAL$/i.test(row[0]?.trim())) continue
-      if (!row[0]?.trim()) continue
+      const firstCell = row[0]?.trim() || ''
+      if (/^TOTAL$/i.test(firstCell)) continue
+      if (!firstCell) continue
+      // Skip section titles that leaked into the table
+      if (/PRODUITS FINANCIERS|BANCAIRES|ASSURANCE|DIVERS/i.test(firstCell)) continue
 
       patrimoine.push({
-        designation: row[0]?.trim() || null,
+        designation: firstCell || null,
         date_acquisition: dateCol >= 0 ? row[dateCol]?.trim() || null : null,
         valeur_acquisition: valAcqCol >= 0 ? parseNumber(row[valAcqCol]) : null,
         valeur_actuelle: valActCol >= 0 ? parseNumber(row[valActCol]) : null,
@@ -1015,11 +1045,31 @@ function parseKYCDocx(html: string): ParsedKYC {
 
   // ═══ TABLE 7: PRODUITS FINANCIERS ═══
   // Columns: Désignation | Détenteur | Valeur | Date d'ouverture | Versements réguliers | Rendement
-  const prodTable = findTable(tables, /PRODUITS FINANCIERS/i) || findTable(tables, /Assurance-vie/i)
+  // Identified by having "Détenteur" AND "Rendement" in header.
+  // NOTE: In some docx formats, the header row is in one table and data rows in the NEXT table.
+  let prodTable = findTableByHeaders(tables, [/d[ée]tenteur/i, /rendement/i])
+    || findTable(tables, /PRODUITS FINANCIERS/i)
   if (prodTable) {
     const produits: KYCData['produits_financiers'] = []
-    const headerIdx = prodTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
-    const headers = headerIdx >= 0 ? prodTable[headerIdx] : []
+    let headerIdx = prodTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
+    let headers = headerIdx >= 0 ? prodTable[headerIdx] : []
+    let dataRows: string[][] = []
+
+    if (headerIdx >= 0 && headerIdx === prodTable.length - 1) {
+      // Header is the last (or only) row — data is in the NEXT table
+      const prodTableIdx = tables.indexOf(prodTable)
+      if (prodTableIdx >= 0 && prodTableIdx + 1 < tables.length) {
+        dataRows = tables[prodTableIdx + 1]
+      }
+    } else {
+      // Data rows are in the same table after the header
+      dataRows = headerIdx >= 0 ? prodTable.slice(headerIdx + 1) : prodTable.slice(1)
+    }
+
+    // If we still don't have headers, assume standard column order
+    if (headers.length === 0) {
+      headers = ['Désignation', 'Détenteur', 'Valeur', 'Date d\'ouverture', 'Versements réguliers', 'Rendement']
+    }
 
     const detCol = headers.findIndex(h => /d[ée]tenteur/i.test(h))
     const valCol = headers.findIndex(h => /valeur/i.test(h))
@@ -1027,10 +1077,11 @@ function parseKYCDocx(html: string): ParsedKYC {
     const versCol = headers.findIndex(h => /versements?/i.test(h))
     const rendCol = headers.findIndex(h => /rendement/i.test(h))
 
-    for (let i = (headerIdx >= 0 ? headerIdx + 1 : 1); i < prodTable.length; i++) {
-      const row = prodTable[i]
+    for (const row of dataRows) {
       if (/^TOTAL$/i.test(row[0]?.trim())) continue
       if (!row[0]?.trim()) continue
+      // Skip rows that are just a header from a split table
+      if (row.some(c => /d[ée]signation/i.test(c))) continue
 
       produits.push({
         designation: row[0]?.trim() || null,
@@ -1046,7 +1097,9 @@ function parseKYCDocx(html: string): ParsedKYC {
 
   // ═══ TABLE 8: EMPRUNTS ET CHARGES ═══
   // Columns: Désignation | Date souscription | Durée | Taux | Montant emprunté | CRD | Montant échéance | (ADI)
-  const empTable = findTable(tables, /EMPRUNTS/i)
+  // Identified by having "Taux" AND "CRD" AND "Durée" in header
+  const empTable = findTableByHeaders(tables, [/taux/i, /CRD/i])
+    || findTable(tables, /EMPRUNTS/i)
   if (empTable) {
     const emprunts: KYCData['emprunts'] = []
     const headerIdx = empTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
