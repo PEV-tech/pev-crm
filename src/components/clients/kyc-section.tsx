@@ -147,6 +147,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
               date_acq: item.date_acq || item.date_acquisition || '',
               valeur_acq: item.valeur_acq ?? item.valeur_acquisition ?? 0,
               valeur_actuelle: item.valeur_actuelle ?? 0,
+              detention: item.detention || '',
               taux_credit: item.taux_credit ?? 0,
               duree_credit: item.duree_credit ?? 0,
               crd: item.crd ?? 0,
@@ -1137,6 +1138,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
               date_acq: '',
               valeur_acq: 0,
               valeur_actuelle: 0,
+              detention: '',
               taux_credit: 0,
               duree_credit: 0,
               crd: 0,
@@ -1207,6 +1209,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             <th className="text-right py-1 px-1 font-semibold">
                               Actuelle
                             </th>
+                            <th className="text-left py-1 px-1 font-semibold">
+                              Détention
+                            </th>
                             <th className="text-right py-1 px-1 font-semibold">
                               Taux %
                             </th>
@@ -1270,6 +1275,21 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                       idx,
                                       'valeur_actuelle',
                                       parseFloat(e.target.value) || 0
+                                    )
+                                  }
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                />
+                              </td>
+                              <td className="py-1 px-1">
+                                <input
+                                  type="text"
+                                  placeholder="ex: 50/50"
+                                  value={row.detention || ''}
+                                  onChange={e =>
+                                    updateImmobilierRow(
+                                      idx,
+                                      'detention',
+                                      e.target.value
                                     )
                                   }
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
@@ -1380,6 +1400,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             <th className="text-right py-1 px-1 font-semibold">
                               Actuelle
                             </th>
+                            <th className="text-left py-1 px-1 font-semibold">
+                              Détention
+                            </th>
                             <th className="text-right py-1 px-1 font-semibold">CRD</th>
                             <th className="text-right py-1 px-1 font-semibold">
                               Charges
@@ -1400,6 +1423,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
                                 {formatCurrency(row.valeur_actuelle)}
+                              </td>
+                              <td className="py-1 px-1 text-gray-900">
+                                {row.detention || '-'}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
                                 {formatCurrency(row.crd)}

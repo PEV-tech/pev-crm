@@ -47,6 +47,7 @@ interface KYCData {
     date_acquisition?: string | null
     valeur_acquisition?: number | null
     valeur_actuelle?: number | null
+    detention?: string | null
     crd?: number | null
     charges?: number | null
   }>
@@ -1032,6 +1033,7 @@ function parseKYCDocx(html: string): ParsedKYC {
     const dateCol = headers.findIndex(h => /date/i.test(h))
     const valAcqCol = headers.findIndex(h => /valeur.*acqui/i.test(h))
     const valActCol = headers.findIndex(h => /valeur.*actuelle/i.test(h))
+    const detentionCol = headers.findIndex(h => /d[ée]tention/i.test(h))
     const crdCol = headers.findIndex(h => /^CRD$/i.test(h))
     const chargesCol = headers.findIndex(h => /charges/i.test(h))
 
@@ -1048,6 +1050,7 @@ function parseKYCDocx(html: string): ParsedKYC {
         date_acquisition: dateCol >= 0 ? row[dateCol]?.trim() || null : null,
         valeur_acquisition: valAcqCol >= 0 ? parseNumber(row[valAcqCol]) : null,
         valeur_actuelle: valActCol >= 0 ? parseNumber(row[valActCol]) : null,
+        detention: detentionCol >= 0 ? row[detentionCol]?.trim() || null : null,
         crd: crdCol >= 0 ? parseNumber(row[crdCol]) : null,
         charges: chargesCol >= 0 ? parseNumber(row[chargesCol]) : null,
       })
