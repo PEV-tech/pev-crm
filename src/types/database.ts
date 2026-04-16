@@ -62,6 +62,37 @@ export type Database = {
           commentaires: string | null
           created_at: string
           updated_at: string
+          titre: string | null
+          nom_jeune_fille: string | null
+          date_naissance: string | null
+          lieu_naissance: string | null
+          nationalite: string | null
+          residence_fiscale: string | null
+          nif: string | null
+          adresse: string | null
+          proprietaire_locataire: string | null
+          situation_matrimoniale: string | null
+          regime_matrimonial: string | null
+          nombre_enfants: number | null
+          enfants_details: string | null
+          profession: string | null
+          statut_professionnel: string | null
+          employeur: string | null
+          date_debut_emploi: string | null
+          revenus_pro_net: number | null
+          revenus_fonciers: number | null
+          autres_revenus: number | null
+          total_revenus_annuel: number | null
+          patrimoine_immobilier: Record<string, unknown> | null
+          produits_financiers: Record<string, unknown> | null
+          patrimoine_divers: Record<string, unknown> | null
+          emprunts: Record<string, unknown> | null
+          impot_revenu_n: number | null
+          impot_revenu_n1: number | null
+          impot_revenu_n2: number | null
+          objectifs_client: string | null
+          kyc_date_signature: string | null
+          kyc_uploaded_at: string | null
         }
         Insert: {
           id?: string
@@ -77,6 +108,37 @@ export type Database = {
           preco?: boolean
           google_drive_url?: string | null
           commentaires?: string | null
+          titre?: string | null
+          nom_jeune_fille?: string | null
+          date_naissance?: string | null
+          lieu_naissance?: string | null
+          nationalite?: string | null
+          residence_fiscale?: string | null
+          nif?: string | null
+          adresse?: string | null
+          proprietaire_locataire?: string | null
+          situation_matrimoniale?: string | null
+          regime_matrimonial?: string | null
+          nombre_enfants?: number | null
+          enfants_details?: string | null
+          profession?: string | null
+          statut_professionnel?: string | null
+          employeur?: string | null
+          date_debut_emploi?: string | null
+          revenus_pro_net?: number | null
+          revenus_fonciers?: number | null
+          autres_revenus?: number | null
+          total_revenus_annuel?: number | null
+          patrimoine_immobilier?: Record<string, unknown> | null
+          produits_financiers?: Record<string, unknown> | null
+          patrimoine_divers?: Record<string, unknown> | null
+          emprunts?: Record<string, unknown> | null
+          impot_revenu_n?: number | null
+          impot_revenu_n1?: number | null
+          impot_revenu_n2?: number | null
+          objectifs_client?: string | null
+          kyc_date_signature?: string | null
+          kyc_uploaded_at?: string | null
         }
         Update: {
           nom?: string
@@ -91,6 +153,37 @@ export type Database = {
           preco?: boolean
           google_drive_url?: string | null
           commentaires?: string | null
+          titre?: string | null
+          nom_jeune_fille?: string | null
+          date_naissance?: string | null
+          lieu_naissance?: string | null
+          nationalite?: string | null
+          residence_fiscale?: string | null
+          nif?: string | null
+          adresse?: string | null
+          proprietaire_locataire?: string | null
+          situation_matrimoniale?: string | null
+          regime_matrimonial?: string | null
+          nombre_enfants?: number | null
+          enfants_details?: string | null
+          profession?: string | null
+          statut_professionnel?: string | null
+          employeur?: string | null
+          date_debut_emploi?: string | null
+          revenus_pro_net?: number | null
+          revenus_fonciers?: number | null
+          autres_revenus?: number | null
+          total_revenus_annuel?: number | null
+          patrimoine_immobilier?: Record<string, unknown> | null
+          produits_financiers?: Record<string, unknown> | null
+          patrimoine_divers?: Record<string, unknown> | null
+          emprunts?: Record<string, unknown> | null
+          impot_revenu_n?: number | null
+          impot_revenu_n1?: number | null
+          impot_revenu_n2?: number | null
+          objectifs_client?: string | null
+          kyc_date_signature?: string | null
+          kyc_uploaded_at?: string | null
         }
         Relationships: []
       }

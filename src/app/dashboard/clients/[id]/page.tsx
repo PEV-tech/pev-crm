@@ -19,6 +19,8 @@ import { JournalSuivi } from '@/components/shared/journal-suivi'
 import { ClientRelations } from '@/components/shared/client-relations'
 import CommunicationsTab from '@/components/google/CommunicationsTab'
 import { PiecesJointes } from '@/components/clients/pieces-jointes'
+import { KYCSection, KYCSectionHandle } from '@/components/clients/kyc-section'
+import { KYCUpload } from '@/components/clients/kyc-upload'
 
 import { formatCurrency } from '@/lib/formatting'
 
@@ -93,6 +95,7 @@ export default function ClientDetailPage() {
   const [dossiers, setDossiers] = React.useState<ClientDossier[]>([])
   const [loading, setLoading] = React.useState(true)
   const [notFound, setNotFound] = React.useState(false)
+  const kycRef = React.useRef<KYCSectionHandle>(null)
 
   // Edit mode states
   const [editingContact, setEditingContact] = React.useState(false)
@@ -324,9 +327,14 @@ export default function ClientDetailPage() {
                 </Button>
               </>
             ) : (
-              <Button size="sm" variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setShowDeleteClientConfirm(true)}>
-                <Trash2 size={14} />Supprimer le client
-              </Button>
+              <>
+                <KYCUpload onDataParsed={(data) => {
+                  if (kycRef.current) kycRef.current.populateFromKyc(data.titulaire)
+                }} />
+                <Button size="sm" variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setShowDeleteClientConfirm(true)}>
+                  <Trash2 size={14} />Supprimer le client
+                </Button>
+              </>
             )}
           </div>
         )}
@@ -438,6 +446,16 @@ export default function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* KYC Section */}
+          <KYCSection
+            ref={kycRef}
+            client={client}
+            onUpdate={async () => {
+              const { data } = await supabase.from('clients').select('*').eq('id', clientId).single()
+              if (data) setClient(data as ClientInfo)
+            }}
+          />
         </div>
 
         {/* Sidebar: Contact + Compliance + Info */}
