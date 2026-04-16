@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Dynamic import to handle pdf-parse in Node.js environment
+// Dynamic imports to handle dependencies in Node.js environment
 let pdfParse: any
+let mammoth: any
 
 try {
   pdfParse = require('pdf-parse')
 } catch {
   pdfParse = null
+}
+
+try {
+  mammoth = require('mammoth')
+} catch {
+  mammoth = null
 }
 
 interface KYCData {
@@ -709,8 +716,403 @@ function parseKYCText(pdfText: string): ParsedKYC {
   return { titulaire, conjoint }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// DOCX PARSER — Uses mammoth to extract HTML tables from Word documents
+// This is MUCH more reliable than PDF text parsing because .docx files
+// have structured XML with actual table cells.
+// ═══════════════════════════════════════════════════════════════════
+
 /**
- * POST handler for KYC PDF parsing
+ * Simple HTML table parser — extracts rows of cells from HTML tables.
+ * Returns array of tables, each table is array of rows, each row is array of cell texts.
+ */
+function parseHTMLTables(html: string): string[][][] {
+  const tables: string[][][] = []
+  // Match each <table>...</table>
+  const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi
+  let tableMatch
+  while ((tableMatch = tableRegex.exec(html)) !== null) {
+    const tableHtml = tableMatch[1]
+    const rows: string[][] = []
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+    let rowMatch
+    while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
+      const rowHtml = rowMatch[1]
+      const cells: string[] = []
+      const cellRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi
+      let cellMatch
+      while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
+        // Strip HTML tags from cell content, normalize whitespace
+        const text = cellMatch[1]
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\s+/g, ' ')
+          .trim()
+        cells.push(text)
+      }
+      if (cells.length > 0) rows.push(cells)
+    }
+    if (rows.length > 0) tables.push(rows)
+  }
+  return tables
+}
+
+/**
+ * Extract text content between HTML tables (for sections like "Régime matrimonial" that
+ * appear as plain text between tables, or the fiscalité/objectifs sections)
+ */
+function extractTextBetweenTables(html: string): string {
+  return html
+    .replace(/<table[^>]*>[\s\S]*?<\/table>/gi, '\n---TABLE---\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Find a table whose first row/cell contains a matching label
+ */
+function findTable(tables: string[][][], pattern: RegExp): string[][] | null {
+  for (const table of tables) {
+    for (const row of table) {
+      for (const cell of row) {
+        if (pattern.test(cell)) return table
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * In a 3-column table (label, Mr, Mme), get cell value by label
+ */
+function getRowValue(table: string[][], labelPattern: RegExp, colIndex: number): string | null {
+  for (const row of table) {
+    if (row.length >= 2 && labelPattern.test(row[0])) {
+      const val = row[colIndex]?.trim()
+      return (val && val !== '-' && val.length > 0) ? val : null
+    }
+  }
+  return null
+}
+
+/**
+ * Parse KYC from DOCX HTML tables — the reliable approach.
+ * The Ethique et Patrimoine KYC docx has these tables:
+ * 1. État civil (3 cols: label, Monsieur, Madame)
+ * 2. Situation matrimoniale (checkboxes as text)
+ * 3. Enfants
+ * 4. Situation professionnelle (3 cols: label, Mr, Mme)
+ * 5. Flux / Revenus (3 cols: label, Mr, Mme)
+ * 6. Immobilier d'usage (6-7 cols)
+ * 7. Produits financiers (6 cols)
+ * 8. Divers (5 cols)
+ * 9. Emprunts et charges (7-8 cols)
+ */
+function parseKYCDocx(html: string): ParsedKYC {
+  const tables = parseHTMLTables(html)
+  const fullText = extractTextBetweenTables(html)
+
+  const titulaire: KYCData = { titre: 'monsieur' }
+  const conjoint: KYCData = { titre: 'madame' }
+
+  // ═══ TABLE 1: ÉTAT CIVIL ═══
+  // 3 columns: Label | Monsieur | Madame
+  const etatCivil = findTable(tables, /^(Titre|Nom)$/i) || findTable(tables, /ETAT CIVIL|COORDONN/i)
+  if (etatCivil) {
+    // Parse titre from header row
+    const titreRow = etatCivil.find(r => /^Titre$/i.test(r[0]))
+    if (titreRow) {
+      if (/monsieur/i.test(titreRow[1] || '')) titulaire.titre = 'monsieur'
+      if (/madame/i.test(titreRow[1] || '')) titulaire.titre = 'madame'
+    }
+
+    titulaire.nom = getRowValue(etatCivil, /^Nom$/i, 1)
+    conjoint.nom = getRowValue(etatCivil, /^Nom$/i, 2)
+
+    // Nom de jeune fille
+    const njf1 = getRowValue(etatCivil, /jeune fille/i, 1)
+    const njf2 = getRowValue(etatCivil, /jeune fille/i, 2)
+    titulaire.nom_jeune_fille = njf1
+    conjoint.nom_jeune_fille = njf2
+
+    titulaire.prenom = getRowValue(etatCivil, /^Pr[ée]nom$/i, 1)
+    conjoint.prenom = getRowValue(etatCivil, /^Pr[ée]nom$/i, 2)
+
+    // Date, lieu de naissance — may be combined "Lille, 17/09/1990" or "Saint Denis (La Reunion), 03/08/1991"
+    const dateLieu1 = getRowValue(etatCivil, /naissance/i, 1)
+    const dateLieu2 = getRowValue(etatCivil, /naissance/i, 2)
+    for (const [val, person] of [[dateLieu1, titulaire], [dateLieu2, conjoint]] as [string | null, KYCData][]) {
+      if (val) {
+        const dateMatch = val.match(/(\d{1,2}\/\d{1,2}\/\d{4})/)
+        if (dateMatch) person.date_naissance = parseDate(dateMatch[1])
+        // Extract lieu: everything except the date
+        const lieu = val.replace(/\d{1,2}\/\d{1,2}\/\d{4}/, '').replace(/^[,\s]+|[,\s]+$/g, '').trim()
+        if (lieu) person.lieu_naissance = lieu
+      }
+    }
+
+    titulaire.nationalite = getRowValue(etatCivil, /nationalit/i, 1)
+    conjoint.nationalite = getRowValue(etatCivil, /nationalit/i, 2)
+
+    titulaire.residence_fiscale = getRowValue(etatCivil, /r[ée]sidence fiscale/i, 1)
+    conjoint.residence_fiscale = getRowValue(etatCivil, /r[ée]sidence fiscale/i, 2)
+
+    // NIF
+    titulaire.nif = getRowValue(etatCivil, /num[ée]ro.*identification|^NIF/i, 1)
+    conjoint.nif = getRowValue(etatCivil, /num[ée]ro.*identification|^NIF/i, 2)
+
+    // Adresse — may span both columns
+    const addr1 = getRowValue(etatCivil, /^Adresse$/i, 1)
+    const addr2 = getRowValue(etatCivil, /^Adresse$/i, 2)
+    titulaire.adresse = addr1 || addr2
+
+    // Propriétaire / Locataire
+    const proprio1 = getRowValue(etatCivil, /propri[ée]taire.*locataire/i, 1)
+    if (proprio1) {
+      titulaire.proprietaire_locataire = /propri[ée]taire/i.test(proprio1) ? 'proprietaire' : 'locataire'
+    }
+
+    titulaire.telephone = getRowValue(etatCivil, /t[ée]l[ée]phone/i, 1)
+    conjoint.telephone = getRowValue(etatCivil, /t[ée]l[ée]phone/i, 2)
+
+    titulaire.email = getRowValue(etatCivil, /mail|email/i, 1)
+    conjoint.email = getRowValue(etatCivil, /mail|email/i, 2)
+  }
+
+  // ═══ TABLE 2: SITUATION MATRIMONIALE ═══
+  const sitMatriTable = findTable(tables, /SITUATION MATRIMONIALE/i)
+  if (sitMatriTable) {
+    // Look for the row with checkboxes: "Célibataire Concubinage Pacsé(e) X Marié(e) ..."
+    for (const row of sitMatriTable) {
+      const cellText = row.join(' ')
+      if (/X\s*Mari[ée]\(?e?\)?/i.test(cellText)) {
+        titulaire.situation_matrimoniale = 'marie'
+      } else if (/X\s*C[ée]libataire/i.test(cellText)) {
+        titulaire.situation_matrimoniale = 'celibataire'
+      } else if (/X\s*Concubinage/i.test(cellText)) {
+        titulaire.situation_matrimoniale = 'concubinage'
+      } else if (/X\s*Pacs[ée]\(?e?\)?/i.test(cellText)) {
+        titulaire.situation_matrimoniale = 'pacse'
+      } else if (/X\s*Veuf/i.test(cellText)) {
+        titulaire.situation_matrimoniale = 'veuf'
+      } else if (/X\s*Divorc[ée]\(?e?\)?/i.test(cellText)) {
+        titulaire.situation_matrimoniale = 'divorce'
+      }
+    }
+  }
+
+  // Régime matrimonial — may be in table or in text between tables
+  const regimeMatch = fullText.match(/R[ée]gime matrimonial\*?\s*:?\s*([^\n.—–-]+)/i)
+    || fullText.match(/R[ée]gime matrimonial\*?\s+(\S[^\n.]*)/i)
+  if (regimeMatch) {
+    let regime = regimeMatch[1].trim()
+    // Clean up: remove leading * or table markers
+    regime = regime.replace(/^[\*\s]+/, '').replace(/---TABLE---.*/, '').trim()
+    if (regime.length > 1) titulaire.regime_matrimonial = regime
+  }
+
+  // ═══ TABLE 3: ENFANTS ═══
+  const enfantsTable = findTable(tables, /ENFANTS|PERSONNES.*CHARGE/i)
+  if (enfantsTable) {
+    const childTexts: string[] = []
+    for (const row of enfantsTable) {
+      if (/ENFANTS|PERSONNES.*CHARGE/i.test(row[0])) continue
+      const text = row.join(' ').trim()
+      if (text) childTexts.push(text)
+    }
+    if (childTexts.length > 0) {
+      // Count children from text
+      const countMatch = childTexts.join(' ').match(/(\d+)\s*enfants?/i)
+      if (countMatch) titulaire.nombre_enfants = parseInt(countMatch[1], 10)
+      titulaire.enfants_details = childTexts.join(', ')
+    }
+  }
+
+  // ═══ TABLE 4: SITUATION PROFESSIONNELLE ═══
+  const profTable = findTable(tables, /SITUATION PROFESSIONNELLE/i) || findTable(tables, /^Profession$/i)
+  if (profTable) {
+    titulaire.profession = getRowValue(profTable, /^Profession$/i, 1)
+    conjoint.profession = getRowValue(profTable, /^Profession$/i, 2)
+
+    titulaire.statut_professionnel = getRowValue(profTable, /^Statut$/i, 1)
+    conjoint.statut_professionnel = getRowValue(profTable, /^Statut$/i, 2)
+
+    titulaire.date_debut_emploi = getRowValue(profTable, /^Depuis$/i, 1)
+    conjoint.date_debut_emploi = getRowValue(profTable, /^Depuis$/i, 2)
+
+    titulaire.employeur = getRowValue(profTable, /^Employeur$/i, 1)
+    conjoint.employeur = getRowValue(profTable, /^Employeur$/i, 2)
+  }
+
+  // ═══ TABLE 5: FLUX / REVENUS ═══
+  const fluxTable = findTable(tables, /^FLUX$/i) || findTable(tables, /Revenus professionnels/i)
+  if (fluxTable) {
+    const revPro1 = getRowValue(fluxTable, /revenus?\s*professionnels?/i, 1)
+    const revPro2 = getRowValue(fluxTable, /revenus?\s*professionnels?/i, 2)
+    if (revPro1) titulaire.revenus_pro_net = parseNumber(revPro1)
+    if (revPro2) conjoint.revenus_pro_net = parseNumber(revPro2)
+
+    const revFonc1 = getRowValue(fluxTable, /revenus?\s*fonciers?/i, 1)
+    const revFonc2 = getRowValue(fluxTable, /revenus?\s*fonciers?/i, 2)
+    if (revFonc1) titulaire.revenus_fonciers = parseNumber(revFonc1)
+    if (revFonc2) conjoint.revenus_fonciers = parseNumber(revFonc2)
+
+    const autres1 = getRowValue(fluxTable, /autres?\s*revenus?/i, 1)
+    if (autres1) titulaire.autres_revenus = parseNumber(autres1)
+
+    // Total revenus — may have "36 000 €/ mois    433 000 €/ an"
+    const totalRow = fluxTable.find(r => /TOTAL\s*REVENUS/i.test(r[0]))
+    if (totalRow) {
+      const totalText = totalRow.slice(1).join(' ')
+      const annualMatch = totalText.match(/([\d\s.,]+)\s*€?\s*\/?\s*an/i)
+      if (annualMatch) {
+        titulaire.total_revenus_annuel = parseNumber(annualMatch[1].replace(/\s/g, ''))
+      }
+    }
+  }
+
+  // ═══ TABLE 6: IMMOBILIER D'USAGE ═══
+  // Columns: Désignation | Date d'acquisition | Valeur d'acquisition | Valeur actuelle | (Détention) | CRD | Charges
+  const immoTable = findTable(tables, /IMMOBILIER/i) || findTable(tables, /D[ée]signation.*lieu/i)
+  if (immoTable) {
+    const patrimoine: KYCData['patrimoine_immobilier'] = []
+    // Find header row to determine column order
+    const headerIdx = immoTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
+    const headers = headerIdx >= 0 ? immoTable[headerIdx] : []
+
+    // Find column indices
+    const dateCol = headers.findIndex(h => /date/i.test(h))
+    const valAcqCol = headers.findIndex(h => /valeur.*acqui/i.test(h))
+    const valActCol = headers.findIndex(h => /valeur.*actuelle/i.test(h))
+    const crdCol = headers.findIndex(h => /^CRD$/i.test(h))
+    const chargesCol = headers.findIndex(h => /charges/i.test(h))
+
+    for (let i = (headerIdx >= 0 ? headerIdx + 1 : 1); i < immoTable.length; i++) {
+      const row = immoTable[i]
+      if (/^TOTAL$/i.test(row[0]?.trim())) continue
+      if (!row[0]?.trim()) continue
+
+      patrimoine.push({
+        designation: row[0]?.trim() || null,
+        date_acquisition: dateCol >= 0 ? row[dateCol]?.trim() || null : null,
+        valeur_acquisition: valAcqCol >= 0 ? parseNumber(row[valAcqCol]) : null,
+        valeur_actuelle: valActCol >= 0 ? parseNumber(row[valActCol]) : null,
+        crd: crdCol >= 0 ? parseNumber(row[crdCol]) : null,
+        charges: chargesCol >= 0 ? parseNumber(row[chargesCol]) : null,
+      })
+    }
+    if (patrimoine.length > 0) titulaire.patrimoine_immobilier = patrimoine
+  }
+
+  // ═══ TABLE 7: PRODUITS FINANCIERS ═══
+  // Columns: Désignation | Détenteur | Valeur | Date d'ouverture | Versements réguliers | Rendement
+  const prodTable = findTable(tables, /PRODUITS FINANCIERS/i) || findTable(tables, /Assurance-vie/i)
+  if (prodTable) {
+    const produits: KYCData['produits_financiers'] = []
+    const headerIdx = prodTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
+    const headers = headerIdx >= 0 ? prodTable[headerIdx] : []
+
+    const detCol = headers.findIndex(h => /d[ée]tenteur/i.test(h))
+    const valCol = headers.findIndex(h => /valeur/i.test(h))
+    const dateCol = headers.findIndex(h => /date/i.test(h))
+    const versCol = headers.findIndex(h => /versements?/i.test(h))
+    const rendCol = headers.findIndex(h => /rendement/i.test(h))
+
+    for (let i = (headerIdx >= 0 ? headerIdx + 1 : 1); i < prodTable.length; i++) {
+      const row = prodTable[i]
+      if (/^TOTAL$/i.test(row[0]?.trim())) continue
+      if (!row[0]?.trim()) continue
+
+      produits.push({
+        designation: row[0]?.trim() || null,
+        detenteur: detCol >= 0 ? row[detCol]?.trim() || null : null,
+        valeur: valCol >= 0 ? parseNumber(row[valCol]) : null,
+        date_ouverture: dateCol >= 0 ? row[dateCol]?.trim() || null : null,
+        versements_reguliers: versCol >= 0 ? parseNumber(row[versCol]) : null,
+        rendement: rendCol >= 0 ? parseNumber(row[rendCol]) : null,
+      })
+    }
+    if (produits.length > 0) titulaire.produits_financiers = produits
+  }
+
+  // ═══ TABLE 8: EMPRUNTS ET CHARGES ═══
+  // Columns: Désignation | Date souscription | Durée | Taux | Montant emprunté | CRD | Montant échéance | (ADI)
+  const empTable = findTable(tables, /EMPRUNTS/i)
+  if (empTable) {
+    const emprunts: KYCData['emprunts'] = []
+    const headerIdx = empTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
+    const headers = headerIdx >= 0 ? empTable[headerIdx] : []
+
+    const dateCol = headers.findIndex(h => /date|souscription/i.test(h))
+    const dureeCol = headers.findIndex(h => /dur[ée]e/i.test(h))
+    const tauxCol = headers.findIndex(h => /taux/i.test(h))
+    const montantCol = headers.findIndex(h => /montant.*emprunt/i.test(h))
+    const crdCol = headers.findIndex(h => /^CRD$/i.test(h))
+    const echeanceCol = headers.findIndex(h => /[ée]ch[ée]ance/i.test(h))
+
+    for (let i = (headerIdx >= 0 ? headerIdx + 1 : 1); i < empTable.length; i++) {
+      const row = empTable[i]
+      if (/^TOTAL$/i.test(row[0]?.trim())) continue
+      if (!row[0]?.trim()) continue
+
+      emprunts.push({
+        designation: row[0]?.trim() || null,
+        etablissement: null, // Some KYC formats have this, some don't
+        montant_emprunte: montantCol >= 0 ? parseNumber(row[montantCol]) : null,
+        date_souscription: dateCol >= 0 ? row[dateCol]?.trim() || null : null,
+        duree: dureeCol >= 0 ? (parseInt(row[dureeCol], 10) || null) : null,
+        taux: tauxCol >= 0 ? parseFloat((row[tauxCol] || '').replace('%', '').replace(',', '.').trim()) || null : null,
+        crd: crdCol >= 0 ? parseNumber(row[crdCol]) : null,
+        echeance: echeanceCol >= 0 ? parseNumber(row[echeanceCol]) : null,
+      })
+    }
+    if (emprunts.length > 0) titulaire.emprunts = emprunts
+  }
+
+  // ═══ FISCALITÉ ═══
+  const fiscMatch = fullText.match(/Imp[ôo]t sur (?:le )?revenu\s*:?\s*(.*?)(?:OBJECTIFS|---TABLE---)/is)
+  if (fiscMatch) {
+    const fiscText = fiscMatch[1]
+    const nMatch = fiscText.match(/N\s*(?:\([^)]*\))?\s*:?\s*;?\s*([\d\s.,]+k?€?)/i)
+    if (nMatch) titulaire.impot_revenu_n = parseNumber(nMatch[1].replace(/\s/g, ''))
+
+    const n1Match = fiscText.match(/N\s*-\s*1\s*:?\s*;?\s*([\d\s.,]+k?€?)/i)
+    if (n1Match) titulaire.impot_revenu_n1 = parseNumber(n1Match[1].replace(/\s/g, ''))
+
+    const n2Match = fiscText.match(/N\s*-?\s*2\s*:?\s*;?\s*([\d\s.,]+k?€?)/i)
+    if (n2Match) titulaire.impot_revenu_n2 = parseNumber(n2Match[1].replace(/\s/g, ''))
+  }
+
+  // ═══ OBJECTIFS CLIENT ═══
+  const objMatch = fullText.match(/Objectifs?\s*principaux?\s*:?\s*([^.]*(?:\.[^.]*){0,3})/i)
+  if (objMatch) {
+    let obj = objMatch[1].trim()
+    // Clean up any remaining markers
+    obj = obj.replace(/---TABLE---.*/, '').replace(/AVERTISSEMENT.*/, '').trim()
+    if (obj.length > 3) titulaire.objectifs_client = obj
+  }
+
+  // ═══ DATE SIGNATURE ═══
+  const sigMatch = fullText.match(/(?:Sign[ée]\s+[àa]|Fait\s+[àa]|le)\s+.*?(\d{1,2}\/\d{1,2}\/\d{4})/i)
+  if (sigMatch) {
+    titulaire.kyc_date_signature = parseDate(sigMatch[1])
+  }
+
+  return { titulaire, conjoint }
+}
+
+
+/**
+ * POST handler for KYC file parsing (PDF or DOCX)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -724,9 +1126,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (file.type !== 'application/pdf') {
+    const fileName = file.name.toLowerCase()
+    const isDocx = fileName.endsWith('.docx') ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    const isPdf = fileName.endsWith('.pdf') || file.type === 'application/pdf'
+
+    if (!isDocx && !isPdf) {
       return NextResponse.json(
-        { error: 'Le fichier doit être un PDF' },
+        { error: 'Le fichier doit être un PDF ou un document Word (.docx)' },
         { status: 400 }
       )
     }
@@ -734,12 +1141,57 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    let pdfText = ''
+    let parsed: ParsedKYC
 
-    if (pdfParse) {
+    if (isDocx) {
+      // ═══ DOCX PARSING (preferred — structured tables) ═══
+      if (!mammoth) {
+        return NextResponse.json(
+          { error: 'Le module de traitement Word n\'est pas disponible.' },
+          { status: 500 }
+        )
+      }
+
+      try {
+        const result = await mammoth.convertToHtml({ buffer })
+        const html = result.value || ''
+
+        if (!html || html.trim().length === 0) {
+          return NextResponse.json(
+            { error: 'Impossible d\'extraire le contenu du fichier Word' },
+            { status: 400 }
+          )
+        }
+
+        parsed = parseKYCDocx(html)
+      } catch (docxErr) {
+        console.error('mammoth error:', docxErr)
+        return NextResponse.json(
+          { error: 'Erreur lors du traitement du fichier Word' },
+          { status: 500 }
+        )
+      }
+    } else {
+      // ═══ PDF PARSING (fallback — text extraction with heuristics) ═══
+      if (!pdfParse) {
+        return NextResponse.json(
+          { error: 'Le module de traitement PDF n\'est pas disponible.' },
+          { status: 500 }
+        )
+      }
+
       try {
         const data = await pdfParse(buffer)
-        pdfText = data.text || ''
+        const pdfText = data.text || ''
+
+        if (!pdfText || pdfText.trim().length === 0) {
+          return NextResponse.json(
+            { error: 'Impossible d\'extraire le texte du PDF' },
+            { status: 400 }
+          )
+        }
+
+        parsed = parseKYCText(pdfText)
       } catch (parseErr) {
         console.error('pdf-parse error:', parseErr)
         return NextResponse.json(
@@ -747,21 +1199,7 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
-    } else {
-      return NextResponse.json(
-        { error: 'Le module de traitement PDF n\'est pas disponible.' },
-        { status: 500 }
-      )
     }
-
-    if (!pdfText || pdfText.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Impossible d\'extraire le texte du PDF' },
-        { status: 400 }
-      )
-    }
-
-    const parsed = parseKYCText(pdfText)
 
     return NextResponse.json(parsed, { status: 200 })
   } catch (error) {

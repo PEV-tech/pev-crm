@@ -81,9 +81,14 @@ export function KYCUpload({ onDataParsed, disabled = false }: KYCUploadProps) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type
-    if (file.type !== 'application/pdf') {
-      setError('Veuillez sélectionner un fichier PDF')
+    // Validate file type (PDF or DOCX)
+    const validTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
+    const isDocx = file.name.toLowerCase().endsWith('.docx')
+    if (!validTypes.includes(file.type) && !isDocx) {
+      setError('Veuillez sélectionner un fichier PDF ou Word (.docx)')
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
@@ -110,7 +115,7 @@ export function KYCUpload({ onDataParsed, disabled = false }: KYCUploadProps) {
 
       if (!response.ok) {
         const data = await response.json()
-        setError(data.error || 'Erreur lors du traitement du PDF')
+        setError(data.error || 'Erreur lors du traitement du fichier')
         setUploading(false)
         if (fileInputRef.current) fileInputRef.current.value = ''
         return
@@ -136,7 +141,7 @@ export function KYCUpload({ onDataParsed, disabled = false }: KYCUploadProps) {
   return (
     <div className="flex flex-col gap-2">
       <label className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-indigo-200 bg-indigo-50/50 disabled:opacity-50 disabled:cursor-not-allowed"
-        title={disabled ? 'Importation désactivée' : 'Importer un fichier KYC (PDF)'}
+        title={disabled ? 'Importation désactivée' : 'Importer un fichier KYC (PDF ou Word)'}
       >
         {uploading ? (
           <>
@@ -146,7 +151,7 @@ export function KYCUpload({ onDataParsed, disabled = false }: KYCUploadProps) {
         ) : (
           <>
             <Upload size={16} />
-            Importer KYC (PDF)
+            Importer KYC
           </>
         )}
         <input
@@ -155,7 +160,7 @@ export function KYCUpload({ onDataParsed, disabled = false }: KYCUploadProps) {
           className="hidden"
           onChange={handleFileSelect}
           disabled={uploading || disabled}
-          accept=".pdf"
+          accept=".pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         />
       </label>
 
