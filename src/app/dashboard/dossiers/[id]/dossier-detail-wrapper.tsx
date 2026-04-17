@@ -487,7 +487,13 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     if (!dossier?.id) return
     setDeleting(true)
     try {
-      // Delete factures first (FK constraint)
+      // Delete related records first (FK constraints)
+      const { error: docsError } = await supabase.from('dossier_documents').delete().eq('dossier_id', dossier.id)
+      if (docsError) throw docsError
+      // Delete relances
+      const { error: relError } = await supabase.from('relances').delete().eq('dossier_id', dossier.id)
+      if (relError) throw relError
+      // Delete factures (FK constraint)
       const { error: factError } = await supabase.from('factures').delete().eq('dossier_id', dossier.id)
       if (factError) throw factError
       // Delete commissions

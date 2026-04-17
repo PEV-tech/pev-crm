@@ -196,11 +196,11 @@ export default function ClientDetailPage() {
     const { error } = await supabase
       .from('clients')
       .update({
-        email: editContact.email || undefined,
-        telephone: editContact.telephone || undefined,
-        pays: editContact.pays || undefined,
-        numero_compte: editContact.numero_compte || undefined,
-        google_drive_url: editContact.google_drive_url || undefined,
+        email: editContact.email || null,
+        telephone: editContact.telephone || null,
+        pays: editContact.pays || null,
+        numero_compte: editContact.numero_compte || null,
+        google_drive_url: editContact.google_drive_url || null,
       })
       .eq('id', clientId)
     if (!error) {
