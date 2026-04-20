@@ -54,9 +54,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       const [clientsRes, compagniesRes, produitsRes] = await Promise.all([
         supabase
           .from('clients')
-          .select('id, nom, prenom, pays, statut_kyc')
-          .or(`nom.ilike.${searchTerm},prenom.ilike.${searchTerm}`)
-          .limit(10),
+          .select('id, nom, prenom, pays, ville, email, statut_kyc')
+          .or(`nom.ilike.${searchTerm},prenom.ilike.${searchTerm},email.ilike.${searchTerm}`)
+          .limit(15),
         supabase
           .from('compagnies')
           .select('id, nom')
@@ -73,14 +73,22 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
       // Add client results — navigate directly to client page
       if (clientsRes.data) {
+                const words = q.toLowerCase().split(/\s+/).filter(Boolean)
         clientsRes.data.forEach((c: any) => {
           const fullName = `${c.prenom || ''} ${c.nom || ''}`.trim()
+                const locationInfo = [c.ville, c.pays].filter(Boolean).join(', ')    
           if (fullName) {
+                        // If multi-word query, check all words match somewhere in nom/prenom/email
+                                    if (words.length > 1) {
+                                      const haystack = `${c.nom || ''} ${c.prenom || ''} ${c.email || ''}`.toLowerCase()
+                                                    const allMatch = words.every(w => haystack.includes(w))
+                                                                  if (!allMatch) return
+                                    }
             searchResults.push({
               id: `client-${c.id}`,
               type: 'client',
               title: fullName,
-              subtitle: c.pays || '',
+              subtitle: locationInfo || '',
               url: `/dashboard/clients/${c.id}`,
             })
           }
