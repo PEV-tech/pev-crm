@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-20 · **Commit de référence** : `6ab7c4f`
+**Mis à jour** : 2026-04-21 · **Commit de référence** : `dc3e267` (après batch 3 — audit logs)
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
@@ -97,7 +97,8 @@ Scripts dans `scripts/` (ordre chronologique) :
 15. `fix-audit-trigger-table-name.sql` (2026-04-20) — **fix prod-critique** : triggers d'audit pointaient vers une table inexistante `audit_log` (singulier). Recrée `fn_audit_log()` et `audit_trigger_func()` pour insérer dans `audit_logs` (pluriel). **Appliqué en prod 2026-04-20.**
 16. `add-client-standalone-fields.sql` (2026-04-20) — ajoute `clients.consultant_id` (FK → consultants, ON DELETE SET NULL) + `clients.date_entree_relation` (date) + index `idx_clients_consultant_id`. Idempotent (ADD COLUMN IF NOT EXISTS). **Appliqué en prod 2026-04-20**, smoke test `information_schema.columns` passant. Débloque la création de clients standalone (sans dossier) conformément au CDC.
 17. `add-personne-morale-fields.sql` (2026-04-20) — ajoute 8 colonnes à `clients` pour support des personnes morales : `type_personne` ('physique'\|'morale', défaut 'physique'), `raison_sociale`, `forme_juridique`, `siren`, `siret`, `representant_legal_id` (FK → clients(id) ON DELETE SET NULL), `capital_social` (NUMERIC(15,2)), `date_creation` + indexes sur type_personne et representant_legal_id. Idempotent. **Appliqué en prod 2026-04-20** (types régénérés confirment la présence des colonnes). Retro-compat totale (default 'physique').
-18. `add-kyc-signature-audit.sql` (2026-04-20) — ajoute 8 colonnes audit sur `clients` pour la traçabilité de la signature KYC (conformité ACPR/DDA) : `kyc_signer_name`, `kyc_signed_at` (timestamptz), `kyc_signer_ip`, `kyc_completion_rate` (SMALLINT 0–100 avec CHECK), `kyc_missing_fields` (jsonb), `kyc_incomplete_signed` (boolean), `kyc_consent_incomplete` (boolean), `kyc_consent_accuracy` (boolean). Index partiel `idx_clients_kyc_incomplete_signed` pour les alertes consultant. Idempotent. **À appliquer en prod via SQL editor Supabase** (non encore appliqué au moment du commit).
+18. `add-kyc-signature-audit.sql` (2026-04-20) — ajoute 8 colonnes audit sur `clients` pour la traçabilité de la signature KYC (conformité ACPR/DDA) : `kyc_signer_name`, `kyc_signed_at` (timestamptz), `kyc_signer_ip`, `kyc_completion_rate` (SMALLINT 0–100 avec CHECK), `kyc_missing_fields` (jsonb), `kyc_incomplete_signed` (boolean), `kyc_consent_incomplete` (boolean), `kyc_consent_accuracy` (boolean). Index partiel `idx_clients_kyc_incomplete_signed` pour les alertes consultant. Idempotent. **Appliqué en prod** (confirmé par le fonctionnement des casts `as any` ciblés en front).
+19. `recreate-v-dossiers-complets-full.sql` (2026-04-21) — recrée `v_dossiers_complets` + `v_dossiers_remunerations` de façon consolidée pour exposer `co_titulaire_id`, `co_titulaire_nom`, `co_titulaire_prenom` ET `apporteur_id`. Corrige la feature co-titulaire silencieusement partielle (STATUS.md §Dette révélée). Garde le DISTINCT ON + security_invoker hérités. Forward les champs dans `v_dossiers_remunerations` y compris le Pool-masking. **À appliquer en prod via SQL editor Supabase puis régénérer les types** (`npx supabase gen types typescript --project-id … > src/types/database.ts`).
 
 **Dette** : pas d'outil de migration (Supabase CLI migrations, Flyway, etc.). Chaque script est appliqué à la main via le SQL editor Supabase. Aucun registre d'exécution. À terme : utiliser Supabase migrations CLI.
 
@@ -119,10 +120,13 @@ Scripts dans `scripts/` (ordre chronologique) :
 | 9 | **Suppression fiche jointe** POULIQUEN & MARC Marion & Simon (1ʳᵉ dissociation CDC) | prod DELETE |
 | 10 | **Route `/dashboard/clients/nouveau`** : fiche client autonome, save partiel, dropdown Pays + "+", co-titulaire via `client_relations`, consultant + date d'entrée en relation au niveau client | à pousser |
 | 11 | Bouton "Nouveau client" dans le header global + remplace "Nouveau dossier" sur Ma Clientèle | à pousser |
+| 12 | **KYC signature — capture IP côté serveur** via route proxy `/api/kyc/sign-public` (x-forwarded-for → RPC) + auto-refresh polling 30 s côté consultant + carte dashboard "KYC signés (7 j)" avec flag rouge sur incomplets | `498fc38` |
+| 13 | **Réglementaire — bandeau KYC incomplets** + ligne récap dans QualityPanel (faisceau de preuve ACPR/DDA) | `5bc5a2a` |
+| 14 | **Audit logs — filtres table + utilisateur + export CSV** (RFC 4180, BOM UTF-8, cap 10 000 lignes) | `dc3e267` |
 
 ### P0 résiduel — Dette révélée par types honnêtes
 Tous post-V1, **aucun ne bloque l'usage quotidien** (cf. section "Dette révélée" plus haut pour le détail) :
-1. Recréer la vue `v_dossiers_complets` pour exposer `co_titulaire_id` et `apporteur_id` (feature co-titulaire partielle en silence).
+1. ~~Recréer la vue `v_dossiers_complets` pour exposer `co_titulaire_id` et `apporteur_id`~~ → script `recreate-v-dossiers-complets-full.sql` écrit (2026-04-21) **à appliquer en prod + régénérer les types** puis supprimer les casts `as any` côté front.
 2. Harmoniser `document-checklist` / `client-relances` : élargir les interfaces locales vers les `Row` Supabase.
 3. Annotations `map/reduce` dans `kyc-section.tsx` (~15 implicit-any).
 4. Bump `tsconfig.target` à ES2018+ pour régler `parse-kyc/route.ts`.
