@@ -68,18 +68,21 @@ consultants, clients, produits, compagnies, taux_produit_compagnie, grilles_frai
 |---|---|---|
 | `add-co-titulaire.sql` | `dossiers.co_titulaire_id` | ✅ présent (4 occ) |
 | `add-kyc-fields.sql` | `clients.titre`, `nom_jeune_fille`, `adresse`, `patrimoine_immobilier` (JSON), etc. | ✅ présent |
-| `p4-encaissements-auto.sql` | **Nouvelle table `encaissements_auto`** | ❌ **absente des types** |
+| `p4-encaissements-auto.sql` | **Table `encaissements`** + trigger + vue `v_encaissements` | ❌ **absente des types** (seul `encaissements_rem` y est) |
 
-### Table référencée sans SQL identifié
-- `apporteurs` — utilisée dans `dossier-detail-wrapper.tsx` (3 erreurs TS) mais aucun script `create table apporteurs` dans `scripts/`. Soit créée manuellement dans l'UI Supabase, soit code mort. **À vérifier.**
+### Table référencée sans SQL tracé
+- `apporteurs` — utilisée dans `dossier-detail-wrapper.tsx` depuis commit `6bd8756` (2026-04-13). Aucun script `create table apporteurs` dans `scripts/`. La page fonctionne en prod → la table **existe bien sur Supabase**, créée manuellement via l'UI. **Dette : pas de script tracé pour ce DDL.**
 
-**Action P0** :
-1. Vérifier si `p4-encaissements-auto.sql` a été appliqué sur Supabase. Si oui → régénérer les types. Si non → l'appliquer puis régénérer.
-2. Vérifier l'existence de la table `apporteurs` sur Supabase. Si oui → régénérer. Si non → décider : créer proprement ou retirer le code mort.
+### Diagnostic consolidé
+Les pages Encaissements, Rémunérations et Dossiers/[id] sont ✅ fonctionnelles → les tables `encaissements` et `apporteurs` **existent bien** sur Supabase. Le problème est **exclusivement côté types** : `database.ts` n'a pas été régénéré depuis l'application de ces schémas.
 
+**Action P0 unique** : régénérer les types Supabase.
 ```bash
 npx supabase gen types typescript --project-id <ID> > src/types/database.ts
 ```
+Après régénération, les 3 erreurs TS résiduelles dans `dossier-detail-wrapper.tsx` (L102, L108, L558) disparaissent. Les `as any` sur `supabase.from('encaissements')` dans `remunerations-client-wrapper.tsx` L34 peuvent être retirés.
+
+**Action P1 (dette)** : créer rétroactivement `scripts/create-apporteurs.sql` à partir de la définition actuelle de la table sur Supabase, pour qu'un futur setup d'un environnement propre puisse reproduire le schéma.
 
 ---
 
@@ -108,9 +111,9 @@ Scripts dans `scripts/` (ordre chronologique) :
 
 ## Backlog priorisé (propositions)
 
-### P0 — Synchronisation schéma ↔ types
-1. **Vérifier l'état de `p4-encaissements-auto.sql` sur Supabase** et régénérer `database.ts` si appliqué.
-2. **Résoudre le cas `apporteurs`** : table existante (régénérer types) ou code mort (supprimer les 3 références dans dossier-detail-wrapper.tsx).
+### P0 — Synchronisation types
+1. **Régénérer `src/types/database.ts`** depuis Supabase. Les tables `encaissements`, `v_encaissements` et `apporteurs` existent en prod mais sont absentes des types (d'où les 3 erreurs TS + le `as any`). Commande : `npx supabase gen types typescript --project-id <ID> > src/types/database.ts`.
+2. **Retirer les `as any`** résiduels une fois les types à jour (`remunerations-client-wrapper.tsx` L34).
 
 ### P1 — Hygiène code
 3. **Clients/[id]** : remplacer les catchs silencieux (L172, L196, L212) par des toasts/messages utilisateur.
@@ -121,9 +124,10 @@ Scripts dans `scripts/` (ordre chronologique) :
 6. **Relances** : ajouter un bouton "marquer fait" inline sur la page agrégée pour éviter l'aller-retour client/[id].
 
 ### P3 — Dette technique
-7. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages.
-8. **Setup un outil de migration** (Supabase CLI) pour remplacer les scripts manuels.
-9. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log` et catchs vides.
+7. **Tracer le DDL `apporteurs`** dans `scripts/create-apporteurs.sql` (reverse-engineering depuis Supabase) pour qu'un futur env propre soit reproductible.
+8. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages.
+9. **Setup un outil de migration** (Supabase CLI) pour remplacer les scripts manuels.
+10. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log` et catchs vides.
 
 ### P4 — Features identifiées
 Cf. `/sessions/charming-jolly-ramanujan/mnt/.auto-memory/project_crm_roadmap.md` pour le cahier des charges complet.
