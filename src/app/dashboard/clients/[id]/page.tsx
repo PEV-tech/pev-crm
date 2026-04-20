@@ -169,8 +169,14 @@ export default function ClientDetailPage() {
           new Map(dossierData.map((d: any) => [d.id, d])).values()
         ) : []
         setDossiers(uniqueDossiers as ClientDossier[])
-      } catch { setNotFound(true) }
-      finally { setLoading(false) }
+      } catch (e) {
+        // Network or unexpected error — log for diagnostic, then show not-found UI.
+        // A 404-style empty result is handled above by the explicit `if (!data)` check.
+        console.error('[clients/[id]] fetchData failed:', e)
+        setNotFound(true)
+      } finally {
+        setLoading(false)
+      }
     }
     fetchData()
   }, [clientId, supabase])
@@ -183,18 +189,24 @@ export default function ClientDetailPage() {
       const { data: ds } = await sb.from('dossiers').select('id').eq('client_id', client.id)
       if (ds?.length) {
         for (const d of ds) {
-                await sb.from('dossier_documents').delete().eq('dossier_id', d.id)
-                      await sb.from('relances').delete().eq('dossier_id', d.id)
+          await sb.from('dossier_documents').delete().eq('dossier_id', d.id)
+          await sb.from('relances').delete().eq('dossier_id', d.id)
           await sb.from('factures').delete().eq('dossier_id', d.id)
           await sb.from('commissions').delete().eq('dossier_id', d.id)
         }
-            await sb.from('relances').delete().eq('client_id', client.id)
+        await sb.from('relances').delete().eq('client_id', client.id)
         await sb.from('dossiers').delete().eq('client_id', client.id)
       }
       await sb.from('clients').delete().eq('id', client.id)
       router.push('/dashboard/dossiers')
-    } catch (e) { console.error(e); setDeletingClient(false); setShowDeleteClientConfirm(false) }
+    } catch (e) {
+      console.error('[clients/[id]] handleDeleteClient failed:', e)
+      alert('Erreur lors de la suppression du client : ' + (e instanceof Error ? e.message : 'erreur inconnue'))
+      setDeletingClient(false)
+      setShowDeleteClientConfirm(false)
+    }
   }
+
   const handleSaveContact = async () => {
     if (!client) return
     setSavingContact(true)
@@ -204,12 +216,15 @@ export default function ClientDetailPage() {
         email: editContact.email || null,
         telephone: editContact.telephone || null,
         pays: editContact.pays || null,
-              ville: editContact.ville || null,
+        ville: editContact.ville || null,
         numero_compte: editContact.numero_compte || null,
         google_drive_url: editContact.google_drive_url || null,
       })
       .eq('id', clientId)
-          if (error) { alert('Erreur sauvegarde: ' + error.message); console.error(error) } else {}
+    if (error) {
+      console.error('[clients/[id]] handleSaveContact failed:', error)
+      alert('Erreur sauvegarde contact : ' + error.message)
+    } else {
       setClient({ ...client, ...editContact })
       setEditingContact(false)
     }
