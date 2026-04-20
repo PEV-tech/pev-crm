@@ -181,9 +181,12 @@ export default function ClientDetailPage() {
       const { data: ds } = await sb.from('dossiers').select('id').eq('client_id', client.id)
       if (ds?.length) {
         for (const d of ds) {
+                await sb.from('dossier_documents').delete().eq('dossier_id', d.id)
+                      await sb.from('relances').delete().eq('dossier_id', d.id)
           await sb.from('factures').delete().eq('dossier_id', d.id)
           await sb.from('commissions').delete().eq('dossier_id', d.id)
         }
+            await sb.from('relances').delete().eq('client_id', client.id)
         await sb.from('dossiers').delete().eq('client_id', client.id)
       }
       await sb.from('clients').delete().eq('id', client.id)
@@ -199,6 +202,7 @@ export default function ClientDetailPage() {
         email: editContact.email || null,
         telephone: editContact.telephone || null,
         pays: editContact.pays || null,
+              ville: editContact.ville || null,
         numero_compte: editContact.numero_compte || null,
         google_drive_url: editContact.google_drive_url || null,
       })
