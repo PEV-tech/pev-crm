@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-20 · **Commit de référence** : à pousser (feat/nouveau-client)
+**Mis à jour** : 2026-04-20 · **Commit de référence** : `dba3419`
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
