@@ -31,10 +31,22 @@ interface FormData {
   ville: string
   email: string
   telephone: string
+  situationMatrimoniale: string
   dateEntreeRelation: string
   consultantId: string
   commentaire: string
 }
+
+// Les 6 valeurs alignees sur kyc-section.tsx (format libelle) pour rester
+// coherent avec la fiche KYC et les recherches existantes.
+const SITUATIONS_MATRIMONIALES = [
+  'Célibataire',
+  'Concubinage',
+  'Pacsé(e)',
+  'Marié(e)',
+  'Veuf(ve)',
+  'Divorcé(e)',
+] as const
 
 function NewClientContent() {
   const router = useRouter()
@@ -63,6 +75,7 @@ function NewClientContent() {
     ville: '',
     email: '',
     telephone: '',
+    situationMatrimoniale: '',
     dateEntreeRelation: new Date().toISOString().split('T')[0],
     consultantId: '',
     commentaire: '',
@@ -178,6 +191,7 @@ function NewClientContent() {
           ville: formData.ville.trim() || null,
           email: formData.email.trim() || null,
           telephone: formData.telephone.trim() || null,
+          situation_matrimoniale: formData.situationMatrimoniale || null,
           consultant_id: formData.consultantId || null,
           date_entree_relation: formData.dateEntreeRelation || null,
           commentaires: formData.commentaire.trim() || null,
@@ -359,6 +373,24 @@ function NewClientContent() {
                   placeholder="+33 6 12 34 56 78"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Situation matrimoniale
+              </label>
+              <Select
+                name="situationMatrimoniale"
+                value={formData.situationMatrimoniale}
+                onChange={handleInputChange}
+              >
+                <option value="">— Non renseignée —</option>
+                {SITUATIONS_MATRIMONIALES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
