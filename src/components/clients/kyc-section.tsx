@@ -12,7 +12,12 @@ import {
   Plus,
   Trash2,
   Shield,
+  PenLine,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react'
+import { computeKycCompletion } from '@/lib/kyc-completion'
+import { KYCSignatureDialog } from './kyc-signature-dialog'
 
 interface KYCSectionProps {
   client: any // The full client object from Supabase with all KYC fields
@@ -46,8 +51,19 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     )
     const [editData, setEditData] = React.useState<EditState>({})
     const [saving, setSaving] = React.useState(false)
+    const [signatureOpen, setSignatureOpen] = React.useState(false)
 
     const supabase = React.useMemo(() => createClient(), [])
+
+    // Complétude calculée à partir du client actuel (recalculée à chaque
+    // changement de props — les edits en cours ne comptent pas tant que
+    // non sauvés, comportement voulu pour que la signature reflète l'état
+    // persisté).
+    const completion = React.useMemo(() => computeKycCompletion(client), [client])
+    const kycSignedAt: string | null = client?.kyc_signed_at ?? null
+    const kycIncompleteSigned: boolean = client?.kyc_incomplete_signed === true
+    const kycSignerName: string | null = client?.kyc_signer_name ?? null
+    const kycCompletionAtSign: number | null = client?.kyc_completion_rate ?? null
 
     // Initialize edit state from client props on mount or when client changes
     React.useEffect(() => {
@@ -2182,36 +2198,107 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             <CardTitle className="flex items-center gap-2 text-lg">
               <Shield size={18} className="text-gray-600" />
               KYC - Know Your Customer
-            </CardTitle>
-            {!isEditMode ? (
-              <button
-                onClick={() => setIsEditMode(true)}
-                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-                title="Éditer"
+              {/* Badge de complétude — toujours visible */}
+              <span
+                className={`ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                  completion.rate >= 100
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : completion.rate >= 70
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+                }`}
+                title={`${completion.filled} / ${completion.total} champs requis renseignés`}
               >
-                <Pencil size={16} className="text-gray-500" />
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
+                {completion.rate >= 100 ? (
+                  <CheckCircle2 size={12} />
+                ) : (
+                  <AlertTriangle size={12} />
+                )}
+                {completion.rate}%
+              </span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {!isEditMode && (
                 <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="p-1.5 hover:bg-green-100 rounded transition-colors text-green-600 disabled:opacity-50"
-                  title="Enregistrer"
+                  onClick={() => setSignatureOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-navy-700 bg-navy-50 border border-navy-200 rounded hover:bg-navy-100 transition-colors"
+                  title={
+                    kycSignedAt
+                      ? 'Re-signer le KYC (remplacera la précédente signature)'
+                      : 'Faire signer le KYC par le client'
+                  }
                 >
-                  <Save size={16} />
+                  <PenLine size={14} />
+                  {kycSignedAt ? 'Re-signer' : 'Faire signer'}
                 </button>
+              )}
+              {!isEditMode ? (
                 <button
-                  onClick={handleCancel}
-                  disabled={saving}
-                  className="p-1.5 hover:bg-gray-100 rounded transition-colors text-gray-500 disabled:opacity-50"
-                  title="Annuler"
+                  onClick={() => setIsEditMode(true)}
+                  className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                  title="Éditer"
                 >
-                  <X size={16} />
+                  <Pencil size={16} className="text-gray-500" />
                 </button>
-              </div>
-            )}
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="p-1.5 hover:bg-green-100 rounded transition-colors text-green-600 disabled:opacity-50"
+                    title="Enregistrer"
+                  >
+                    <Save size={16} />
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    disabled={saving}
+                    className="p-1.5 hover:bg-gray-100 rounded transition-colors text-gray-500 disabled:opacity-50"
+                    title="Annuler"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Bannière d'audit si KYC signé — rouge si incomplet, verte si complet. */}
+          {kycSignedAt && (
+            <div
+              className={`mt-3 p-3 rounded-lg border text-sm ${
+                kycIncompleteSigned
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-green-50 border-green-200 text-green-800'
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                {kycIncompleteSigned ? (
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                ) : (
+                  <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold">
+                    {kycIncompleteSigned
+                      ? `Document signé avec des informations incomplètes (${kycCompletionAtSign ?? '?'}%)`
+                      : 'KYC signé'}
+                  </p>
+                  <p className="text-xs opacity-90 mt-0.5">
+                    Signé le{' '}
+                    {new Date(kycSignedAt).toLocaleString('fr-FR', {
+                      dateStyle: 'long',
+                      timeStyle: 'short',
+                    })}
+                    {kycSignerName ? ` par ${kycSignerName}` : ''}
+                    {kycIncompleteSigned
+                      ? ' — consentement explicite enregistré.'
+                      : '.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y divide-gray-200">
@@ -2226,6 +2313,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             <ObjectifsSection />
           </div>
         </CardContent>
+
+        <KYCSignatureDialog
+          open={signatureOpen}
+          onClose={() => setSignatureOpen(false)}
+          client={client}
+          onSigned={onUpdate}
+        />
       </Card>
     )
   }
