@@ -21,6 +21,10 @@ interface QualityIssue {
 
 function runQualityChecks(dossiers: any[]): QualityIssue[] {
   const issues: QualityIssue[] = []
+  // Pour éviter de doublonner les alertes "signature KYC incomplète" au
+  // niveau client, on les lève une seule fois par client_id.
+  const signatureIncompleteSeen = new Set<string>()
+
   dossiers.forEach(d => {
     const clientName = `${d.client_prenom || ''} ${d.client_nom || ''}`.trim() || 'Sans nom'
     const consultantName = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim() || 'Non attribué'
@@ -57,6 +61,22 @@ function runQualityChecks(dossiers: any[]): QualityIssue[] {
     }
     // Missing pays
     if (!d.client_pays) issues.push({ ...base, severity: 'warning', message: 'Pays client non renseigné', field: 'pays' })
+
+    // Signature KYC marquée incomplète au moment de signer — warning
+    // compliance : audit ACPR/DDA peut exiger des compléments. On alerte
+    // une seule fois par client, même si plusieurs dossiers rattachés.
+    if (d.client_id && d.kyc_incomplete_signed === true && !signatureIncompleteSeen.has(d.client_id)) {
+      signatureIncompleteSeen.add(d.client_id)
+      const rate = typeof d.kyc_completion_rate === 'number' ? d.kyc_completion_rate : null
+      issues.push({
+        ...base,
+        severity: 'warning',
+        message: rate !== null
+          ? `Signature KYC reçue avec dossier incomplet (${rate}%) — à compléter`
+          : 'Signature KYC reçue avec dossier incomplet — à compléter',
+        field: 'kyc_signature',
+      })
+    }
   })
   return issues
 }
@@ -66,6 +86,16 @@ function QualityPanel({ dossiers }: { dossiers: any[] }) {
   const errors = issues.filter(i => i.severity === 'error')
   const warnings = issues.filter(i => i.severity === 'warning')
   const infos = issues.filter(i => i.severity === 'info')
+
+  // Count distinct clients with an incomplete signed KYC — mise en exergue
+  // car c'est une alerte réglementaire ciblée (signature ≠ complétude).
+  const kycIncompleteClients = React.useMemo(() => {
+    const set = new Set<string>()
+    dossiers.forEach((d: any) => {
+      if (d.client_id && d.kyc_incomplete_signed === true) set.add(d.client_id)
+    })
+    return set.size
+  }, [dossiers])
 
   const totalDossiers = dossiers.length
   const dossiersWithErrors = new Set(errors.map(e => e.dossierId)).size
@@ -114,6 +144,22 @@ function QualityPanel({ dossiers }: { dossiers: any[] }) {
             <p className="text-xs text-gray-500 mt-1">Dossiers conformes</p>
           </div>
         </div>
+
+        {/* Bandeau signature KYC incomplète — affiché uniquement s'il y a du
+            stock à traiter. Cliquable vers la liste des clients. */}
+        {kycIncompleteClients > 0 && (
+          <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <AlertTriangle size={18} className="text-red-600 shrink-0" />
+            <div className="flex-1 text-sm">
+              <span className="font-semibold text-red-800">
+                {kycIncompleteClients} client{kycIncompleteClients > 1 ? 's' : ''} avec signature KYC incomplète
+              </span>
+              <span className="text-red-700">
+                {' '}— à compléter en priorité (faisceau de preuve ACPR/DDA).
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Issues list */}
         {issues.length > 0 ? (
@@ -170,12 +216,43 @@ export function ReglementaireClientWrapper() {
       try {
         const supabase = createClient()
 
-        const { data, error } = await supabase
-          .from('v_dossiers_complets')
-          .select('id, client_id, statut, date_operation, montant, client_nom, client_prenom, client_pays, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, statut_kyc, der, pi, preco, lm, rm, commission_brute, facturee')
+        // Parallèle : dossiers + signatures KYC côté client. Les infos de
+        // signature (kyc_signed_at, kyc_incomplete_signed, rate) vivent sur
+        // la table `clients`, pas sur la vue `v_dossiers_complets`. On
+        // merge côté client pour éviter de refaire la vue SQL.
+        const [dossiersRes, clientsKycRes] = await Promise.all([
+          supabase
+            .from('v_dossiers_complets')
+            .select('id, client_id, statut, date_operation, montant, client_nom, client_prenom, client_pays, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, statut_kyc, der, pi, preco, lm, rm, commission_brute, facturee'),
+          // Cast `any` : les colonnes kyc_signature_audit ne sont pas encore
+          // dans src/types/database.ts (migration appliquée en prod, types
+          // non régénérés) — cf. STATUS.md dette post-regen.
+          (supabase.from('clients') as any)
+            .select('id, kyc_signed_at, kyc_incomplete_signed, kyc_completion_rate, kyc_signer_name'),
+        ])
 
-        if (!error) {
-          setData(data || [])
+        const dossiers = (dossiersRes.data || []) as any[]
+        const clientsKyc = (clientsKycRes.data || []) as Array<{
+          id: string
+          kyc_signed_at: string | null
+          kyc_incomplete_signed: boolean | null
+          kyc_completion_rate: number | null
+          kyc_signer_name: string | null
+        }>
+        const kycByClient = new Map(clientsKyc.map((c) => [c.id, c]))
+
+        if (!dossiersRes.error) {
+          const merged = dossiers.map((d) => {
+            const k = d.client_id ? kycByClient.get(d.client_id) : undefined
+            return {
+              ...d,
+              kyc_signed_at: k?.kyc_signed_at ?? null,
+              kyc_incomplete_signed: k?.kyc_incomplete_signed ?? null,
+              kyc_completion_rate: k?.kyc_completion_rate ?? null,
+              kyc_signer_name: k?.kyc_signer_name ?? null,
+            }
+          })
+          setData(merged)
         } else {
           setData([])
         }
