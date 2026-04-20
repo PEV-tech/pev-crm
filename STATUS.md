@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-20 · **Commit de référence** : `ca1e973`
+**Mis à jour** : 2026-04-20 · **Commit de référence** : `cea09a9`
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
@@ -40,7 +40,8 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 - Divers `console.error` de développement dans dossier-detail-wrapper
 
 ### Types TS pré-existants (non bloquants mais polluants)
-- `dossier-detail-wrapper.tsx` L102, L108, L558 — 3 erreurs sur la table `apporteurs` (absente de `database.ts`)
+- ~~`dossier-detail-wrapper.tsx` L102, L108, L558 — 3 erreurs sur la table `apporteurs`~~ ✅ **Résolu** par régénération des types (commit `cea09a9`).
+- `clients/[id]/page.tsx` L864 — TS1128 résiduel. **Cause racine identifiée** : accolades déséquilibrées dans `handleSaveContact` (L198-217), propagées jusqu'en fin de fichier. Fix au passage dans le nettoyage des catchs silencieux (même zone).
 
 ---
 
@@ -59,30 +60,11 @@ Vérifier avant de supprimer avec `grep -r "from.*search-modal"` etc.
 
 ## État schéma DB
 
-### Tables dans `src/types/database.ts` (30)
-consultants, clients, produits, compagnies, taux_produit_compagnie, grilles_frais, dossiers, commissions, factures, challenges, audit_log, client_commentaires, client_pj, rendez_vous, audit_logs, document_templates, dossier_documents, client_relations, google_tokens, relances, faq, encaissements_rem, grilles_commissionnement, visibility_settings, facturation_consultant, manager_cagnotte + 4 vues (`v_dossiers_complets`, `v_collecte_par_consultant`, `v_pipeline_par_consultant`, `v_dossiers_remunerations`).
+### Tables dans `src/types/database.ts` — ✅ régénéré 2026-04-20 (commit `cea09a9`)
+Types complets et à jour avec Supabase. Tables incluses : consultants, clients, produits, compagnies, taux_produit_compagnie, grilles_frais, dossiers, commissions, factures, challenges, audit_log, audit_logs, client_commentaires, client_pj, client_relations, rendez_vous, document_templates, dossier_documents, google_tokens, relances, faq, encaissements, encaissements_rem, grilles_commissionnement, visibility_settings, facturation_consultant, manager_cagnotte, **apporteurs** + vues (`v_dossiers_complets`, `v_collecte_par_consultant`, `v_pipeline_par_consultant`, `v_dossiers_remunerations`, `v_encaissements`, `v_clients_secure`) + RPC (get_classement, calculate_commission, get_frais_taux, is_manager, is_back_office, mask_account/email/phone, unaccent, get_current_consultant_id, get_current_role, upsert_google_token).
 
-### Migrations datées 2026-04-20 — état de synchronisation
-
-| Script | Ajoute / Modifie | Reflété dans types ? |
-|---|---|---|
-| `add-co-titulaire.sql` | `dossiers.co_titulaire_id` | ✅ présent (4 occ) |
-| `add-kyc-fields.sql` | `clients.titre`, `nom_jeune_fille`, `adresse`, `patrimoine_immobilier` (JSON), etc. | ✅ présent |
-| `p4-encaissements-auto.sql` | **Table `encaissements`** + trigger + vue `v_encaissements` | ❌ **absente des types** (seul `encaissements_rem` y est) |
-
-### Table référencée sans SQL tracé
-- `apporteurs` — utilisée dans `dossier-detail-wrapper.tsx` depuis commit `6bd8756` (2026-04-13). Aucun script `create table apporteurs` dans `scripts/`. La page fonctionne en prod → la table **existe bien sur Supabase**, créée manuellement via l'UI. **Dette : pas de script tracé pour ce DDL.**
-
-### Diagnostic consolidé
-Les pages Encaissements, Rémunérations et Dossiers/[id] sont ✅ fonctionnelles → les tables `encaissements` et `apporteurs` **existent bien** sur Supabase. Le problème est **exclusivement côté types** : `database.ts` n'a pas été régénéré depuis l'application de ces schémas.
-
-**Action P0 unique** : régénérer les types Supabase.
-```bash
-npx supabase gen types typescript --project-id <ID> > src/types/database.ts
-```
-Après régénération, les 3 erreurs TS résiduelles dans `dossier-detail-wrapper.tsx` (L102, L108, L558) disparaissent. Les `as any` sur `supabase.from('encaissements')` dans `remunerations-client-wrapper.tsx` L34 peuvent être retirés.
-
-**Action P1 (dette)** : créer rétroactivement `scripts/create-apporteurs.sql` à partir de la définition actuelle de la table sur Supabase, pour qu'un futur setup d'un environnement propre puisse reproduire le schéma.
+### Dette résiduelle (P3)
+- `apporteurs` — utilisée dans `dossier-detail-wrapper.tsx` depuis commit `6bd8756` (2026-04-13). Présente sur Supabase et désormais dans les types, mais **aucun script DDL tracé** dans `scripts/`. À créer rétroactivement pour qu'un nouvel environnement soit reproductible.
 
 ---
 
@@ -111,23 +93,24 @@ Scripts dans `scripts/` (ordre chronologique) :
 
 ## Backlog priorisé (propositions)
 
-### P0 — Synchronisation types
-1. **Régénérer `src/types/database.ts`** depuis Supabase. Les tables `encaissements`, `v_encaissements` et `apporteurs` existent en prod mais sont absentes des types (d'où les 3 erreurs TS + le `as any`). Commande : `npx supabase gen types typescript --project-id <ID> > src/types/database.ts`.
-2. **Retirer les `as any`** résiduels une fois les types à jour (`remunerations-client-wrapper.tsx` L34).
+### ✅ P0 — Synchronisation types (FAIT 2026-04-20, commit `cea09a9`)
+- Régénération `src/types/database.ts` depuis Supabase — tables `encaissements`, `v_encaissements`, `apporteurs` désormais présentes.
+- `as any` retiré de `remunerations-client-wrapper.tsx` L34.
 
-### P1 — Hygiène code
-3. **Clients/[id]** : remplacer les catchs silencieux (L172, L196, L212) par des toasts/messages utilisateur.
-4. **Nettoyer les `console.error` résiduels** (audit L86/L94, dossier-detail-wrapper L654, remunerations L81).
-5. **Supprimer les 5 composants orphelins** listés plus haut (après grep de vérification).
+### P0 — Hygiène code (bloqueurs d'usage quotidien)
+1. **Clients/[id]** : remplacer les catchs silencieux (L172, L196, L212) par des toasts/messages utilisateur. Le save silencieux à L212 fait **perdre des données sans feedback** — c'est LE blocker V1.
+   - Note : le fix de L212 résout aussi l'erreur TS1128 pré-existante à L864 (même accolade mal placée).
+2. **Nettoyer les `console.error` résiduels** (audit L86/L94, dossier-detail-wrapper L654, remunerations L81).
+3. **Supprimer les 5 composants orphelins** listés plus haut (après grep de vérification).
 
-### P2 — UX gaps
-6. **Relances** : ajouter un bouton "marquer fait" inline sur la page agrégée pour éviter l'aller-retour client/[id].
+### P1 — UX gaps
+4. **Relances** : ajouter un bouton "marquer fait" inline sur la page agrégée pour éviter l'aller-retour client/[id].
 
-### P3 — Dette technique
-7. **Tracer le DDL `apporteurs`** dans `scripts/create-apporteurs.sql` (reverse-engineering depuis Supabase) pour qu'un futur env propre soit reproductible.
-8. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages.
-9. **Setup un outil de migration** (Supabase CLI) pour remplacer les scripts manuels.
-10. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log` et catchs vides.
+### P2 — Post-V1 (dette technique)
+5. **Tracer le DDL `apporteurs`** dans `scripts/create-apporteurs.sql` (reverse-engineering depuis Supabase) pour qu'un futur env propre soit reproductible.
+6. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages.
+7. **Setup un outil de migration** (Supabase CLI) pour remplacer les scripts manuels.
+8. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log` et catchs vides.
 
 ### P4 — Features identifiées
 Cf. `/sessions/charming-jolly-ramanujan/mnt/.auto-memory/project_crm_roadmap.md` pour le cahier des charges complet.
