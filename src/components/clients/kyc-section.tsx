@@ -22,6 +22,16 @@ import {
   Eye,
 } from 'lucide-react'
 import { computeKycCompletion } from '@/lib/kyc-completion'
+import { COUNTRY_NAMES } from '@/lib/countries'
+import {
+  LOGEMENT_OPTIONS,
+  REGIME_MATRIMONIAL_OPTIONS,
+  SITUATION_MATRIMONIALE_OPTIONS,
+  TYPE_BIEN_IMMOBILIER_OPTIONS,
+  TYPE_PRODUIT_FINANCIER_OPTIONS,
+  TYPE_DETENTION_OPTIONS,
+  needsRegimeMatrimonial,
+} from '@/lib/kyc-enums'
 import { KYCSignatureDialog } from './kyc-signature-dialog'
 
 interface KYCSectionProps {
@@ -97,6 +107,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         residence_fiscale: client?.residence_fiscale,
         nif: client?.nif,
         adresse: client?.adresse,
+        ville: client?.ville,
+        pays: client?.pays,
         proprietaire_locataire: client?.proprietaire_locataire,
         situation_matrimoniale: client?.situation_matrimoniale,
         regime_matrimonial: client?.regime_matrimonial,
@@ -160,6 +172,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             residence_fiscale: data.residence_fiscale,
             nif: data.nif,
             adresse: data.adresse,
+            ville: data.ville,
+            pays: data.pays,
             proprietaire_locataire: proprio,
             situation_matrimoniale: sitMatri,
             regime_matrimonial: data.regime_matrimonial,
@@ -180,17 +194,21 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             // Remap immobilier fields: parser uses valeur_acquisition/date_acquisition,
             // CRM uses valeur_acq/date_acq
             patrimoine_immobilier: (data.patrimoine_immobilier || []).map((item: any) => ({
+              type_bien: item.type_bien || item.type || '',
               designation: item.designation || '',
               date_acq: item.date_acq || item.date_acquisition || '',
               valeur_acq: item.valeur_acq ?? item.valeur_acquisition ?? 0,
               valeur_actuelle: item.valeur_actuelle ?? 0,
               detention: item.detention || '',
+              proportion:
+                typeof item.proportion === 'number' ? item.proportion : 100,
               taux_credit: item.taux_credit ?? 0,
               duree_credit: item.duree_credit ?? 0,
               crd: item.crd ?? 0,
               charges: item.charges ?? 0,
             })),
             produits_financiers: (data.produits_financiers || []).map((item: any) => ({
+              type_produit: item.type_produit || item.type || '',
               designation: item.designation || '',
               detenteur: item.detenteur || '',
               valeur: item.valeur ?? 0,
@@ -227,6 +245,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
               residence_fiscale: mappedData.residence_fiscale,
               nif: mappedData.nif,
               adresse: mappedData.adresse,
+              ville: mappedData.ville,
+              pays: mappedData.pays,
               proprietaire_locataire: mappedData.proprietaire_locataire,
               situation_matrimoniale: mappedData.situation_matrimoniale,
               regime_matrimonial: mappedData.regime_matrimonial,
@@ -296,6 +316,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           residence_fiscale: editData.residence_fiscale,
           nif: editData.nif,
           adresse: editData.adresse,
+          ville: editData.ville,
+          pays: editData.pays,
           proprietaire_locataire: editData.proprietaire_locataire,
           situation_matrimoniale: editData.situation_matrimoniale,
           regime_matrimonial: editData.regime_matrimonial,
@@ -348,6 +370,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         residence_fiscale: client?.residence_fiscale,
         nif: client?.nif,
         adresse: client?.adresse,
+        ville: client?.ville,
+        pays: client?.pays,
         proprietaire_locataire: client?.proprietaire_locataire,
         situation_matrimoniale: client?.situation_matrimoniale,
         regime_matrimonial: client?.regime_matrimonial,
@@ -522,21 +546,35 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       <label className="text-xs font-semibold text-gray-600">
                         Nationalité
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={data.nationalite || ''}
                         onChange={e =>
                           setEditData({ ...editData, nationalite: e.target.value })
                         }
                         className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                      />
+                      >
+                        <option value="">— Sélectionner —</option>
+                        {/* Si la valeur actuelle ne figure pas dans la liste ISO
+                            (legacy text libre), on l'ajoute en tête pour éviter
+                            qu'elle disparaisse silencieusement. */}
+                        {data.nationalite &&
+                          !COUNTRY_NAMES.includes(data.nationalite) && (
+                            <option value={data.nationalite}>
+                              {data.nationalite} (valeur existante)
+                            </option>
+                          )}
+                        {COUNTRY_NAMES.map(name => (
+                          <option key={`nat-${name}`} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-gray-600">
                         Résidence fiscale
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={data.residence_fiscale || ''}
                         onChange={e =>
                           setEditData({
@@ -545,7 +583,20 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           })
                         }
                         className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                      />
+                      >
+                        <option value="">— Sélectionner —</option>
+                        {data.residence_fiscale &&
+                          !COUNTRY_NAMES.includes(data.residence_fiscale) && (
+                            <option value={data.residence_fiscale}>
+                              {data.residence_fiscale} (valeur existante)
+                            </option>
+                          )}
+                        {COUNTRY_NAMES.map(name => (
+                          <option key={`fisc-${name}`} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -576,13 +627,56 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         setEditData({ ...editData, adresse: e.target.value })
                       }
                       rows={2}
+                      placeholder="Numéro, rue, complément"
                       className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
                     />
                   </div>
 
+                  {/* Ordre d'usage FR : Ville AVANT Pays. */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600">
+                        Ville
+                      </label>
+                      <input
+                        type="text"
+                        value={data.ville || ''}
+                        onChange={e =>
+                          setEditData({ ...editData, ville: e.target.value })
+                        }
+                        placeholder="Paris"
+                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600">
+                        Pays
+                      </label>
+                      <select
+                        value={data.pays || ''}
+                        onChange={e =>
+                          setEditData({ ...editData, pays: e.target.value })
+                        }
+                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                      >
+                        <option value="">— Sélectionner —</option>
+                        {data.pays && !COUNTRY_NAMES.includes(data.pays) && (
+                          <option value={data.pays}>
+                            {data.pays} (valeur existante)
+                          </option>
+                        )}
+                        {COUNTRY_NAMES.map(name => (
+                          <option key={`pays-${name}`} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-xs font-semibold text-gray-600">
-                      Propriétaire / Locataire
+                      Statut de logement
                     </label>
                     <select
                       value={data.proprietaire_locataire || ''}
@@ -594,9 +688,21 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       }
                       className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
                     >
-                      <option value="">Sélectionner</option>
-                      <option value="Propriétaire">Propriétaire</option>
-                      <option value="Locataire">Locataire</option>
+                      <option value="">— Sélectionner —</option>
+                      {/* Garde les valeurs legacy si elles ne figurent pas dans la liste. */}
+                      {data.proprietaire_locataire &&
+                        !LOGEMENT_OPTIONS.includes(
+                          data.proprietaire_locataire as any
+                        ) && (
+                          <option value={data.proprietaire_locataire}>
+                            {data.proprietaire_locataire} (valeur existante)
+                          </option>
+                        )}
+                      {LOGEMENT_OPTIONS.map(opt => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </>
@@ -676,8 +782,23 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </p>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Ville</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {displayValue(data.ville)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Pays</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {displayValue(data.pays)}
+                      </p>
+                    </div>
+                  </div>
+
                   <div>
-                    <p className="text-xs text-gray-500">Propriétaire / Locataire</p>
+                    <p className="text-xs text-gray-500">Statut de logement</p>
                     <p className="text-sm font-medium text-gray-900">
                       {displayValue(data.proprietaire_locataire)}
                     </p>
@@ -723,32 +844,46 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </label>
                     <select
                       value={data.situation_matrimoniale || ''}
-                      onChange={e =>
+                      onChange={e => {
+                        const newSit = e.target.value
+                        // Quand on passe sur une situation qui ne nécessite pas
+                        // de régime (célibataire, divorcé, veuf…), on remet à
+                        // null pour éviter les données orphelines sur un
+                        // changement d'état marital.
                         setEditData({
                           ...editData,
-                          situation_matrimoniale: e.target.value,
+                          situation_matrimoniale: newSit,
+                          regime_matrimonial: needsRegimeMatrimonial(newSit)
+                            ? editData.regime_matrimonial
+                            : null,
                         })
-                      }
+                      }}
                       className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
                     >
-                      <option value="">Sélectionner</option>
-                      <option value="Célibataire">Célibataire</option>
-                      <option value="Concubinage">Concubinage</option>
-                      <option value="Pacsé(e)">Pacsé(e)</option>
-                      <option value="Marié(e)">Marié(e)</option>
-                      <option value="Veuf(ve)">Veuf(ve)</option>
-                      <option value="Divorcé(e)">Divorcé(e)</option>
+                      <option value="">— Sélectionner —</option>
+                      {data.situation_matrimoniale &&
+                        !SITUATION_MATRIMONIALE_OPTIONS.includes(
+                          data.situation_matrimoniale as any
+                        ) && (
+                          <option value={data.situation_matrimoniale}>
+                            {data.situation_matrimoniale} (valeur existante)
+                          </option>
+                        )}
+                      {SITUATION_MATRIMONIALE_OPTIONS.map(opt => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
-                  {(data.situation_matrimoniale === 'Marié(e)' ||
-                    data.situation_matrimoniale === 'Pacsé(e)') && (
+                  {/* Régime matrimonial : UNIQUEMENT si Marié(e) ou Pacsé(e). */}
+                  {needsRegimeMatrimonial(data.situation_matrimoniale) && (
                     <div>
                       <label className="text-xs font-semibold text-gray-600">
                         Régime matrimonial
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={data.regime_matrimonial || ''}
                         onChange={e =>
                           setEditData({
@@ -757,7 +892,22 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           })
                         }
                         className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                      />
+                      >
+                        <option value="">— Sélectionner —</option>
+                        {data.regime_matrimonial &&
+                          !REGIME_MATRIMONIAL_OPTIONS.includes(
+                            data.regime_matrimonial as any
+                          ) && (
+                            <option value={data.regime_matrimonial}>
+                              {data.regime_matrimonial} (valeur existante)
+                            </option>
+                          )}
+                        {REGIME_MATRIMONIAL_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
@@ -806,8 +956,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </p>
                   </div>
 
-                  {(data.situation_matrimoniale === 'Marié(e)' ||
-                    data.situation_matrimoniale === 'Pacsé(e)') && (
+                  {needsRegimeMatrimonial(data.situation_matrimoniale) && (
                     <div>
                       <p className="text-xs text-gray-500">Régime matrimonial</p>
                       <p className="text-sm font-medium text-gray-900">
@@ -922,15 +1071,57 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     <label className="text-xs font-semibold text-gray-600">
                       Depuis
                     </label>
-                    <input
-                      type="text"
-                      placeholder="p.ex. 2020 ou Jan. 2020"
-                      value={data.date_debut_emploi || ''}
-                      onChange={e =>
-                        setEditData({ ...editData, date_debut_emploi: e.target.value })
+                    {/* date_debut_emploi stocke "YYYY-MM-DD" en base ; l'input
+                        `date` n'accepte que ce format. Si la valeur legacy est
+                        du texte libre (ex: "Jan. 2020"), on bascule en input
+                        text en fallback pour ne pas la perdre. */}
+                    {(() => {
+                      const v = data.date_debut_emploi || ''
+                      const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(v)
+                      if (v && !isIsoDate) {
+                        return (
+                          <div className="flex items-center gap-2 mt-1">
+                            <input
+                              type="text"
+                              value={v}
+                              onChange={e =>
+                                setEditData({
+                                  ...editData,
+                                  date_debut_emploi: e.target.value,
+                                })
+                              }
+                              className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditData({
+                                  ...editData,
+                                  date_debut_emploi: '',
+                                })
+                              }
+                              className="text-xs text-indigo-600 hover:text-indigo-800 whitespace-nowrap"
+                              title="Effacer pour basculer sur le date picker"
+                            >
+                              Convertir en date
+                            </button>
+                          </div>
+                        )
                       }
-                      className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                    />
+                      return (
+                        <input
+                          type="date"
+                          value={v}
+                          onChange={e =>
+                            setEditData({
+                              ...editData,
+                              date_debut_emploi: e.target.value,
+                            })
+                          }
+                          className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                        />
+                      )
+                    })()}
                   </div>
                 </>
               ) : (
@@ -1076,17 +1267,41 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </p>
                   </div>
 
-                  {tauxEndettement > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-semibold text-gray-600">
-                        Taux d'endettement
+                  {/* Taux d'endettement — toujours affiché pour que l'absence
+                      d'emprunt soit un état explicite et pas un oubli. */}
+                  <div className="mt-2 border-t pt-2">
+                    <p className="text-xs font-semibold text-gray-600">
+                      Taux d'endettement
+                    </p>
+                    {empruntsArr.length === 0 ? (
+                      <p className="text-sm font-bold mt-1 text-gray-500">
+                        0% — aucun emprunt enregistré
                       </p>
-                      <p className={`text-sm font-bold mt-1 ${tauxEndettement > 35 ? 'text-red-600' : tauxEndettement > 25 ? 'text-orange-600' : 'text-green-600'}`}>
-                        {tauxEndettement}%
-                        {tauxEndettement > 35 && ' ⚠️ Élevé'}
+                    ) : revenusMensuels <= 0 ? (
+                      <p className="text-sm font-bold mt-1 text-gray-500">
+                        Non calculable — renseigner les revenus
                       </p>
-                    </div>
-                  )}
+                    ) : (
+                      <>
+                        <p
+                          className={`text-sm font-bold mt-1 ${
+                            tauxEndettement > 35
+                              ? 'text-red-600'
+                              : tauxEndettement > 25
+                              ? 'text-orange-600'
+                              : 'text-green-600'
+                          }`}
+                        >
+                          {tauxEndettement}%
+                          {tauxEndettement > 35 && ' ⚠️ Élevé'}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {formatCurrency(totalEcheancesMensuelles)} /mois sur{' '}
+                          {formatCurrency(revenusMensuels)} /mois de revenus
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </>
               ) : (
                 <>
@@ -1122,17 +1337,39 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </p>
                   </div>
 
-                  {tauxEndettement > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-semibold text-gray-600">
-                        Taux d'endettement
+                  <div className="mt-2 border-t pt-2">
+                    <p className="text-xs font-semibold text-gray-600">
+                      Taux d'endettement
+                    </p>
+                    {empruntsArr.length === 0 ? (
+                      <p className="text-sm font-bold text-gray-500">
+                        0% — aucun emprunt enregistré
                       </p>
-                      <p className={`text-sm font-bold ${tauxEndettement > 35 ? 'text-red-600' : tauxEndettement > 25 ? 'text-orange-600' : 'text-green-600'}`}>
-                        {tauxEndettement}%
-                        {tauxEndettement > 35 && ' ⚠️ Élevé'}
+                    ) : revenusMensuels <= 0 ? (
+                      <p className="text-sm font-bold text-gray-500">
+                        Non calculable — renseigner les revenus
                       </p>
-                    </div>
-                  )}
+                    ) : (
+                      <>
+                        <p
+                          className={`text-sm font-bold ${
+                            tauxEndettement > 35
+                              ? 'text-red-600'
+                              : tauxEndettement > 25
+                              ? 'text-orange-600'
+                              : 'text-green-600'
+                          }`}
+                        >
+                          {tauxEndettement}%
+                          {tauxEndettement > 35 && ' ⚠️ Élevé'}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {formatCurrency(totalEcheancesMensuelles)} /mois sur{' '}
+                          {formatCurrency(revenusMensuels)} /mois de revenus
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -1159,15 +1396,36 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         return /^(cte|communaut[ée]|commun)/.test(regime)
       }
 
-      // Format currency with 50% annotation when communauté
-      const formatImmoValue = (value: number | undefined | null, detention: string | undefined | null): React.ReactNode => {
-        if (value === undefined || value === null || value === 0) return formatCurrency(0)
-        if (isCommunaute(detention)) {
+      // Format currency with proportion annotation.
+      // Si une proportion explicite est renseignée (0–100) on l'utilise ;
+      // sinon on retombe sur l'heuristique communauté (50/50).
+      const formatImmoValue = (
+        value: number | undefined | null,
+        detention: string | undefined | null,
+        proportion?: number | null
+      ): React.ReactNode => {
+        if (value === undefined || value === null || value === 0)
+          return formatCurrency(0)
+        const prop = typeof proportion === 'number' ? proportion : null
+        if (prop !== null && prop !== 100) {
+          const share = Math.round((value * prop) / 100)
+          return (
+            <span>
+              {formatCurrency(share)}
+              <span className="text-[10px] text-gray-400 ml-1">
+                ({prop}% de {formatCurrency(value)})
+              </span>
+            </span>
+          )
+        }
+        if (prop === null && isCommunaute(detention)) {
           const half = Math.round(value / 2)
           return (
             <span>
               {formatCurrency(half)}
-              <span className="text-[10px] text-gray-400 ml-1">(50% de {formatCurrency(value)})</span>
+              <span className="text-[10px] text-gray-400 ml-1">
+                (50% de {formatCurrency(value)})
+              </span>
             </span>
           )
         }
@@ -1198,11 +1456,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           patrimoine_immobilier: [
             ...immobilier,
             {
+              type_bien: '',
               designation: '',
               date_acq: '',
               valeur_acq: 0,
               valeur_actuelle: 0,
               detention: '',
+              proportion: 100,
               taux_credit: 0,
               duree_credit: 0,
               crd: 0,
@@ -1252,6 +1512,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
               <span className="text-sm font-bold text-indigo-600">
                 {formatCurrency(immobilier.reduce((sum, row) => {
                   const val = row.valeur_actuelle ?? 0
+                  // Ordre de priorité : proportion explicite > heuristique
+                  // communauté > 100%. La proportion est toujours traitée en
+                  // % (0–100) et représente la quote-part du client.
+                  const prop = typeof row.proportion === 'number' ? row.proportion : null
+                  if (prop !== null) {
+                    return sum + Math.round((val * prop) / 100)
+                  }
                   return sum + (isCommunaute(row.detention) ? Math.round(val / 2) : val)
                 }, 0))}
               </span>
@@ -1270,6 +1537,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <thead>
                           <tr className="border-b border-gray-300">
                             <th className="text-left py-1 px-1 font-semibold">
+                              Type
+                            </th>
+                            <th className="text-left py-1 px-1 font-semibold">
                               Désignation
                             </th>
                             <th className="text-left py-1 px-1 font-semibold">
@@ -1283,6 +1553,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             </th>
                             <th className="text-left py-1 px-1 font-semibold">
                               Détention
+                            </th>
+                            <th className="text-right py-1 px-1 font-semibold">
+                              Part %
                             </th>
                             <th className="text-right py-1 px-1 font-semibold">
                               Taux %
@@ -1300,6 +1573,34 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <tbody>
                           {immobilier.map((row, idx) => (
                             <tr key={idx} className="border-b border-gray-200">
+                              <td className="py-1 px-1">
+                                <select
+                                  value={row.type_bien || ''}
+                                  onChange={e =>
+                                    updateImmobilierRow(
+                                      idx,
+                                      'type_bien',
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                                >
+                                  <option value="">—</option>
+                                  {row.type_bien &&
+                                    !TYPE_BIEN_IMMOBILIER_OPTIONS.includes(
+                                      row.type_bien
+                                    ) && (
+                                      <option value={row.type_bien}>
+                                        {row.type_bien}
+                                      </option>
+                                    )}
+                                  {TYPE_BIEN_IMMOBILIER_OPTIONS.map(opt => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
                               <td className="py-1 px-1">
                                 <input
                                   type="text"
@@ -1353,9 +1654,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                 />
                               </td>
                               <td className="py-1 px-1">
-                                <input
-                                  type="text"
-                                  placeholder="ex: 50/50"
+                                <select
                                   value={row.detention || ''}
                                   onChange={e =>
                                     updateImmobilierRow(
@@ -1364,7 +1663,41 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                       e.target.value
                                     )
                                   }
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                                >
+                                  <option value="">—</option>
+                                  {row.detention &&
+                                    !TYPE_DETENTION_OPTIONS.includes(row.detention) && (
+                                      <option value={row.detention}>
+                                        {row.detention}
+                                      </option>
+                                    )}
+                                  {TYPE_DETENTION_OPTIONS.map(opt => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-1 px-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={1}
+                                  value={row.proportion ?? 100}
+                                  onChange={e =>
+                                    updateImmobilierRow(
+                                      idx,
+                                      'proportion',
+                                      Math.min(
+                                        100,
+                                        Math.max(0, parseInt(e.target.value) || 0)
+                                      )
+                                    )
+                                  }
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                  title="Quote-part du client (100% si détenteur unique)"
                                 />
                               </td>
                               <td className="py-1 px-1">
@@ -1461,6 +1794,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <thead>
                           <tr className="border-b border-gray-300">
                             <th className="text-left py-1 px-1 font-semibold">
+                              Type
+                            </th>
+                            <th className="text-left py-1 px-1 font-semibold">
                               Désignation
                             </th>
                             <th className="text-left py-1 px-1 font-semibold">
@@ -1475,6 +1811,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             <th className="text-left py-1 px-1 font-semibold">
                               Détention
                             </th>
+                            <th className="text-right py-1 px-1 font-semibold">
+                              Part %
+                            </th>
                             <th className="text-right py-1 px-1 font-semibold">CRD</th>
                             <th className="text-right py-1 px-1 font-semibold">
                               Charges
@@ -1485,25 +1824,49 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           {immobilier.map((row, idx) => (
                             <tr key={idx} className="border-b border-gray-200">
                               <td className="py-1 px-1 text-gray-900">
+                                {row.type_bien || '-'}
+                              </td>
+                              <td className="py-1 px-1 text-gray-900">
                                 {row.designation || '-'}
                               </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {row.date_acq || '-'}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatImmoValue(row.valeur_acq, row.detention)}
+                                {formatImmoValue(
+                                  row.valeur_acq,
+                                  row.detention,
+                                  row.proportion
+                                )}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatImmoValue(row.valeur_actuelle, row.detention)}
+                                {formatImmoValue(
+                                  row.valeur_actuelle,
+                                  row.detention,
+                                  row.proportion
+                                )}
                               </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {row.detention || '-'}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatImmoValue(row.crd, row.detention)}
+                                {typeof row.proportion === 'number'
+                                  ? `${row.proportion}%`
+                                  : '-'}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
-                                {formatImmoValue(row.charges, row.detention)}
+                                {formatImmoValue(
+                                  row.crd,
+                                  row.detention,
+                                  row.proportion
+                                )}
+                              </td>
+                              <td className="py-1 px-1 text-right text-gray-900">
+                                {formatImmoValue(
+                                  row.charges,
+                                  row.detention,
+                                  row.proportion
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -1531,6 +1894,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           produits_financiers: [
             ...produits,
             {
+              type_produit: '',
               designation: '',
               detenteur: '',
               valeur: 0,
@@ -1592,6 +1956,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <thead>
                           <tr className="border-b border-gray-300">
                             <th className="text-left py-1 px-1 font-semibold">
+                              Type
+                            </th>
+                            <th className="text-left py-1 px-1 font-semibold">
                               Désignation
                             </th>
                             <th className="text-left py-1 px-1 font-semibold">
@@ -1615,6 +1982,34 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <tbody>
                           {produits.map((row, idx) => (
                             <tr key={idx} className="border-b border-gray-200">
+                              <td className="py-1 px-1">
+                                <select
+                                  value={row.type_produit || ''}
+                                  onChange={e =>
+                                    updateProduitRow(
+                                      idx,
+                                      'type_produit',
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                                >
+                                  <option value="">—</option>
+                                  {row.type_produit &&
+                                    !TYPE_PRODUIT_FINANCIER_OPTIONS.includes(
+                                      row.type_produit
+                                    ) && (
+                                      <option value={row.type_produit}>
+                                        {row.type_produit}
+                                      </option>
+                                    )}
+                                  {TYPE_PRODUIT_FINANCIER_OPTIONS.map(opt => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
                               <td className="py-1 px-1">
                                 <input
                                   type="text"
@@ -1721,6 +2116,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <thead>
                           <tr className="border-b border-gray-300">
                             <th className="text-left py-1 px-1 font-semibold">
+                              Type
+                            </th>
+                            <th className="text-left py-1 px-1 font-semibold">
                               Désignation
                             </th>
                             <th className="text-left py-1 px-1 font-semibold">
@@ -1743,6 +2141,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <tbody>
                           {produits.map((row, idx) => (
                             <tr key={idx} className="border-b border-gray-200">
+                              <td className="py-1 px-1 text-gray-900">
+                                {row.type_produit || '-'}
+                              </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {row.designation || '-'}
                               </td>

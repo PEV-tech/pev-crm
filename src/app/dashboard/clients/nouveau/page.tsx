@@ -11,6 +11,7 @@ import { Consultant } from '@/types/database'
 import { useUser } from '@/hooks/use-user'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Heart, X, Search, Plus, User, Building2 } from 'lucide-react'
+import { COUNTRY_NAMES } from '@/lib/countries'
 
 // Fiche de creation client autonome (sans dossier).
 // Supporte deux types : Personne Physique (PP) et Personne Morale (PM).
@@ -143,14 +144,20 @@ function NewClientContent() {
         ])
         if (consultantsRes.data) setConsultants(consultantsRes.data)
         if (paysRes.data) {
-          const distinct = Array.from(
-            new Set(
-              paysRes.data
-                .map((r: any) => (r.pays || '').trim())
-                .filter((p: string) => p.length > 0)
-            )
-          ).sort((a, b) => a.localeCompare(b, 'fr'))
-          setPaysList(distinct)
+          // On fusionne la liste ISO (référentiel officiel) avec les valeurs
+          // déjà présentes en base (pour ne jamais perdre une saisie legacy
+          // qui ne serait pas mappable). L'ordre préserve les pays "pinned"
+          // (France, Belgique, Luxembourg, Suisse, Monaco, Andorre) en tête.
+          const fromDb = paysRes.data
+            .map((r: any) => (r.pays || '').trim())
+            .filter((p: string) => p.length > 0)
+          const iso = COUNTRY_NAMES
+          const merged = Array.from(new Set([...iso, ...fromDb]))
+          // Ordre final : les 6 pays pinned (ISO[0..5]) en premier, le reste alpha.
+          const pinned = iso.slice(0, 6)
+          const rest = Array.from(new Set(merged.filter(n => !pinned.includes(n))))
+            .sort((a, b) => a.localeCompare(b, 'fr'))
+          setPaysList([...pinned, ...rest])
         }
       } catch {
         // silencieux
@@ -562,6 +569,16 @@ function NewClientContent() {
                 placeholder={isPM ? '5 rue du Siège, Bat A' : '15 rue de la Paix'}
               />
             </div>
+            {/* Ordre FR : Ville AVANT Pays. */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ville</label>
+              <Input
+                name="ville"
+                value={formData.ville}
+                onChange={handleInputChange}
+                placeholder="Paris"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pays</label>
               {addingPays ? (
@@ -606,15 +623,6 @@ function NewClientContent() {
                   <option value="__add_new__">+ Ajouter un nouveau pays…</option>
                 </Select>
               )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ville</label>
-              <Input
-                name="ville"
-                value={formData.ville}
-                onChange={handleInputChange}
-                placeholder="Paris"
-              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
