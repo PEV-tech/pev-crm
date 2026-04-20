@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-20 · **Commit de référence** : `dba3419`
+**Mis à jour** : 2026-04-20 · **Commit de référence** : `6ab7c4f`
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
@@ -15,14 +15,14 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 | Aide | ✅ | FAQ statique, accès par rôle. Pas de DB. |
 | Analyse | ✅ | Reads `v_dossiers_complets`, charts Recharts. OK. |
 | Challenges | ✅ | Leaderboard via RPC `get_classement()`. Read-only. |
-| Dossiers (list + nouveau + [id]) | ✅ | CRUD complet. 43 useState dans le detail-wrapper : complexe mais marche. |
+| Dossiers (list + [id]) | ✅ | CRUD complet. 43 useState dans le detail-wrapper : complexe mais marche. **Le bouton "Nouveau dossier" en tête de liste a été retiré (`fbeb5be`)** — création d'un dossier passe obligatoirement par la fiche client. La route `/dashboard/dossiers/nouveau` reste accessible mais n'est plus exposée. |
 | Encaissements | ✅ | Table + filtres + bulk mark paid + export CSV. |
 | Facturation | ✅ | Dashboard factures avec bulk "émettre". |
 | Ma clientèle | ✅ | Portfolio consultant avec commissions. Read-only. |
 | Rémunérations | ✅ | Breakdown par mois/pool. Read-only. |
 | Réglementaire | ✅ | **Read-only by design** — dashboard de monitoring conformité. Les edits se font sur client/[id] et dossier/[id]. |
 | Clients/[id] | ✅ | Error handling propre depuis commit `7506da8` (V1). Les échecs de save/delete remontent en alert utilisateur. |
-| Clients/nouveau | ✅ | **Nouveau flux dédié** (CDC) : fiche client autonome sans dossier. Seul le nom est requis. Dropdown Pays avec bouton "+", co-titulaire via `client_relations`, consultant + date d'entrée en relation capturés au niveau client. |
+| Clients/nouveau | ✅ | **Flux dédié** (CDC) : fiche client autonome sans dossier. **Deux types pris en charge depuis `6ab7c4f`** : Personne physique (nom+prénom+situation+co-titulaire) et Personne morale (raison sociale, forme juridique SCI/SARL/SAS/SCPI/..., SIREN/SIRET, capital, date de création, représentant légal PP). Toggle PP/PM en tête. Dropdown Pays avec bouton "+", consultant + date d'entrée en relation capturés au niveau client. |
 | Audit | ✅ | Bandeau d'erreur in-page depuis `45dfdaf`. Plus de `console.error` silencieux. |
 | Paramètres | ⚠️ | **1817 lignes monolithiques**. CRUD fonctionne, mais dette technique max — à découper en sous-pages (Consultants, Produits, Grilles, Challenges). Post-V1. |
 | Relances | ✅ | Bouton "Marquer fait" sur les manuelles (`1d4d6c4`) + bouton "Ouvrir" sur les dérivées qui navigue vers le dossier concerné (`95ae905`). |
@@ -68,7 +68,7 @@ Note : `search-modal.tsx` était sur la liste initiale mais est en fait importé
 
 ## État schéma DB
 
-### Tables dans `src/types/database.ts` — ✅ régénéré 2026-04-20 (commit `cea09a9`)
+### Tables dans `src/types/database.ts` — ✅ régénéré 2026-04-20 (commit `6ab7c4f`, avant : `cea09a9`)
 Types complets et à jour avec Supabase. Tables incluses : consultants, clients, produits, compagnies, taux_produit_compagnie, grilles_frais, dossiers, commissions, factures, challenges, audit_log, audit_logs, client_commentaires, client_pj, client_relations, rendez_vous, document_templates, dossier_documents, google_tokens, relances, faq, encaissements, encaissements_rem, grilles_commissionnement, visibility_settings, facturation_consultant, manager_cagnotte, **apporteurs** + vues (`v_dossiers_complets`, `v_collecte_par_consultant`, `v_pipeline_par_consultant`, `v_dossiers_remunerations`, `v_encaissements`, `v_clients_secure`) + RPC (get_classement, calculate_commission, get_frais_taux, is_manager, is_back_office, mask_account/email/phone, unaccent, get_current_consultant_id, get_current_role, upsert_google_token).
 
 ### Dette résiduelle (P3)
@@ -96,6 +96,7 @@ Scripts dans `scripts/` (ordre chronologique) :
 14. `p4-encaissements-auto.sql` (2026-04-20) — `encaissements_auto`
 15. `fix-audit-trigger-table-name.sql` (2026-04-20) — **fix prod-critique** : triggers d'audit pointaient vers une table inexistante `audit_log` (singulier). Recrée `fn_audit_log()` et `audit_trigger_func()` pour insérer dans `audit_logs` (pluriel). **Appliqué en prod 2026-04-20.**
 16. `add-client-standalone-fields.sql` (2026-04-20) — ajoute `clients.consultant_id` (FK → consultants, ON DELETE SET NULL) + `clients.date_entree_relation` (date) + index `idx_clients_consultant_id`. Idempotent (ADD COLUMN IF NOT EXISTS). **Appliqué en prod 2026-04-20**, smoke test `information_schema.columns` passant. Débloque la création de clients standalone (sans dossier) conformément au CDC.
+17. `add-personne-morale-fields.sql` (2026-04-20) — ajoute 8 colonnes à `clients` pour support des personnes morales : `type_personne` ('physique'\|'morale', défaut 'physique'), `raison_sociale`, `forme_juridique`, `siren`, `siret`, `representant_legal_id` (FK → clients(id) ON DELETE SET NULL), `capital_social` (NUMERIC(15,2)), `date_creation` + indexes sur type_personne et representant_legal_id. Idempotent. **Appliqué en prod 2026-04-20** (types régénérés confirment la présence des colonnes). Retro-compat totale (default 'physique').
 
 **Dette** : pas d'outil de migration (Supabase CLI migrations, Flyway, etc.). Chaque script est appliqué à la main via le SQL editor Supabase. Aucun registre d'exécution. À terme : utiliser Supabase migrations CLI.
 
