@@ -181,6 +181,54 @@ export default function ClientDetailPage() {
     fetchData()
   }, [clientId, supabase])
 
+  // Polling ciblé sur les champs de signature KYC.
+  // Déclenché uniquement quand un lien public est en vol (token émis, envoyé
+  // ou ouvert par le client, mais pas encore signé). 30 s de cadence, en
+  // pause si l'onglet n'est pas visible pour ne pas gaspiller de requêtes.
+  // Dès que la signature est détectée, l'effet se retire (guards + cleanup).
+  React.useEffect(() => {
+    if (!client) return
+    const c = client as unknown as Record<string, unknown>
+    const token = c.kyc_token as string | null
+    const signedAt = c.kyc_signed_at as string | null
+    const sentOrOpened = (c.kyc_sent_at as string | null) || (c.kyc_opened_at as string | null)
+    if (!token || signedAt || !sentOrOpened) return
+
+    let cancelled = false
+    const tick = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      const { data } = await supabase
+        .from('clients')
+        .select(
+          'kyc_token, kyc_sent_at, kyc_opened_at, kyc_signed_at, kyc_signer_name, kyc_signer_ip, kyc_incomplete_signed, kyc_completion_rate, kyc_missing_fields, kyc_consent_incomplete, kyc_consent_accuracy, kyc_date_signature'
+        )
+        .eq('id', clientId)
+        .single()
+      if (cancelled || !data) return
+      const prevSigned = (c.kyc_signed_at as string | null) ?? null
+      const prevOpened = (c.kyc_opened_at as string | null) ?? null
+      const newSigned = (data as any).kyc_signed_at ?? null
+      const newOpened = (data as any).kyc_opened_at ?? null
+      // N'appliquer que si un champ KYC a changé (évite re-renders inutiles).
+      if (prevSigned !== newSigned || prevOpened !== newOpened) {
+        setClient((prev) => (prev ? ({ ...prev, ...(data as object) } as ClientInfo) : prev))
+      }
+    }
+
+    const intervalId = setInterval(tick, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
+  }, [
+    clientId,
+    supabase,
+    (client as any)?.kyc_token,
+    (client as any)?.kyc_sent_at,
+    (client as any)?.kyc_opened_at,
+    (client as any)?.kyc_signed_at,
+  ])
+
   const handleDeleteClient = async () => {
     if (!client?.id) return
     setDeletingClient(true)

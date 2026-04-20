@@ -7,7 +7,7 @@ import { useRole, useConsultantInfo } from '@/hooks/use-user'
 import { useLoadingTimeout } from '@/hooks/use-loading-timeout'
 import { DashboardClient } from './dashboard-client'
 import { SkeletonDashboard } from '@/components/shared/skeleton'
-import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy, Target, AlertTriangle } from 'lucide-react'
+import { TrendingUp, DollarSign, Clock, CheckCircle, Trophy, Target, AlertTriangle, PenLine } from 'lucide-react'
 import { VDossiersComplets } from '@/types/database'
 
 import { formatCurrencyOrZero } from '@/lib/formatting'
@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [projection, setProjection] = useState<number | null>(null)
   const [relancesCount, setRelancesCount] = useState(0)
   const [totalDossiersCount, setTotalDossiersCount] = useState(0)
+  const [kycRecent, setKycRecent] = useState<{ total: number; incomplete: number; latestName: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
   const timedOut = useLoadingTimeout(loading, 15000)
 
@@ -35,8 +36,13 @@ export default function DashboardPage() {
       const supabase = createClient()
       const fullName = consultantInfo?.name || ''
 
-      // Single fetch for dossiers 2026 only + challenges + factures in parallel
-      const [dossiersRes, challengesRes, facturesRes] = await Promise.all([
+      // Signatures KYC des 7 derniers jours — alerte consultant sur l'activité récente.
+      // Index partiel côté DB sur kyc_incomplete_signed → requête rapide.
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+      // Single fetch for dossiers 2026 only + challenges + factures + KYC signés récemment in parallel
+      const [dossiersRes, challengesRes, facturesRes, kycRes] = await Promise.all([
         supabase
           .from('v_dossiers_complets')
           .select('id, statut, montant, commission_brute, date_operation, consultant_prenom, consultant_nom, client_prenom, client_nom, produit_nom, compagnie_nom, statut_kyc, facturee, payee')
@@ -50,6 +56,16 @@ export default function DashboardPage() {
           .select('id, dossier_id, facturee, montant')
           .eq('facturee', false)
           .limit(20),
+        // Cast en `any` : les colonnes kyc_signature_audit ont été ajoutées en
+        // prod (migration `add-kyc-signature-audit.sql`) mais les types
+        // TypeScript n'ont pas été régénérés — cf. STATUS.md #18. La requête
+        // est fonctionnelle côté base, on contourne seulement le compilateur.
+        (supabase
+          .from('clients') as any)
+          .select('id, nom, prenom, raison_sociale, type_personne, kyc_signed_at, kyc_incomplete_signed, kyc_completion_rate, consultant_id')
+          .gte('kyc_signed_at', sevenDaysAgo.toISOString())
+          .order('kyc_signed_at', { ascending: false })
+          .limit(50),
       ])
 
       const dossiers = dossiersRes.data || []
@@ -128,6 +144,30 @@ export default function DashboardPage() {
         .sort((a: any, b: any) => new Date(b.date_operation || '').getTime() - new Date(a.date_operation || '').getTime())
         .slice(0, 5)
       setRecentDossiers(sorted as any)
+
+      // Signatures KYC récentes — filtrage côté consultant (RLS est souple sur clients,
+      // on refiltre côté client pour ne montrer que ses propres signatures si pas manager).
+      const kycRaw = (kycRes.data || []) as Array<{
+        id: string
+        nom: string | null
+        prenom: string | null
+        raison_sociale: string | null
+        type_personne: string | null
+        kyc_signed_at: string | null
+        kyc_incomplete_signed: boolean | null
+        consultant_id: string | null
+      }>
+      const myId = consultantInfo?.id
+      const mineKyc = (!isManager && myId) ? kycRaw.filter((c) => c.consultant_id === myId) : kycRaw
+      if (mineKyc.length > 0) {
+        const incomplete = mineKyc.filter((c) => c.kyc_incomplete_signed === true).length
+        const first = mineKyc[0]
+        const latestName =
+          first.type_personne === 'morale'
+            ? first.raison_sociale || null
+            : `${first.prenom || ''} ${first.nom || ''}`.trim() || null
+        setKycRecent({ total: mineKyc.length, incomplete, latestName })
+      }
 
       // Pending invoices: use pre-filtered factures (already fetched with facturee=false)
       const factures = facturesRes.data || []
@@ -256,7 +296,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Objectives + Projection + Relances row */}
-      {(objectif || projection || relancesCount > 0) && (
+      {(objectif || projection || relancesCount > 0 || kycRecent) && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Objectif gauge */}
           {objectif && objectif.objectif > 0 && (
@@ -326,6 +366,30 @@ export default function DashboardPage() {
               <p className="text-xs text-gray-500 mt-1">Actions requises (réglementaire, paiements, inactivité)</p>
               <a href="/dashboard/relances" className="text-xs text-indigo-600 hover:underline mt-2 inline-block">
                 Voir les relances →
+              </a>
+            </Card>
+          )}
+
+          {/* Signatures KYC récentes (7j) — rouge si au moins une incomplète */}
+          {kycRecent && kycRecent.total > 0 && (
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`${kycRecent.incomplete > 0 ? 'bg-red-100' : 'bg-green-100'} p-2 rounded-lg`}>
+                  <PenLine className={`${kycRecent.incomplete > 0 ? 'text-red-600' : 'text-green-600'}`} size={20} />
+                </div>
+                <p className="text-sm font-medium text-gray-600">Signatures KYC (7 j.)</p>
+              </div>
+              <p className={`text-2xl font-bold ${kycRecent.incomplete > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {kycRecent.total}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {kycRecent.incomplete > 0
+                  ? `${kycRecent.incomplete} signature${kycRecent.incomplete > 1 ? 's' : ''} incomplète${kycRecent.incomplete > 1 ? 's' : ''} — à compléter`
+                  : 'Toutes complètes'}
+                {kycRecent.latestName ? ` · Dernière : ${kycRecent.latestName}` : ''}
+              </p>
+              <a href="/dashboard/reglementaire" className="text-xs text-indigo-600 hover:underline mt-2 inline-block">
+                Voir le réglementaire →
               </a>
             </Card>
           )}

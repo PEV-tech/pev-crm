@@ -285,7 +285,6 @@ function SignDialog({
   onClose: () => void
   onSigned: () => void
 }) {
-  const supabase = useMemo(() => createClient(), [])
   const [signerName, setSignerName] = useState('')
   const [consentAccuracy, setConsentAccuracy] = useState(false)
   const [consentIncomplete, setConsentIncomplete] = useState(false)
@@ -303,21 +302,34 @@ function SignDialog({
     if (!canSubmit) return
     setSubmitting(true)
     setErr(null)
-    const { error } = await supabase.rpc('kyc_sign_by_token' as never, {
-      p_token: token,
-      p_signer_name: signerName.trim(),
-      p_completion_rate: Math.round(completionRate),
-      p_missing_fields: missingFields as never,
-      p_consent_incomplete: consentIncomplete,
-      p_consent_accuracy: consentAccuracy,
-      p_signer_ip: null,
-    } as never)
-    if (error) {
-      setErr(error.message)
+    // On passe par /api/kyc/sign-public pour que le serveur (Vercel) capte
+    // l'IP publique du signataire via x-forwarded-for et la passe à la RPC.
+    // Le navigateur ne la connaît pas, donc tout appel direct à la RPC
+    // kyc_sign_by_token laisserait `kyc_signer_ip` à null.
+    try {
+      const res = await fetch('/api/kyc/sign-public', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          signer_name: signerName.trim(),
+          completion_rate: Math.round(completionRate),
+          missing_fields: missingFields,
+          consent_incomplete: consentIncomplete,
+          consent_accuracy: consentAccuracy,
+        }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        setErr(payload?.error || 'Erreur lors de la signature')
+        setSubmitting(false)
+        return
+      }
+      onSigned()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erreur réseau')
       setSubmitting(false)
-      return
     }
-    onSigned()
   }
 
   return (
