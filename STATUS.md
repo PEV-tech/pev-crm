@@ -20,11 +20,11 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 | Facturation | ✅ | Dashboard factures avec bulk "émettre". |
 | Ma clientèle | ✅ | Portfolio consultant avec commissions. Read-only. |
 | Rémunérations | ✅ | Breakdown par mois/pool. Read-only. |
+| Réglementaire | ✅ | **Read-only by design** — dashboard de monitoring conformité. Les edits se font sur client/[id] et dossier/[id]. |
 | Clients/[id] | ⚠️ | Fonctionne mais error handling fragile : `catch { setNotFound(true) }` (L172), `catch (e) { console.error }` (L196), error swallowed au save (L212). |
 | Audit | ⚠️ | `console.error` résiduels (L86, L94). Fonctionne mais logs à nettoyer. |
 | Paramètres | ⚠️ | **1817 lignes monolithiques**. CRUD fonctionne, mais dette technique max — à découper en sous-pages (Consultants, Produits, Grilles, Challenges). |
-| Réglementaire | 🚫 | Form visible mais **pas de save handler identifié** dans les 80 premières lignes. Données ne persistent probablement pas. À vérifier. |
-| Relances | 🚫 | Wrapper load initial OK mais **pas de POST/PATCH** pour persister les changements de statut. À vérifier. |
+| Relances | ⚠️ | **Read-only by design avec UX gap** — page principale agrège, les mutations (INSERT/UPDATE) fonctionnent via le composant `ClientRelances` embarqué sur client/[id]. Manque un bouton "marquer fait" inline sur la liste agrégée. |
 
 ---
 
@@ -34,10 +34,6 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 - `src/app/dashboard/clients/[id]/page.tsx` L172, L196, L212 — catchs vides ou alertes sans contexte
 - `src/app/dashboard/remunerations/remunerations-client.tsx` L81 — `} catch { return [] }` silent fallback
 - `src/app/dashboard/dossiers/[id]/dossier-detail-wrapper.tsx` L654 — `console.error('Error creating apporteur')`
-
-### Chemins d'écriture manquants
-- **Réglementaire** : formulaire sans handler de save
-- **Relances** : pas de persistance des updates
 
 ### Debugging résiduel
 - `src/app/dashboard/audit/page.tsx` L86, L94 — `console.error`
@@ -66,13 +62,21 @@ Vérifier avant de supprimer avec `grep -r "from.*search-modal"` etc.
 ### Tables dans `src/types/database.ts` (30)
 consultants, clients, produits, compagnies, taux_produit_compagnie, grilles_frais, dossiers, commissions, factures, challenges, audit_log, client_commentaires, client_pj, rendez_vous, audit_logs, document_templates, dossier_documents, client_relations, google_tokens, relances, faq, encaissements_rem, grilles_commissionnement, visibility_settings, facturation_consultant, manager_cagnotte + 4 vues (`v_dossiers_complets`, `v_collecte_par_consultant`, `v_pipeline_par_consultant`, `v_dossiers_remunerations`).
 
-### Migrations probablement non synchronisées avec les types
-- `scripts/p4-encaissements-auto.sql` (2026-04-20 19:26) — crée `encaissements_auto` **absente des types**
-- `scripts/add-co-titulaire.sql` (2026-04-20 19:26) — ajoute `co_titulaire_id` sur dossiers
-- `scripts/add-kyc-fields.sql` (2026-04-20 19:26) — ajoute colonnes KYC sur clients (titre, nom_jeune_fille, adresse, patrimoine_immobilier JSON, etc.)
-- Table `apporteurs` référencée dans le code mais absente des types
+### Migrations datées 2026-04-20 — état de synchronisation
 
-**Action** : après avoir appliqué ces migrations sur Supabase, régénérer les types :
+| Script | Ajoute / Modifie | Reflété dans types ? |
+|---|---|---|
+| `add-co-titulaire.sql` | `dossiers.co_titulaire_id` | ✅ présent (4 occ) |
+| `add-kyc-fields.sql` | `clients.titre`, `nom_jeune_fille`, `adresse`, `patrimoine_immobilier` (JSON), etc. | ✅ présent |
+| `p4-encaissements-auto.sql` | **Nouvelle table `encaissements_auto`** | ❌ **absente des types** |
+
+### Table référencée sans SQL identifié
+- `apporteurs` — utilisée dans `dossier-detail-wrapper.tsx` (3 erreurs TS) mais aucun script `create table apporteurs` dans `scripts/`. Soit créée manuellement dans l'UI Supabase, soit code mort. **À vérifier.**
+
+**Action P0** :
+1. Vérifier si `p4-encaissements-auto.sql` a été appliqué sur Supabase. Si oui → régénérer les types. Si non → l'appliquer puis régénérer.
+2. Vérifier l'existence de la table `apporteurs` sur Supabase. Si oui → régénérer. Si non → décider : créer proprement ou retirer le code mort.
+
 ```bash
 npx supabase gen types typescript --project-id <ID> > src/types/database.ts
 ```
@@ -104,22 +108,24 @@ Scripts dans `scripts/` (ordre chronologique) :
 
 ## Backlog priorisé (propositions)
 
-### P0 — Bugs qui impactent les utilisateurs
-1. **Vérifier Réglementaire** : les données saisies sont-elles persistées ? Si non, implémenter le save.
-2. **Vérifier Relances** : idem.
-3. **Synchroniser les types avec la DB** : appliquer les 3 migrations du 2026-04-20 sur Supabase, régénérer `database.ts`, supprimer les 3 erreurs TS pré-existantes.
+### P0 — Synchronisation schéma ↔ types
+1. **Vérifier l'état de `p4-encaissements-auto.sql` sur Supabase** et régénérer `database.ts` si appliqué.
+2. **Résoudre le cas `apporteurs`** : table existante (régénérer types) ou code mort (supprimer les 3 références dans dossier-detail-wrapper.tsx).
 
-### P1 — Hygiène
-4. **Clients/[id]** : remplacer les catchs silencieux par des toasts/messages utilisateur.
-5. **Supprimer les 5 composants orphelins** listés plus haut.
-6. **Nettoyer les `console.error` résiduels** (audit, dossier-detail-wrapper, autres).
+### P1 — Hygiène code
+3. **Clients/[id]** : remplacer les catchs silencieux (L172, L196, L212) par des toasts/messages utilisateur.
+4. **Nettoyer les `console.error` résiduels** (audit L86/L94, dossier-detail-wrapper L654, remunerations L81).
+5. **Supprimer les 5 composants orphelins** listés plus haut (après grep de vérification).
 
-### P2 — Dette technique
+### P2 — UX gaps
+6. **Relances** : ajouter un bouton "marquer fait" inline sur la page agrégée pour éviter l'aller-retour client/[id].
+
+### P3 — Dette technique
 7. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages.
 8. **Setup un outil de migration** (Supabase CLI) pour remplacer les scripts manuels.
 9. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log` et catchs vides.
 
-### P3 — Features identifiées
+### P4 — Features identifiées
 Cf. `/sessions/charming-jolly-ramanujan/mnt/.auto-memory/project_crm_roadmap.md` pour le cahier des charges complet.
 
 ---
@@ -132,3 +138,4 @@ Cf. `/sessions/charming-jolly-ramanujan/mnt/.auto-memory/project_crm_roadmap.md`
 4. **Mettre à jour ce fichier** après chaque feature finie ou bug identifié. Traité = retiré.
 5. **Pas de migration SQL sans régénération des types** dans le même commit.
 6. **Pas de push direct sur `main` si divergence** — toujours `git pull --rebase` d'abord, ou faire une PR.
+7. **Avant de flagger une feature comme "cassée"**, vérifier qu'elle n'est pas simplement read-only by design (cas Réglementaire/Relances : mutations sur pages parentes).
