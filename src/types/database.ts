@@ -371,10 +371,12 @@ export type Database = {
         Row: {
           adresse: string | null
           autres_revenus: number | null
+          capital_social: number | null
           commentaires: string | null
           conformite: string | null
           consultant_id: string | null
           created_at: string | null
+          date_creation: string | null
           date_debut_emploi: string | null
           date_entree_relation: string | null
           date_naissance: string | null
@@ -384,6 +386,7 @@ export type Database = {
           employeur: string | null
           emprunts: Json | null
           enfants_details: string | null
+          forme_juridique: string | null
           google_drive_url: string | null
           id: string
           impot_revenu_n: number | null
@@ -409,27 +412,34 @@ export type Database = {
           produits_financiers: Json | null
           profession: string | null
           proprietaire_locataire: string | null
+          raison_sociale: string | null
           regime_matrimonial: string | null
+          representant_legal_id: string | null
           residence_fiscale: string | null
           revenus_fonciers: number | null
           revenus_pro_net: number | null
           rm: boolean | null
+          siren: string | null
+          siret: string | null
           situation_matrimoniale: string | null
           statut_kyc: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel: string | null
           telephone: string | null
           titre: string | null
           total_revenus_annuel: number | null
+          type_personne: string
           updated_at: string | null
           ville: string | null
         }
         Insert: {
           adresse?: string | null
           autres_revenus?: number | null
+          capital_social?: number | null
           commentaires?: string | null
           conformite?: string | null
           consultant_id?: string | null
           created_at?: string | null
+          date_creation?: string | null
           date_debut_emploi?: string | null
           date_entree_relation?: string | null
           date_naissance?: string | null
@@ -439,6 +449,7 @@ export type Database = {
           employeur?: string | null
           emprunts?: Json | null
           enfants_details?: string | null
+          forme_juridique?: string | null
           google_drive_url?: string | null
           id?: string
           impot_revenu_n?: number | null
@@ -464,27 +475,34 @@ export type Database = {
           produits_financiers?: Json | null
           profession?: string | null
           proprietaire_locataire?: string | null
+          raison_sociale?: string | null
           regime_matrimonial?: string | null
+          representant_legal_id?: string | null
           residence_fiscale?: string | null
           revenus_fonciers?: number | null
           revenus_pro_net?: number | null
           rm?: boolean | null
+          siren?: string | null
+          siret?: string | null
           situation_matrimoniale?: string | null
           statut_kyc?: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel?: string | null
           telephone?: string | null
           titre?: string | null
           total_revenus_annuel?: number | null
+          type_personne?: string
           updated_at?: string | null
           ville?: string | null
         }
         Update: {
           adresse?: string | null
           autres_revenus?: number | null
+          capital_social?: number | null
           commentaires?: string | null
           conformite?: string | null
           consultant_id?: string | null
           created_at?: string | null
+          date_creation?: string | null
           date_debut_emploi?: string | null
           date_entree_relation?: string | null
           date_naissance?: string | null
@@ -494,6 +512,7 @@ export type Database = {
           employeur?: string | null
           emprunts?: Json | null
           enfants_details?: string | null
+          forme_juridique?: string | null
           google_drive_url?: string | null
           id?: string
           impot_revenu_n?: number | null
@@ -519,17 +538,22 @@ export type Database = {
           produits_financiers?: Json | null
           profession?: string | null
           proprietaire_locataire?: string | null
+          raison_sociale?: string | null
           regime_matrimonial?: string | null
+          representant_legal_id?: string | null
           residence_fiscale?: string | null
           revenus_fonciers?: number | null
           revenus_pro_net?: number | null
           rm?: boolean | null
+          siren?: string | null
+          siret?: string | null
           situation_matrimoniale?: string | null
           statut_kyc?: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel?: string | null
           telephone?: string | null
           titre?: string | null
           total_revenus_annuel?: number | null
+          type_personne?: string
           updated_at?: string | null
           ville?: string | null
         }
