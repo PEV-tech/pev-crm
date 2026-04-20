@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { DashboardLayoutClient } from './layout-client'
@@ -72,12 +72,12 @@ export default function DashboardLayout({
     router.push('/login')
   }
 
-  const contextValue = {
-    user,
-    consultant,
-    isLoading: false,
-    error: null,
-  }
+  // Stabiliser la référence pour éviter de re-render tous les useUser()
+  // consumers à chaque render du layout (hygiène perf).
+  const contextValue = useMemo(
+    () => ({ user, consultant, isLoading: false, error: null }),
+    [user, consultant]
+  )
 
   return (
     <UserContext.Provider value={contextValue}>

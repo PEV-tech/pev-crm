@@ -11,7 +11,8 @@ const MANAGER_ROUTES = [
 
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const publicRoutes = ['/login', '/auth']
+  // /kyc/[token] : accessible en anonyme (lien privé envoyé au client).
+  const publicRoutes = ['/login', '/auth', '/kyc']
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   let response = NextResponse.next({

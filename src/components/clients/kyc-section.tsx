@@ -15,6 +15,11 @@ import {
   PenLine,
   AlertTriangle,
   CheckCircle2,
+  Copy,
+  Mail,
+  Loader2,
+  Clock,
+  Eye,
 } from 'lucide-react'
 import { computeKycCompletion } from '@/lib/kyc-completion'
 import { KYCSignatureDialog } from './kyc-signature-dialog'
@@ -52,6 +57,8 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     const [editData, setEditData] = React.useState<EditState>({})
     const [saving, setSaving] = React.useState(false)
     const [signatureOpen, setSignatureOpen] = React.useState(false)
+    const [linkBusy, setLinkBusy] = React.useState<null | 'copy' | 'email'>(null)
+    const [linkFeedback, setLinkFeedback] = React.useState<string | null>(null)
 
     const supabase = React.useMemo(() => createClient(), [])
 
@@ -64,6 +71,20 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     const kycIncompleteSigned: boolean = client?.kyc_incomplete_signed === true
     const kycSignerName: string | null = client?.kyc_signer_name ?? null
     const kycCompletionAtSign: number | null = client?.kyc_completion_rate ?? null
+
+    // Statut dérivé du workflow lien public : Brouillon → Envoyé → En cours → Signé.
+    // "Signé incomplet" est un sous-état de Signé traité visuellement via
+    // kycIncompleteSigned au-dessus.
+    const kycToken: string | null = client?.kyc_token ?? null
+    const kycSentAt: string | null = client?.kyc_sent_at ?? null
+    const kycOpenedAt: string | null = client?.kyc_opened_at ?? null
+    const kycStatus: 'brouillon' | 'envoye' | 'en_cours' | 'signe' = kycSignedAt
+      ? 'signe'
+      : kycOpenedAt
+      ? 'en_cours'
+      : kycSentAt
+      ? 'envoye'
+      : 'brouillon'
 
     // Initialize edit state from client props on mount or when client changes
     React.useEffect(() => {
@@ -2191,6 +2212,86 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       )
     }
 
+    // Workflow KYC par lien public : génère/réutilise un token, puis soit
+    // copie le lien dans le presse-papier, soit ouvre Gmail pré-rempli.
+    // Dans les deux cas on appelle mark-sent pour passer en statut "Envoyé"
+    // (RPC idempotente côté Postgres via COALESCE).
+    const fetchKycLink = async (): Promise<
+      | { url: string; gmail_compose: string; recipient_email: string | null }
+      | null
+    > => {
+      if (!client?.id) return null
+      const res = await fetch('/api/kyc/generate-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: client.id }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.url) {
+        throw new Error(json?.error || `Erreur ${res.status}`)
+      }
+      return {
+        url: json.url,
+        gmail_compose: json.gmail_compose,
+        recipient_email: json.recipient_email ?? null,
+      }
+    }
+
+    const markKycSent = async () => {
+      if (!client?.id) return
+      await fetch('/api/kyc/mark-sent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: client.id }),
+      }).catch(() => null)
+    }
+
+    const handleCopyKycLink = async () => {
+      setLinkFeedback(null)
+      setLinkBusy('copy')
+      try {
+        const info = await fetchKycLink()
+        if (!info) return
+        try {
+          await navigator.clipboard.writeText(info.url)
+          setLinkFeedback('Lien copié dans le presse-papier')
+        } catch {
+          window.prompt('Copiez le lien KYC ci-dessous :', info.url)
+          setLinkFeedback('Lien affiché (copie auto indisponible)')
+        }
+        await markKycSent()
+        onUpdate()
+      } catch (e: any) {
+        setLinkFeedback(`Erreur : ${e?.message || 'inconnue'}`)
+      } finally {
+        setLinkBusy(null)
+        setTimeout(() => setLinkFeedback(null), 4000)
+      }
+    }
+
+    const handleEmailKyc = async () => {
+      setLinkFeedback(null)
+      setLinkBusy('email')
+      try {
+        const info = await fetchKycLink()
+        if (!info) return
+        // Ouvre Gmail compose pré-rempli dans un nouvel onglet.
+        window.open(info.gmail_compose, '_blank', 'noopener,noreferrer')
+        await markKycSent()
+        setLinkFeedback(
+          info.recipient_email
+            ? `Gmail ouvert → ${info.recipient_email}`
+            : 'Gmail ouvert (pas d\'email client enregistré)'
+        )
+        onUpdate()
+      } catch (e: any) {
+        setLinkFeedback(`Erreur : ${e?.message || 'inconnue'}`)
+      } finally {
+        setLinkBusy(null)
+        setTimeout(() => setLinkFeedback(null), 4000)
+      }
+    }
+
     return (
       <Card className="mt-4">
         <CardHeader>
@@ -2219,18 +2320,105 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             </CardTitle>
             <div className="flex items-center gap-2">
               {!isEditMode && (
-                <button
-                  onClick={() => setSignatureOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-navy-700 bg-navy-50 border border-navy-200 rounded hover:bg-navy-100 transition-colors"
-                  title={
-                    kycSignedAt
-                      ? 'Re-signer le KYC (remplacera la précédente signature)'
-                      : 'Faire signer le KYC par le client'
-                  }
-                >
-                  <PenLine size={14} />
-                  {kycSignedAt ? 'Re-signer' : 'Faire signer'}
-                </button>
+                <>
+                  {/* Badge de statut workflow (Brouillon / Envoyé / En cours / Signé). */}
+                  {(() => {
+                    const statusStyles: Record<
+                      typeof kycStatus,
+                      { bg: string; label: string; Icon: any; title: string }
+                    > = {
+                      brouillon: {
+                        bg: 'bg-gray-100 text-gray-700 border-gray-200',
+                        label: 'Brouillon',
+                        Icon: Pencil,
+                        title: 'Aucun lien envoyé au client',
+                      },
+                      envoye: {
+                        bg: 'bg-blue-50 text-blue-700 border-blue-200',
+                        label: 'Envoyé',
+                        Icon: Mail,
+                        title: kycSentAt
+                          ? `Lien envoyé le ${new Date(kycSentAt).toLocaleString('fr-FR')}`
+                          : 'Lien envoyé au client',
+                      },
+                      en_cours: {
+                        bg: 'bg-amber-50 text-amber-700 border-amber-200',
+                        label: 'En cours',
+                        Icon: Eye,
+                        title: kycOpenedAt
+                          ? `Ouvert par le client le ${new Date(kycOpenedAt).toLocaleString('fr-FR')}`
+                          : 'Lien ouvert par le client',
+                      },
+                      signe: {
+                        bg: kycIncompleteSigned
+                          ? 'bg-red-50 text-red-700 border-red-200'
+                          : 'bg-green-50 text-green-700 border-green-200',
+                        label: kycIncompleteSigned ? 'Signé incomplet' : 'Signé',
+                        Icon: kycIncompleteSigned ? AlertTriangle : CheckCircle2,
+                        title: kycSignedAt
+                          ? `Signé le ${new Date(kycSignedAt).toLocaleString('fr-FR')}`
+                          : 'KYC signé',
+                      },
+                    }
+                    const s = statusStyles[kycStatus]
+                    const Icon = s.Icon
+                    return (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${s.bg}`}
+                        title={s.title}
+                      >
+                        <Icon size={12} />
+                        {s.label}
+                      </span>
+                    )
+                  })()}
+
+                  {/* Actions workflow : disponibles tant que le KYC n'est pas signé. */}
+                  {!kycSignedAt && (
+                    <>
+                      <button
+                        onClick={handleCopyKycLink}
+                        disabled={linkBusy !== null}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-navy-700 bg-navy-50 border border-navy-200 rounded hover:bg-navy-100 transition-colors disabled:opacity-50"
+                        title="Générer/réutiliser un lien privé et le copier dans le presse-papier"
+                      >
+                        {linkBusy === 'copy' ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                        Copier le lien
+                      </button>
+                      <button
+                        onClick={handleEmailKyc}
+                        disabled={linkBusy !== null}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-white bg-navy-700 border border-navy-700 rounded hover:bg-navy-800 transition-colors disabled:opacity-50"
+                        title="Ouvrir Gmail avec un brouillon pré-rempli vers le client"
+                      >
+                        {linkBusy === 'email' ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Mail size={14} />
+                        )}
+                        Envoyer par email
+                      </button>
+                    </>
+                  )}
+
+                  {/* Re-signer manuel (offline) — garde le flux existant via modale. */}
+                  <button
+                    onClick={() => setSignatureOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                    title={
+                      kycSignedAt
+                        ? 'Re-signer manuellement (écrase la précédente signature)'
+                        : 'Signer manuellement sur place (hors parcours email)'
+                    }
+                  >
+                    <PenLine size={14} />
+                    {kycSignedAt ? 'Re-signer' : 'Signer sur place'}
+                  </button>
+                </>
               )}
               {!isEditMode ? (
                 <button
@@ -2262,6 +2450,14 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
               )}
             </div>
           </div>
+
+          {/* Feedback inline après "Copier le lien" ou "Envoyer par email". */}
+          {linkFeedback && (
+            <div className="mt-3 p-2 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center gap-2">
+              <Clock size={12} />
+              <span>{linkFeedback}</span>
+            </div>
+          )}
 
           {/* Bannière d'audit si KYC signé — rouge si incomplet, verte si complet. */}
           {kycSignedAt && (
@@ -2302,15 +2498,24 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y divide-gray-200">
-            <EtatCivilSection />
-            <SituationFamilialeSection />
-            <SituationProfessionnelleSection />
-            <RevenusSection />
-            <PatrimoineImmobilierSection />
-            <ProduitsFinianciers />
-            <EmpruntsSection />
-            <FiscaliteSection />
-            <ObjectifsSection />
+            {/*
+              IMPORTANT: ces sous-"composants" sont en fait des closures
+              locales qui referment sur le state/setters du KYCSection.
+              On les APPELLE en fonctions ({FooSection()}) au lieu de les
+              monter en JSX (<FooSection />) : cela évite à React de les
+              traiter comme un nouveau type de composant à chaque render
+              du parent, ce qui provoquait un unmount+remount à chaque
+              frappe (bug de perte de focus signalé 2026-04-21).
+            */}
+            {EtatCivilSection()}
+            {SituationFamilialeSection()}
+            {SituationProfessionnelleSection()}
+            {RevenusSection()}
+            {PatrimoineImmobilierSection()}
+            {ProduitsFinianciers()}
+            {EmpruntsSection()}
+            {FiscaliteSection()}
+            {ObjectifsSection()}
           </div>
         </CardContent>
 

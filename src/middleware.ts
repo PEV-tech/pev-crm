@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/auth']
+// /kyc/[token] : page publique où un client signe son KYC via un lien privé.
+const publicRoutes = ['/login', '/auth', '/kyc']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
