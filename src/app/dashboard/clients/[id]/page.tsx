@@ -108,6 +108,7 @@ export default function ClientDetailPage() {
     email: '',
     telephone: '',
     pays: '',
+        ville: '',
     numero_compte: '',
     google_drive_url: '',
   })
@@ -142,6 +143,7 @@ export default function ClientDetailPage() {
           email: clientData.email || '',
           telephone: clientData.telephone || '',
           pays: clientData.pays || '',
+                    ville: clientData.ville || '',
           numero_compte: clientData.numero_compte || '',
           google_drive_url: clientData.google_drive_url || '',
         })
@@ -207,7 +209,7 @@ export default function ClientDetailPage() {
         google_drive_url: editContact.google_drive_url || null,
       })
       .eq('id', clientId)
-    if (!error) {
+          if (error) { alert('Erreur sauvegarde: ' + error.message); console.error(error) } else {}
       setClient({ ...client, ...editContact })
       setEditingContact(false)
     }
@@ -649,6 +651,7 @@ export default function ClientDetailPage() {
                           email: client.email || '',
                           telephone: client.telephone || '',
                           pays: client.pays || '',
+                                          ville: client.ville || '',
                           numero_compte: client.numero_compte || '',
                           google_drive_url: client.google_drive_url || '',
                         })
