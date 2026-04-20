@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-20 · **Commit de référence** : `cea09a9`
+**Mis à jour** : 2026-04-20 · **Commit de référence** : `1d4d6c4`
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
@@ -21,40 +21,45 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 | Ma clientèle | ✅ | Portfolio consultant avec commissions. Read-only. |
 | Rémunérations | ✅ | Breakdown par mois/pool. Read-only. |
 | Réglementaire | ✅ | **Read-only by design** — dashboard de monitoring conformité. Les edits se font sur client/[id] et dossier/[id]. |
-| Clients/[id] | ⚠️ | Fonctionne mais error handling fragile : `catch { setNotFound(true) }` (L172), `catch (e) { console.error }` (L196), error swallowed au save (L212). |
-| Audit | ⚠️ | `console.error` résiduels (L86, L94). Fonctionne mais logs à nettoyer. |
-| Paramètres | ⚠️ | **1817 lignes monolithiques**. CRUD fonctionne, mais dette technique max — à découper en sous-pages (Consultants, Produits, Grilles, Challenges). |
-| Relances | ⚠️ | **Read-only by design avec UX gap** — page principale agrège, les mutations (INSERT/UPDATE) fonctionnent via le composant `ClientRelances` embarqué sur client/[id]. Manque un bouton "marquer fait" inline sur la liste agrégée. |
+| Clients/[id] | ✅ | Error handling propre depuis commit `7506da8` (V1). Les échecs de save/delete remontent en alert utilisateur. |
+| Audit | ✅ | Bandeau d'erreur in-page depuis `45dfdaf`. Plus de `console.error` silencieux. |
+| Paramètres | ⚠️ | **1817 lignes monolithiques**. CRUD fonctionne, mais dette technique max — à découper en sous-pages (Consultants, Produits, Grilles, Challenges). Post-V1. |
+| Relances | ✅ | Bouton "Marquer fait" inline ajouté (`1d4d6c4`) pour les relances `manuelle`. Les dérivées (kyc/inactivité/…) se résolvent en corrigeant la donnée sous-jacente. |
 
 ---
 
 ## Drapeaux rouges (à adresser)
 
-### Comportement silencieux (erreurs avalées)
-- `src/app/dashboard/clients/[id]/page.tsx` L172, L196, L212 — catchs vides ou alertes sans contexte
-- `src/app/dashboard/remunerations/remunerations-client.tsx` L81 — `} catch { return [] }` silent fallback
-- `src/app/dashboard/dossiers/[id]/dossier-detail-wrapper.tsx` L654 — `console.error('Error creating apporteur')`
+### ✅ Résolus pendant la campagne V1 (2026-04-20, commits `7506da8`, `45dfdaf`)
+- ~~clients/[id] L172/L196/L212 — catchs silencieux qui perdaient les saves~~ → alert/console.error dédiés.
+- ~~clients/[id] L864 — TS1128 causé par accolades déséquilibrées dans `handleSaveContact`~~ → réécrit comme `handleSaveReglementaire`.
+- ~~remunerations-client L81 — `catch { return [] }` silencieux~~ → `console.warn` avec contexte, dégradation inchangée.
+- ~~dossier-detail-wrapper L654 — `console.error('Error creating apporteur')` sans UX~~ → alert utilisateur + correction du bug `newAp` référencé avant définition (erreur runtime au passage).
+- ~~audit L86/L94 — `console.error` sans feedback visuel~~ → bandeau rouge in-page via `loadError` state.
 
-### Debugging résiduel
-- `src/app/dashboard/audit/page.tsx` L86, L94 — `console.error`
-- Divers `console.error` de développement dans dossier-detail-wrapper
+### Dette révélée par la régénération des types (non bloquants — post-V1)
+La régénération honnête des types (commit `cea09a9`) a fait remonter des incohérences que les types hand-edited masquaient :
 
-### Types TS pré-existants (non bloquants mais polluants)
-- ~~`dossier-detail-wrapper.tsx` L102, L108, L558 — 3 erreurs sur la table `apporteurs`~~ ✅ **Résolu** par régénération des types (commit `cea09a9`).
-- `clients/[id]/page.tsx` L864 — TS1128 résiduel. **Cause racine identifiée** : accolades déséquilibrées dans `handleSaveContact` (L198-217), propagées jusqu'en fin de fichier. Fix au passage dans le nettoyage des catchs silencieux (même zone).
+- **`v_dossiers_complets` n'expose pas `co_titulaire_id` / `apporteur_id`** (vue pas rafraîchie après `add-co-titulaire.sql`). Le code `dossier-detail-wrapper.tsx` (L164, L165, L191, L346, L347, L471, L596) lit ces champs → renvoie `undefined` au runtime. Traité comme "no co-titulaire" par la logique de falsy-check, donc pas de crash, mais la feature co-titulaire est **silencieusement partielle**. **Fix** : recréer la vue avec ces colonnes.
+- **kyc-section.tsx** : ~15 erreurs implicit-any dans des callbacks `map/reduce`. Pré-existant, annotations manquantes.
+- **document-checklist / client-relances** : les `Row` types Supabase sont plus larges que les interfaces locales (ex: `statut: string` vs `"a_faire" | "fait" | …`). À harmoniser.
+- **clients/[id]/page.tsx(218,669)** : `Update` type de Supabase exclut `null` pour colonnes nullable-with-default ; `ClientInfo` local manque `ville`. Micro-fix.
+- **dossiers/nouveau page.tsx(201)** : `client_id: string | null` vs signature Insert qui veut `string | undefined`. Harmoniser.
+- **parse-kyc/route.ts** : flag regex ES2018 — bump `target` dans `tsconfig.json`.
+
+Total tsc : 73 errors. **Aucune ne bloque le build Next.js** (Vercel ignore les type errors par défaut). Liste exhaustive : `npx tsc --noEmit`.
 
 ---
 
-## Composants orphelins (importés nulle part)
+## Composants orphelins
 
-À supprimer au prochain nettoyage :
-- `src/components/shared/search-modal.tsx`
+✅ **Nettoyage effectué 2026-04-20 (commit `0e2bb74`)** — 4 composants supprimés après vérification grep :
 - `src/components/shared/stats-card.tsx`
 - `src/components/dashboard/podium-wrapper.tsx`
 - `src/components/dashboard/podium.tsx`
 - `src/components/dossiers/apporteur-section.tsx`
 
-Vérifier avant de supprimer avec `grep -r "from.*search-modal"` etc.
+Note : `search-modal.tsx` était sur la liste initiale mais est en fait importé par `components/shared/header.tsx` — **conservé**.
 
 ---
 
@@ -91,26 +96,30 @@ Scripts dans `scripts/` (ordre chronologique) :
 
 ---
 
-## Backlog priorisé (propositions)
+## Backlog priorisé
 
-### ✅ P0 — Synchronisation types (FAIT 2026-04-20, commit `cea09a9`)
-- Régénération `src/types/database.ts` depuis Supabase — tables `encaissements`, `v_encaissements`, `apporteurs` désormais présentes.
-- `as any` retiré de `remunerations-client-wrapper.tsx` L34.
+### ✅ Campagne V1 livrée (2026-04-20)
+| # | Item | Commit |
+|---|---|---|
+| 1 | Synchro types (`encaissements`, `v_encaissements`, `apporteurs`) | `cea09a9` |
+| 2 | Restauration aliases de commodité (VDossiersComplets, Consultant, …) | `a6cd9dc` |
+| 3 | Fix catchs silencieux clients/[id] + résolution TS1128 L864 | `7506da8` |
+| 4 | Nettoyage console.error (audit, rémunérations, dossier-detail) + fix bug `newAp` | `45dfdaf` |
+| 5 | Suppression 4 composants orphelins | `0e2bb74` |
+| 6 | Bouton inline "Marquer fait" sur relances agrégées | `1d4d6c4` |
 
-### P0 — Hygiène code (bloqueurs d'usage quotidien)
-1. **Clients/[id]** : remplacer les catchs silencieux (L172, L196, L212) par des toasts/messages utilisateur. Le save silencieux à L212 fait **perdre des données sans feedback** — c'est LE blocker V1.
-   - Note : le fix de L212 résout aussi l'erreur TS1128 pré-existante à L864 (même accolade mal placée).
-2. **Nettoyer les `console.error` résiduels** (audit L86/L94, dossier-detail-wrapper L654, remunerations L81).
-3. **Supprimer les 5 composants orphelins** listés plus haut (après grep de vérification).
+### P0 résiduel — Dette révélée par types honnêtes
+Tous post-V1, **aucun ne bloque l'usage quotidien** (cf. section "Dette révélée" plus haut pour le détail) :
+1. Recréer la vue `v_dossiers_complets` pour exposer `co_titulaire_id` et `apporteur_id` (feature co-titulaire partielle en silence).
+2. Harmoniser `document-checklist` / `client-relances` : élargir les interfaces locales vers les `Row` Supabase.
+3. Annotations `map/reduce` dans `kyc-section.tsx` (~15 implicit-any).
+4. Bump `tsconfig.target` à ES2018+ pour régler `parse-kyc/route.ts`.
 
-### P1 — UX gaps
-4. **Relances** : ajouter un bouton "marquer fait" inline sur la page agrégée pour éviter l'aller-retour client/[id].
-
-### P2 — Post-V1 (dette technique)
+### P1 — Dette technique
 5. **Tracer le DDL `apporteurs`** dans `scripts/create-apporteurs.sql` (reverse-engineering depuis Supabase) pour qu'un futur env propre soit reproductible.
-6. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages.
-7. **Setup un outil de migration** (Supabase CLI) pour remplacer les scripts manuels.
-8. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log` et catchs vides.
+6. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages (Consultants, Produits, Grilles, Challenges).
+7. **Setup Supabase CLI migrations** pour remplacer les scripts manuels appliqués via le SQL editor.
+8. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log`, catchs vides, et `as any` régressions.
 
 ### P4 — Features identifiées
 Cf. `/sessions/charming-jolly-ramanujan/mnt/.auto-memory/project_crm_roadmap.md` pour le cahier des charges complet.

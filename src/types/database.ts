@@ -2268,9 +2268,8 @@ export type Challenge = Database["public"]["Tables"]["challenges"]["Row"]
 export type ChallengeInsert = Database["public"]["Tables"]["challenges"]["Insert"]
 export type ChallengeUpdate = Database["public"]["Tables"]["challenges"]["Update"]
 
-export type AuditLog = Database["public"]["Tables"]["audit_log"]["Row"]
-export type AuditLogInsert = Database["public"]["Tables"]["audit_log"]["Insert"]
-export type AuditLogUpdate = Database["public"]["Tables"]["audit_log"]["Update"]
+// Note: legacy `audit_log` (singular) alias retiré — seule `audit_logs` existe
+// dans la DB régénérée. Voir AuditLogs plus bas.
 
 export type ClientCommentaire = Database["public"]["Tables"]["client_commentaires"]["Row"]
 export type ClientCommentaireInsert = Database["public"]["Tables"]["client_commentaires"]["Insert"]
