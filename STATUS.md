@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-20 · **Commit de référence** : `1d4d6c4`
+**Mis à jour** : 2026-04-20 · **Commit de référence** : `95ae905`
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
@@ -24,18 +24,20 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 | Clients/[id] | ✅ | Error handling propre depuis commit `7506da8` (V1). Les échecs de save/delete remontent en alert utilisateur. |
 | Audit | ✅ | Bandeau d'erreur in-page depuis `45dfdaf`. Plus de `console.error` silencieux. |
 | Paramètres | ⚠️ | **1817 lignes monolithiques**. CRUD fonctionne, mais dette technique max — à découper en sous-pages (Consultants, Produits, Grilles, Challenges). Post-V1. |
-| Relances | ✅ | Bouton "Marquer fait" inline ajouté (`1d4d6c4`) pour les relances `manuelle`. Les dérivées (kyc/inactivité/…) se résolvent en corrigeant la donnée sous-jacente. |
+| Relances | ✅ | Bouton "Marquer fait" sur les manuelles (`1d4d6c4`) + bouton "Ouvrir" sur les dérivées qui navigue vers le dossier concerné (`95ae905`). |
 
 ---
 
 ## Drapeaux rouges (à adresser)
 
-### ✅ Résolus pendant la campagne V1 (2026-04-20, commits `7506da8`, `45dfdaf`)
+### ✅ Résolus pendant la campagne V1 (2026-04-20, commits `7506da8`, `45dfdaf`, `e80655d`, `0cba145`, `95ae905`)
 - ~~clients/[id] L172/L196/L212 — catchs silencieux qui perdaient les saves~~ → alert/console.error dédiés.
 - ~~clients/[id] L864 — TS1128 causé par accolades déséquilibrées dans `handleSaveContact`~~ → réécrit comme `handleSaveReglementaire`.
 - ~~remunerations-client L81 — `catch { return [] }` silencieux~~ → `console.warn` avec contexte, dégradation inchangée.
 - ~~dossier-detail-wrapper L654 — `console.error('Error creating apporteur')` sans UX~~ → alert utilisateur + correction du bug `newAp` référencé avant définition (erreur runtime au passage).
 - ~~audit L86/L94 — `console.error` sans feedback visuel~~ → bandeau rouge in-page via `loadError` state.
+- ~~**CRITIQUE** : triggers d'audit en prod insèrent dans `audit_log` (singulier, table inexistante) au lieu de `audit_logs` (pluriel)~~ → recréation de `fn_audit_log()` ET `audit_trigger_func()` via `scripts/fix-audit-trigger-table-name.sql`, appliqué en prod 2026-04-20 SQL editor + smoke test UPDATE clients passant. Cassait **tous** les UPDATE/INSERT/DELETE sur clients/dossiers/commissions/factures, silencieusement swallowé avant le fix des catches.
+- ~~relances : colonne Actions affichait "—" pour les dérivées (949 entrées, "je ne peux rien faire")~~ → bouton "Ouvrir" vers `/dashboard/dossiers/<id>` ajouté via `95ae905`.
 
 ### Dette révélée par la régénération des types (non bloquants — post-V1)
 La régénération honnête des types (commit `cea09a9`) a fait remonter des incohérences que les types hand-edited masquaient :
@@ -91,6 +93,7 @@ Scripts dans `scripts/` (ordre chronologique) :
 12. `add-co-titulaire.sql` (2026-04-20) — co_titulaire_id
 13. `add-kyc-fields.sql` (2026-04-20) — champs KYC clients
 14. `p4-encaissements-auto.sql` (2026-04-20) — `encaissements_auto`
+15. `fix-audit-trigger-table-name.sql` (2026-04-20) — **fix prod-critique** : triggers d'audit pointaient vers une table inexistante `audit_log` (singulier). Recrée `fn_audit_log()` et `audit_trigger_func()` pour insérer dans `audit_logs` (pluriel). **Appliqué en prod 2026-04-20.**
 
 **Dette** : pas d'outil de migration (Supabase CLI migrations, Flyway, etc.). Chaque script est appliqué à la main via le SQL editor Supabase. Aucun registre d'exécution. À terme : utiliser Supabase migrations CLI.
 
@@ -107,6 +110,8 @@ Scripts dans `scripts/` (ordre chronologique) :
 | 4 | Nettoyage console.error (audit, rémunérations, dossier-detail) + fix bug `newAp` | `45dfdaf` |
 | 5 | Suppression 4 composants orphelins | `0e2bb74` |
 | 6 | Bouton inline "Marquer fait" sur relances agrégées | `1d4d6c4` |
+| 7 | **Fix prod audit triggers** (`audit_log` → `audit_logs`) + smoke test passant | `e80655d`, `0cba145` |
+| 8 | Bouton "Ouvrir" sur relances dérivées (nav vers dossier) | `95ae905` |
 
 ### P0 résiduel — Dette révélée par types honnêtes
 Tous post-V1, **aucun ne bloque l'usage quotidien** (cf. section "Dette révélée" plus haut pour le détail) :
