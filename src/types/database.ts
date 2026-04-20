@@ -373,8 +373,10 @@ export type Database = {
           autres_revenus: number | null
           commentaires: string | null
           conformite: string | null
+          consultant_id: string | null
           created_at: string | null
           date_debut_emploi: string | null
+          date_entree_relation: string | null
           date_naissance: string | null
           der: boolean | null
           drive_url: string | null
@@ -426,8 +428,10 @@ export type Database = {
           autres_revenus?: number | null
           commentaires?: string | null
           conformite?: string | null
+          consultant_id?: string | null
           created_at?: string | null
           date_debut_emploi?: string | null
+          date_entree_relation?: string | null
           date_naissance?: string | null
           der?: boolean | null
           drive_url?: string | null
@@ -479,8 +483,10 @@ export type Database = {
           autres_revenus?: number | null
           commentaires?: string | null
           conformite?: string | null
+          consultant_id?: string | null
           created_at?: string | null
           date_debut_emploi?: string | null
+          date_entree_relation?: string | null
           date_naissance?: string | null
           der?: boolean | null
           drive_url?: string | null

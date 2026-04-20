@@ -349,10 +349,10 @@ export function MaClienteleClient({ initialData, consultant, gestionGrilles = []
             <Download size={18} />
             Exporter
           </Button>
-          <Link href="/dashboard/dossiers/nouveau">
+          <Link href="/dashboard/clients/nouveau">
             <Button className="gap-2">
               <Plus size={18} />
-              Nouveau dossier
+              Nouveau client
             </Button>
           </Link>
         </div>

@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-20 · **Commit de référence** : `95ae905`
+**Mis à jour** : 2026-04-20 · **Commit de référence** : à pousser (feat/nouveau-client)
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
@@ -22,6 +22,7 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 | Rémunérations | ✅ | Breakdown par mois/pool. Read-only. |
 | Réglementaire | ✅ | **Read-only by design** — dashboard de monitoring conformité. Les edits se font sur client/[id] et dossier/[id]. |
 | Clients/[id] | ✅ | Error handling propre depuis commit `7506da8` (V1). Les échecs de save/delete remontent en alert utilisateur. |
+| Clients/nouveau | ✅ | **Nouveau flux dédié** (CDC) : fiche client autonome sans dossier. Seul le nom est requis. Dropdown Pays avec bouton "+", co-titulaire via `client_relations`, consultant + date d'entrée en relation capturés au niveau client. |
 | Audit | ✅ | Bandeau d'erreur in-page depuis `45dfdaf`. Plus de `console.error` silencieux. |
 | Paramètres | ⚠️ | **1817 lignes monolithiques**. CRUD fonctionne, mais dette technique max — à découper en sous-pages (Consultants, Produits, Grilles, Challenges). Post-V1. |
 | Relances | ✅ | Bouton "Marquer fait" sur les manuelles (`1d4d6c4`) + bouton "Ouvrir" sur les dérivées qui navigue vers le dossier concerné (`95ae905`). |
@@ -94,6 +95,7 @@ Scripts dans `scripts/` (ordre chronologique) :
 13. `add-kyc-fields.sql` (2026-04-20) — champs KYC clients
 14. `p4-encaissements-auto.sql` (2026-04-20) — `encaissements_auto`
 15. `fix-audit-trigger-table-name.sql` (2026-04-20) — **fix prod-critique** : triggers d'audit pointaient vers une table inexistante `audit_log` (singulier). Recrée `fn_audit_log()` et `audit_trigger_func()` pour insérer dans `audit_logs` (pluriel). **Appliqué en prod 2026-04-20.**
+16. `add-client-standalone-fields.sql` (2026-04-20) — ajoute `clients.consultant_id` (FK → consultants, ON DELETE SET NULL) + `clients.date_entree_relation` (date) + index `idx_clients_consultant_id`. Idempotent (ADD COLUMN IF NOT EXISTS). **Appliqué en prod 2026-04-20**, smoke test `information_schema.columns` passant. Débloque la création de clients standalone (sans dossier) conformément au CDC.
 
 **Dette** : pas d'outil de migration (Supabase CLI migrations, Flyway, etc.). Chaque script est appliqué à la main via le SQL editor Supabase. Aucun registre d'exécution. À terme : utiliser Supabase migrations CLI.
 
@@ -112,6 +114,9 @@ Scripts dans `scripts/` (ordre chronologique) :
 | 6 | Bouton inline "Marquer fait" sur relances agrégées | `1d4d6c4` |
 | 7 | **Fix prod audit triggers** (`audit_log` → `audit_logs`) + smoke test passant | `e80655d`, `0cba145` |
 | 8 | Bouton "Ouvrir" sur relances dérivées (nav vers dossier) | `95ae905` |
+| 9 | **Suppression fiche jointe** POULIQUEN & MARC Marion & Simon (1ʳᵉ dissociation CDC) | prod DELETE |
+| 10 | **Route `/dashboard/clients/nouveau`** : fiche client autonome, save partiel, dropdown Pays + "+", co-titulaire via `client_relations`, consultant + date d'entrée en relation au niveau client | à pousser |
+| 11 | Bouton "Nouveau client" dans le header global + remplace "Nouveau dossier" sur Ma Clientèle | à pousser |
 
 ### P0 résiduel — Dette révélée par types honnêtes
 Tous post-V1, **aucun ne bloque l'usage quotidien** (cf. section "Dette révélée" plus haut pour le détail) :

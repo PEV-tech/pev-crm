@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, ChevronDown, LogOut } from 'lucide-react'
+import Link from 'next/link'
+import { Search, ChevronDown, LogOut, UserPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchModal } from './search-modal'
 
@@ -61,8 +62,16 @@ export function Header({
           </div>
         </button>
 
-        {/* Right section - User Avatar and Menu */}
+        {/* Right section - Quick actions + User Avatar */}
         <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard/clients/nouveau"
+            className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/90 transition-colors"
+          >
+            <UserPlus size={16} />
+            <span>Nouveau client</span>
+          </Link>
+
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
