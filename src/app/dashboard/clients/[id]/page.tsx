@@ -626,7 +626,7 @@ export default function ClientDetailPage() {
                   <div>
                     <label className="text-xs font-semibold text-gray-600">Lien Google Drive</label>
                     <input
-                      type="url"
+                      type="text"
                       value={editContact.google_drive_url}
                       onChange={e => setEditContact({ ...editContact, google_drive_url: e.target.value })}
                       placeholder="https://drive.google.com/..."
