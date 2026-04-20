@@ -41,6 +41,7 @@ export default function AuditLogsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [filterAction, setFilterAction] = useState<string>('all')
   const [filterDateFrom, setFilterDateFrom] = useState<string>('')
   const [filterDateTo, setFilterDateTo] = useState<string>('')
@@ -53,6 +54,7 @@ export default function AuditLogsPage() {
 
     async function loadAuditLogs() {
       setLoading(true)
+      setLoadError(null)
       const supabase = createClient()
 
       try {
@@ -83,15 +85,16 @@ export default function AuditLogsPage() {
         const { data, count, error } = await query
 
         if (error) {
-          console.error('Error fetching audit logs:', error)
+          setLoadError('Chargement des logs impossible : ' + error.message)
           setLogs([])
           setTotalCount(0)
         } else {
           setLogs((data as AuditLog[]) || [])
           setTotalCount(count || 0)
         }
-      } catch (error) {
-        console.error('Error loading audit logs:', error)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'erreur inconnue'
+        setLoadError('Chargement des logs impossible : ' + msg)
         setLogs([])
         setTotalCount(0)
       } finally {
@@ -225,6 +228,11 @@ export default function AuditLogsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {loadError && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {loadError}
+            </div>
+          )}
           {loading ? (
             <div className="flex justify-center py-12">
               <p className="text-gray-500">Chargement...</p>

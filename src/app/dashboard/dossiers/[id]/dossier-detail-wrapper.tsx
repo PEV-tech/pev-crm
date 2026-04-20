@@ -630,6 +630,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         created_by: currentUser?.id || null,
       }).select().single()
       if (error) throw error
+      const newAp = data as { id: string; prenom: string; nom: string; taux_commission: number }
       setApporteurs(prev => [...prev, newAp].sort((a: any, b: any) => a.nom.localeCompare(b.nom)))
       setEditApporteurId(newAp.id)
       if (newAp.taux_commission > 0) setEditApporteurTaux((newAp.taux_commission * 100).toFixed(2))
@@ -639,7 +640,6 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       setNewApporteurTauxDefaut('')
       // Auto-save: link new apporteur to dossier immediately
       if (dossier?.id) {
-        const newAp = data as { id: string; prenom: string; nom: string; taux_commission: number }
         const nomComplet = newAp.prenom + ' ' + newAp.nom
         await supabase.from('dossiers').update({
           has_apporteur_ext: true,
@@ -651,7 +651,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         if (refreshed) setDossier(refreshed as VDossiersComplets)
       }
     } catch (err) {
-      console.error('Error creating apporteur:', err)
+      const msg = err instanceof Error ? err.message : 'erreur inconnue'
+      console.error('[dossier-detail] handleCreateApporteur failed:', err)
+      alert('Creation de l\'apporteur impossible : ' + msg)
     } finally {
       setSavingNewApporteur(false)
     }

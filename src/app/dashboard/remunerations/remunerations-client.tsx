@@ -71,15 +71,19 @@ function ManagerCagnotteCard({
     .filter(d => d.statut === 'client_en_cours' && (d.rem_apporteur || 0) > 0)
     .reduce((sum, d) => sum + (d.rem_apporteur || 0), 0)
 
-  // Parse factures_detail from cagnotteRow
+  // Parse factures_detail from cagnotteRow (fallback to empty if malformed)
   const facturesDetail: { date: string; montant: number; description: string }[] = React.useMemo(() => {
+    const raw = cagnotteRow?.factures_detail
+    if (Array.isArray(raw)) return raw
+    if (typeof raw !== 'string') return []
     try {
-      const raw = cagnotteRow?.factures_detail
-      if (Array.isArray(raw)) return raw
-      if (typeof raw === 'string') return JSON.parse(raw)
+      return JSON.parse(raw)
+    } catch (e) {
+      // Corrupt JSON in manager_cagnotte.factures_detail — dégrade mais signale.
+      console.warn('[rémunérations] factures_detail JSON invalide pour', label, e)
       return []
-    } catch { return [] }
-  }, [cagnotteRow])
+    }
+  }, [cagnotteRow, label])
 
   return (
     <Card className={`border-2 ${isCurrentUser ? 'border-indigo-300 bg-indigo-50/40' : 'border-gray-200'}`}>
