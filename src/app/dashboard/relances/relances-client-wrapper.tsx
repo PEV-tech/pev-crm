@@ -23,8 +23,7 @@ export function RelancesClientWrapper() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = React.useCallback(async () => {
       try {
         setIsLoading(true)
         const supabase = createClient()
@@ -237,10 +236,29 @@ export function RelancesClientWrapper() {
       } finally {
         setIsLoading(false)
       }
-    }
+    }, [])
 
+  useEffect(() => {
     fetchData()
-  }, [])
+  }, [fetchData])
+
+  const handleMarkDone = React.useCallback(async (relanceRowId: string) => {
+    // Only manuelle relances (id prefix `manual-<uuid>`) are row-backed and can be marked fait.
+    if (!relanceRowId.startsWith('manual-')) return
+    const realId = relanceRowId.slice('manual-'.length)
+    const supabase = createClient()
+    const { error: updateError } = await supabase
+      .from('relances')
+      .update({ statut: 'fait' })
+      .eq('id', realId)
+    if (updateError) {
+      alert('Impossible de marquer la relance comme faite : ' + updateError.message)
+      return
+    }
+    // Optimistic local removal so the list updates immediately; refresh from DB as safety net.
+    setData(prev => prev.filter(r => r.id !== relanceRowId))
+    fetchData()
+  }, [fetchData])
 
   if (isLoading) {
     return (
@@ -258,5 +276,5 @@ export function RelancesClientWrapper() {
     )
   }
 
-  return <RelancesClient initialData={data} />
+  return <RelancesClient initialData={data} onMarkDone={handleMarkDone} />
 }

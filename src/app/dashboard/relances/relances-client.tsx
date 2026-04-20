@@ -4,7 +4,8 @@ import React, { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Clock, CreditCard, ShieldAlert, CalendarClock, Bell } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { AlertCircle, Clock, CreditCard, ShieldAlert, CalendarClock, Bell, Check } from 'lucide-react'
 
 interface RelanceRow {
   id: string
@@ -21,6 +22,7 @@ interface RelanceRow {
 
 interface RelancesClientProps {
   initialData: RelanceRow[]
+  onMarkDone?: (id: string) => Promise<void>
 }
 
 const formatDate = (dateString: string | null): string => {
@@ -97,8 +99,19 @@ const getRelanceTypeBadge = (type: string) => {
 
 type TabType = 'all' | 'kyc' | 'inactivite' | 'paiement' | 'reglementaire' | 'facture_aging' | 'manuelle'
 
-export function RelancesClient({ initialData }: RelancesClientProps) {
+export function RelancesClient({ initialData, onMarkDone }: RelancesClientProps) {
   const [activeTab, setActiveTab] = useState<TabType>('all')
+  const [markingId, setMarkingId] = useState<string | null>(null)
+
+  const handleMarkClick = async (id: string) => {
+    if (!onMarkDone) return
+    setMarkingId(id)
+    try {
+      await onMarkDone(id)
+    } finally {
+      setMarkingId(null)
+    }
+  }
 
   const filteredData = useMemo(() => {
     if (activeTab === 'all') return initialData
@@ -142,6 +155,31 @@ export function RelancesClient({ initialData }: RelancesClientProps) {
       key: 'detail',
       label: 'Détail',
       render: (value) => value ? <span className="text-xs text-gray-600">{value}</span> : '-',
+    },
+    {
+      key: 'id',
+      label: 'Actions',
+      render: (_value, row) => {
+        // Only manuelle relances are row-backed and can be marked fait inline.
+        // Derived relances (kyc/inactivite/paiement/reglementaire/facture_aging) resolve
+        // themselves once the underlying data is fixed on the client/dossier page.
+        if (row.typeRelance !== 'manuelle') {
+          return <span className="text-xs text-gray-400">—</span>
+        }
+        const isMarking = markingId === row.id
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isMarking || !onMarkDone}
+            onClick={() => handleMarkClick(row.id)}
+            className="h-7 px-2 text-xs"
+          >
+            <Check size={12} className="mr-1" />
+            {isMarking ? 'En cours...' : 'Marquer fait'}
+          </Button>
+        )
+      },
     },
   ]
 
