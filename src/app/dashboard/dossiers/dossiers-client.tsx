@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { Plus, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
 import { GrilleGestion, getGestionTaux, hasEncours, computeQuarterlyConsultant } from '@/lib/commissions/gestion'
@@ -302,12 +302,6 @@ export function DossiersClient({
             <Download size={18} />
             Exporter CSV
           </Button>
-          <Link href="/dashboard/dossiers/nouveau">
-            <Button className="gap-2">
-              <Plus size={18} />
-              Nouveau dossier
-            </Button>
-          </Link>
         </div>
       </div>
 
