@@ -31,7 +31,7 @@ export function RemunerationsClientWrapper() {
         // (RLS restricts these tables to manager role only — back_office will get empty results)
         if (isManager) {
           const [remRes, cagnotteRes] = await Promise.all([
-            supabase.from('encaissements').select('part_maxine, part_thelo') as any,
+            supabase.from('encaissements').select('part_maxine, part_thelo'),
             supabase.from('manager_cagnotte').select('*'),
           ])
           if (remRes.data && remRes.data.length > 0) {
