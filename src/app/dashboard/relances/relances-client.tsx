@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, Clock, CreditCard, ShieldAlert, CalendarClock, Bell, Check } from 'lucide-react'
+import { AlertCircle, Clock, CreditCard, ShieldAlert, CalendarClock, Bell, Check, ExternalLink } from 'lucide-react'
 
 interface RelanceRow {
   id: string
@@ -18,6 +19,8 @@ interface RelanceRow {
   statut: string
   urgency: 'critical' | 'high' | 'medium'
   detail?: string
+  dossierId?: string
+  clientId?: string
 }
 
 interface RelancesClientProps {
@@ -160,24 +163,52 @@ export function RelancesClient({ initialData, onMarkDone }: RelancesClientProps)
       key: 'id',
       label: 'Actions',
       render: (_value, row) => {
-        // Only manuelle relances are row-backed and can be marked fait inline.
-        // Derived relances (kyc/inactivite/paiement/reglementaire/facture_aging) resolve
-        // themselves once the underlying data is fixed on the client/dossier page.
-        if (row.typeRelance !== 'manuelle') {
+        // Cible navigation : dossier si dispo (toutes les dérivées l'ont),
+        // sinon client, sinon rien.
+        const href = row.dossierId
+          ? `/dashboard/dossiers/${row.dossierId}`
+          : row.clientId
+            ? `/dashboard/clients/${row.clientId}`
+            : null
+
+        // Relances manuelles : bouton Marquer fait + éventuellement Ouvrir.
+        if (row.typeRelance === 'manuelle') {
+          const isMarking = markingId === row.id
+          return (
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isMarking || !onMarkDone}
+                onClick={() => handleMarkClick(row.id)}
+                className="h-7 px-2 text-xs"
+              >
+                <Check size={12} className="mr-1" />
+                {isMarking ? '...' : 'Fait'}
+              </Button>
+              {href && (
+                <Link href={href}>
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
+                    <ExternalLink size={12} />
+                  </Button>
+                </Link>
+              )}
+            </div>
+          )
+        }
+
+        // Relances dérivées : elles se résolvent seules en corrigeant la donnée
+        // sous-jacente. On offre donc un lien direct vers le dossier concerné.
+        if (!href) {
           return <span className="text-xs text-gray-400">—</span>
         }
-        const isMarking = markingId === row.id
         return (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={isMarking || !onMarkDone}
-            onClick={() => handleMarkClick(row.id)}
-            className="h-7 px-2 text-xs"
-          >
-            <Check size={12} className="mr-1" />
-            {isMarking ? 'En cours...' : 'Marquer fait'}
-          </Button>
+          <Link href={href}>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
+              <ExternalLink size={12} className="mr-1" />
+              Ouvrir
+            </Button>
+          </Link>
         )
       },
     },

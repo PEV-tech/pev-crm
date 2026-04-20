@@ -16,6 +16,11 @@ interface RelanceRow {
   statut: string
   urgency: 'critical' | 'high' | 'medium'
   detail?: string
+  // Contexte navigationnel : pour les relances dérivées, on dispose de l'ID
+  // du dossier sous-jacent. Pour les manuelles, on stocke client et dossier
+  // pour pouvoir ouvrir l'un ou l'autre.
+  dossierId?: string
+  clientId?: string
 }
 
 export function RelancesClientWrapper() {
@@ -74,6 +79,7 @@ export function RelancesClientWrapper() {
                 typeRelance: 'kyc',
                 statut: dossier.statut || '',
                 urgency: 'critical',
+                dossierId: dossier.id,
               })
             }
 
@@ -93,6 +99,7 @@ export function RelancesClientWrapper() {
                 typeRelance: 'inactivite',
                 statut: dossier.statut || '',
                 urgency: daysSinceOperation >= 60 ? 'high' : 'medium',
+                dossierId: dossier.id,
               })
             }
 
@@ -120,6 +127,7 @@ export function RelancesClientWrapper() {
                   statut: dossier.statut || '',
                   urgency: daysSinceFacture >= 60 ? 'critical' : 'high',
                   detail: `Facture impayée depuis ${daysSinceFacture}j`,
+                  dossierId: dossier.id,
                 })
               } else {
                 relances.push({
@@ -132,6 +140,7 @@ export function RelancesClientWrapper() {
                   typeRelance: 'paiement',
                   statut: dossier.statut || '',
                   urgency: 'high',
+                  dossierId: dossier.id,
                 })
               }
             }
@@ -158,6 +167,7 @@ export function RelancesClientWrapper() {
                   statut: dossier.statut || '',
                   urgency: missingFields.length >= 4 ? 'critical' : missingFields.length >= 2 ? 'high' : 'medium',
                   detail: `Manquant : ${missingFields.join(', ')}`,
+                  dossierId: dossier.id,
                 })
               }
             }
@@ -208,7 +218,9 @@ export function RelancesClientWrapper() {
                 typeRelance: 'manuelle',
                 statut: mr.statut,
                 urgency: isOverdue ? 'critical' : 'medium',
-                detail: mr.description,
+                detail: mr.description ?? undefined,
+                clientId: mr.client_id ?? undefined,
+                dossierId: mr.dossier_id ?? undefined,
               })
             })
           }
