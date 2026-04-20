@@ -2212,3 +2212,100 @@ export const Constants = {
     },
   },
 } as const
+
+// ---------------------------------------------------------------------------
+// Convenience type aliases (manually maintained — not part of Supabase gen)
+// If you re-run `supabase gen types typescript`, re-append this block.
+// ---------------------------------------------------------------------------
+
+// Enum Types
+export type RoleType = Database["public"]["Enums"]["role_type"]
+export type StatutKycType = Database["public"]["Enums"]["statut_kyc_type"]
+export type FinancementType = Database["public"]["Enums"]["financement_type"]
+export type StatutDossierType = Database["public"]["Enums"]["statut_dossier_type"]
+export type ModeDetentionType = Database["public"]["Enums"]["mode_detention_type"]
+export type PaiementType = Database["public"]["Enums"]["paiement_type"]
+export type TypeFraisType = Database["public"]["Enums"]["type_frais"]
+
+// Table-specific types for convenience
+export type Consultant = Database["public"]["Tables"]["consultants"]["Row"]
+export type ConsultantInsert = Database["public"]["Tables"]["consultants"]["Insert"]
+export type ConsultantUpdate = Database["public"]["Tables"]["consultants"]["Update"]
+
+export type Client = Database["public"]["Tables"]["clients"]["Row"]
+export type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"]
+export type ClientUpdate = Database["public"]["Tables"]["clients"]["Update"]
+
+export type Produit = Database["public"]["Tables"]["produits"]["Row"]
+export type ProduitInsert = Database["public"]["Tables"]["produits"]["Insert"]
+export type ProduitUpdate = Database["public"]["Tables"]["produits"]["Update"]
+
+export type Compagnie = Database["public"]["Tables"]["compagnies"]["Row"]
+export type CompagnieInsert = Database["public"]["Tables"]["compagnies"]["Insert"]
+export type CompagnieUpdate = Database["public"]["Tables"]["compagnies"]["Update"]
+
+export type TauxProduitCompagnie = Database["public"]["Tables"]["taux_produit_compagnie"]["Row"]
+export type TauxProduitCompagnieInsert = Database["public"]["Tables"]["taux_produit_compagnie"]["Insert"]
+export type TauxProduitCompagnieUpdate = Database["public"]["Tables"]["taux_produit_compagnie"]["Update"]
+
+export type GrillesFrais = Database["public"]["Tables"]["grilles_frais"]["Row"]
+export type GrillesFraisInsert = Database["public"]["Tables"]["grilles_frais"]["Insert"]
+export type GrillesFraisUpdate = Database["public"]["Tables"]["grilles_frais"]["Update"]
+
+export type Dossier = Database["public"]["Tables"]["dossiers"]["Row"]
+export type DossierInsert = Database["public"]["Tables"]["dossiers"]["Insert"]
+export type DossierUpdate = Database["public"]["Tables"]["dossiers"]["Update"]
+
+export type Commission = Database["public"]["Tables"]["commissions"]["Row"]
+export type CommissionInsert = Database["public"]["Tables"]["commissions"]["Insert"]
+export type CommissionUpdate = Database["public"]["Tables"]["commissions"]["Update"]
+
+export type Facture = Database["public"]["Tables"]["factures"]["Row"]
+export type FactureInsert = Database["public"]["Tables"]["factures"]["Insert"]
+export type FactureUpdate = Database["public"]["Tables"]["factures"]["Update"]
+
+export type Challenge = Database["public"]["Tables"]["challenges"]["Row"]
+export type ChallengeInsert = Database["public"]["Tables"]["challenges"]["Insert"]
+export type ChallengeUpdate = Database["public"]["Tables"]["challenges"]["Update"]
+
+export type AuditLog = Database["public"]["Tables"]["audit_log"]["Row"]
+export type AuditLogInsert = Database["public"]["Tables"]["audit_log"]["Insert"]
+export type AuditLogUpdate = Database["public"]["Tables"]["audit_log"]["Update"]
+
+export type ClientCommentaire = Database["public"]["Tables"]["client_commentaires"]["Row"]
+export type ClientCommentaireInsert = Database["public"]["Tables"]["client_commentaires"]["Insert"]
+export type ClientPj = Database["public"]["Tables"]["client_pj"]["Row"]
+export type ClientPjInsert = Database["public"]["Tables"]["client_pj"]["Insert"]
+export type RendezVous = Database["public"]["Tables"]["rendez_vous"]["Row"]
+export type RendezVousInsert = Database["public"]["Tables"]["rendez_vous"]["Insert"]
+export type AuditLogs = Database["public"]["Tables"]["audit_logs"]["Row"]
+export type AuditLogsInsert = Database["public"]["Tables"]["audit_logs"]["Insert"]
+export type DossierDocument = Database["public"]["Tables"]["dossier_documents"]["Row"]
+export type DossierDocumentInsert = Database["public"]["Tables"]["dossier_documents"]["Insert"]
+export type DocumentTemplate = Database["public"]["Tables"]["document_templates"]["Row"]
+export type ClientRelation = Database["public"]["Tables"]["client_relations"]["Row"]
+export type GoogleToken = Database["public"]["Tables"]["google_tokens"]["Row"]
+export type Relance = Database["public"]["Tables"]["relances"]["Row"]
+export type RelanceInsert = Database["public"]["Tables"]["relances"]["Insert"]
+export type RelanceUpdate = Database["public"]["Tables"]["relances"]["Update"]
+export type Faq = Database["public"]["Tables"]["faq"]["Row"]
+export type FaqInsert = Database["public"]["Tables"]["faq"]["Insert"]
+export type EncaissementsRem = Database["public"]["Tables"]["encaissements_rem"]["Row"]
+export type Encaissement = Database["public"]["Tables"]["encaissements"]["Row"]
+export type EncaissementInsert = Database["public"]["Tables"]["encaissements"]["Insert"]
+export type EncaissementUpdate = Database["public"]["Tables"]["encaissements"]["Update"]
+export type Apporteur = Database["public"]["Tables"]["apporteurs"]["Row"]
+export type ApporteurInsert = Database["public"]["Tables"]["apporteurs"]["Insert"]
+export type ApporteurUpdate = Database["public"]["Tables"]["apporteurs"]["Update"]
+export type GrillesCommissionnement = Database["public"]["Tables"]["grilles_commissionnement"]["Row"]
+export type VisibilitySettings = Database["public"]["Tables"]["visibility_settings"]["Row"]
+export type FacturationConsultant = Database["public"]["Tables"]["facturation_consultant"]["Row"]
+export type ManagerCagnotte = Database["public"]["Tables"]["manager_cagnotte"]["Row"]
+
+// View types
+export type VDossiersComplets = Database["public"]["Views"]["v_dossiers_complets"]["Row"]
+export type VCollecteParConsultant = Database["public"]["Views"]["v_collecte_par_consultant"]["Row"]
+export type VPipelineParConsultant = Database["public"]["Views"]["v_pipeline_par_consultant"]["Row"]
+export type VDossiersRemunerations = Database["public"]["Views"]["v_dossiers_remunerations"]["Row"]
+export type VEncaissements = Database["public"]["Views"]["v_encaissements"]["Row"]
+export type VClientsSecure = Database["public"]["Views"]["v_clients_secure"]["Row"]
