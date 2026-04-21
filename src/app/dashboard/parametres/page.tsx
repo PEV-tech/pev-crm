@@ -7,9 +7,10 @@ import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp, Target, Eye, Shield, Lock, Unlock } from 'lucide-react'
+import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp, Target, Eye, Shield, Lock, Unlock, Mail } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
 import { formatCurrency } from '@/lib/formatting'
+import { EmailTemplatesTab } from '@/components/parametres/email-templates-tab'
 
 const formatPercentage = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -400,7 +401,7 @@ export default function ParametresPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="consultants" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-7">
+            <TabsList className={`grid w-full ${role === 'manager' ? 'grid-cols-8' : 'grid-cols-7'}`}>
               <TabsTrigger value="consultants" className="flex items-center gap-2">
                 <Users size={16} />
                 <span className="hidden sm:inline">Consultants</span>
@@ -424,6 +425,10 @@ export default function ParametresPage() {
               <TabsTrigger value="objectifs" className="flex items-center gap-2">
                 <Target size={16} />
                 <span className="hidden sm:inline">Objectifs</span>
+              </TabsTrigger>
+              <TabsTrigger value="emails" className="flex items-center gap-2">
+                <Mail size={16} />
+                <span className="hidden sm:inline">Emails</span>
               </TabsTrigger>
               {role === 'manager' && (
                 <TabsTrigger value="vue" className="flex items-center gap-2">
@@ -838,6 +843,14 @@ export default function ParametresPage() {
                   </table>
                 </div>
               </div>
+            </TabsContent>
+
+            {/* Emails Tab — templates personnalisables par consultant */}
+            <TabsContent value="emails">
+              <EmailTemplatesTab
+                currentConsultantId={consultant?.id ?? null}
+                isManager={isManager}
+              />
             </TabsContent>
 
             {/* Vue (Visibility) Tab — Manager only */}

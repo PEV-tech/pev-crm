@@ -35,6 +35,13 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import {
+  loadConsultantEmailTemplate,
+  substituteVars,
+  wrapBodyInPevShell,
+  titleForTemplateKey,
+  type EmailTemplateVariables,
+} from '@/lib/kyc-email-templates'
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ||
@@ -131,10 +138,6 @@ export async function sendKycSignedNotification(
       ? client.raison_sociale || client.nom
       : `${client.prenom || ''} ${client.nom}`.trim() || client.nom
 
-  const subject = ctx.isIncomplete
-    ? `[KYC] Signature INCOMPLÈTE (${ctx.completionRate}%) — ${clientLabel}`
-    : `[KYC] Signature complète — ${clientLabel}`
-
   const fichePath = `/dashboard/clients/${ctx.clientId}`
   const ficheUrl = `${APP_URL}${fichePath}`
   const pdfDownloadUrl = `${APP_URL}/api/kyc/pdf/${ctx.clientId}`
@@ -143,18 +146,58 @@ export async function sendKycSignedNotification(
     timeStyle: 'short',
   })
 
-  const { html, text } = buildEmailContent({
-    clientLabel,
-    consultantPrenom: consultant.prenom || '',
-    signerName: ctx.signerName,
-    signedAtStr,
-    completionRate: ctx.completionRate,
-    missingFields: ctx.missingFields,
-    isIncomplete: ctx.isIncomplete,
-    ficheUrl,
-    pdfDownloadUrl,
-    hasAttachedPdf: !!ctx.pdfBytes,
-  })
+  // Retour #1 (2026-04-21) : chaque consultant peut personnaliser son
+  // template. On tente de charger un template custom ; sinon on retombe
+  // sur le template hardcodé historique (buildEmailContent).
+  const customTpl = await loadConsultantEmailTemplate(
+    ctx.admin,
+    consultant.id,
+    'kyc_signed_consultant',
+  )
+
+  let subject: string
+  let html: string
+  let text: string
+
+  if (customTpl) {
+    const vars: EmailTemplateVariables = {
+      clientLabel,
+      clientFirstName:
+        client.type_personne === 'morale' ? '' : client.prenom || '',
+      signerName: ctx.signerName,
+      signedAtStr,
+      completionRate: ctx.completionRate,
+      missingFields: ctx.missingFields.length
+        ? ctx.missingFields.join(', ')
+        : '—',
+      consultantPrenom: consultant.prenom || '',
+    }
+    subject = substituteVars(customTpl.subject, vars)
+    text = substituteVars(customTpl.bodyText, vars)
+    html = wrapBodyInPevShell({
+      title: titleForTemplateKey('kyc_signed_consultant', ctx.isIncomplete),
+      bodyText: text,
+      footer: 'Email automatique PEV CRM — ne pas répondre.',
+    })
+  } else {
+    subject = ctx.isIncomplete
+      ? `[KYC] Signature INCOMPLÈTE (${ctx.completionRate}%) — ${clientLabel}`
+      : `[KYC] Signature complète — ${clientLabel}`
+    const built = buildEmailContent({
+      clientLabel,
+      consultantPrenom: consultant.prenom || '',
+      signerName: ctx.signerName,
+      signedAtStr,
+      completionRate: ctx.completionRate,
+      missingFields: ctx.missingFields,
+      isIncomplete: ctx.isIncomplete,
+      ficheUrl,
+      pdfDownloadUrl,
+      hasAttachedPdf: !!ctx.pdfBytes,
+    })
+    html = built.html
+    text = built.text
+  }
 
   // 3. Send via Resend
   const resend = new Resend(apiKey)
@@ -308,7 +351,7 @@ export async function sendKycSignedNotificationToClient(
 
   const { data: client, error: readErr } = await ctx.admin
     .from('clients')
-    .select('id, nom, prenom, raison_sociale, type_personne, email')
+    .select('id, nom, prenom, raison_sociale, type_personne, email, consultant_id')
     .eq('id', ctx.clientId)
     .maybeSingle()
 
@@ -331,16 +374,69 @@ export async function sendKycSignedNotificationToClient(
     timeStyle: 'short',
   })
 
-  const { html, text } = buildClientEmailContent({
-    clientLabel,
-    firstName: client.type_personne === 'morale' ? '' : client.prenom || '',
-    signerName: ctx.signerName,
-    signedAtStr,
-    completionRate: ctx.completionRate,
-    missingFields: ctx.missingFields,
-    isIncomplete: ctx.isIncomplete,
-    hasAttachedPdf: !!ctx.pdfBytes,
-  })
+  // Retour #1 (2026-04-21) : template client personnalisable par le
+  // consultant qui suit ce client. On résout le prénom consultant pour
+  // le rendre disponible comme variable aussi sur l'email client.
+  let consultantPrenom = ''
+  let customTpl: Awaited<
+    ReturnType<typeof loadConsultantEmailTemplate>
+  > = null
+  if (client.consultant_id) {
+    const { data: cons } = await ctx.admin
+      .from('consultants')
+      .select('prenom')
+      .eq('id', client.consultant_id)
+      .maybeSingle()
+    consultantPrenom = (cons?.prenom as string) || ''
+    customTpl = await loadConsultantEmailTemplate(
+      ctx.admin,
+      client.consultant_id,
+      'kyc_signed_client',
+    )
+  }
+
+  let subjectStr: string
+  let html: string
+  let text: string
+
+  if (customTpl) {
+    const vars: EmailTemplateVariables = {
+      clientLabel,
+      clientFirstName:
+        client.type_personne === 'morale' ? '' : client.prenom || '',
+      signerName: ctx.signerName,
+      signedAtStr,
+      completionRate: ctx.completionRate,
+      missingFields: ctx.missingFields.length
+        ? ctx.missingFields.join(', ')
+        : '—',
+      consultantPrenom,
+    }
+    subjectStr = substituteVars(customTpl.subject, vars)
+    text = substituteVars(customTpl.bodyText, vars)
+    html = wrapBodyInPevShell({
+      title: titleForTemplateKey('kyc_signed_client', ctx.isIncomplete),
+      bodyText: text,
+      footer:
+        'Pour toute question, répondez simplement à cet email ou contactez votre conseiller habituel.',
+    })
+  } else {
+    subjectStr = ctx.isIncomplete
+      ? 'Votre dossier KYC signé (à compléter) — Private Equity Valley'
+      : 'Votre dossier KYC signé — Private Equity Valley'
+    const built = buildClientEmailContent({
+      clientLabel,
+      firstName: client.type_personne === 'morale' ? '' : client.prenom || '',
+      signerName: ctx.signerName,
+      signedAtStr,
+      completionRate: ctx.completionRate,
+      missingFields: ctx.missingFields,
+      isIncomplete: ctx.isIncomplete,
+      hasAttachedPdf: !!ctx.pdfBytes,
+    })
+    html = built.html
+    text = built.text
+  }
 
   const resend = new Resend(apiKey)
   const from = process.env.RESEND_FROM || DEFAULT_FROM
@@ -356,9 +452,7 @@ export async function sendKycSignedNotificationToClient(
     const result = await resend.emails.send({
       from,
       to: clientEmail,
-      subject: ctx.isIncomplete
-        ? 'Votre dossier KYC signé (à compléter) — Private Equity Valley'
-        : 'Votre dossier KYC signé — Private Equity Valley',
+      subject: subjectStr,
       html,
       text,
       attachments: attachments.length ? attachments : undefined,
