@@ -1790,6 +1790,7 @@ export type Database = {
       v_dossiers_complets: {
         Row: {
           apporteur_ext_nom: string | null
+          apporteur_id: string | null
           apporteur_label: string | null
           client_email: string | null
           client_id: string | null
@@ -1798,6 +1799,9 @@ export type Database = {
           client_prenom: string | null
           client_telephone: string | null
           client_ville: string | null
+          co_titulaire_id: string | null
+          co_titulaire_nom: string | null
+          co_titulaire_prenom: string | null
           commentaire: string | null
           commission_brute: number | null
           compagnie_nom: string | null
@@ -1843,6 +1847,7 @@ export type Database = {
       v_dossiers_remunerations: {
         Row: {
           apporteur_ext_nom: string | null
+          apporteur_id: string | null
           apporteur_label: string | null
           client_email: string | null
           client_id: string | null
@@ -1851,6 +1856,9 @@ export type Database = {
           client_prenom: string | null
           client_telephone: string | null
           client_ville: string | null
+          co_titulaire_id: string | null
+          co_titulaire_nom: string | null
+          co_titulaire_prenom: string | null
           commentaire: string | null
           commission_brute: number | null
           compagnie_nom: string | null

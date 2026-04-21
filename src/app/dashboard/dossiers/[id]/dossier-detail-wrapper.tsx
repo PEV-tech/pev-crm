@@ -161,8 +161,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           }
 
           // Initialize co-titulaire from view data
-          if (data.co_titulaire_id && (data as any).co_titulaire_nom) {
-            setCoTitulaire({ id: data.co_titulaire_id, nom: (data as any).co_titulaire_nom, prenom: (data as any).co_titulaire_prenom })
+          if (data.co_titulaire_id && data.co_titulaire_nom) {
+            setCoTitulaire({ id: data.co_titulaire_id, nom: data.co_titulaire_nom, prenom: data.co_titulaire_prenom ?? '' })
           }
           // Fetch linked partners for the client
           if (data.client_id) {
@@ -343,8 +343,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       if (data) {
         setDossier(data as VDossiersComplets)
         // Refresh co-titulaire display from refreshed data
-        if (data.co_titulaire_id && (data as any).co_titulaire_nom) {
-          setCoTitulaire({ id: data.co_titulaire_id, nom: (data as any).co_titulaire_nom, prenom: (data as any).co_titulaire_prenom })
+        if (data.co_titulaire_id && data.co_titulaire_nom) {
+          setCoTitulaire({ id: data.co_titulaire_id, nom: data.co_titulaire_nom, prenom: data.co_titulaire_prenom ?? '' })
         } else {
           setCoTitulaire(null)
         }

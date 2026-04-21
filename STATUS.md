@@ -126,7 +126,7 @@ Scripts dans `scripts/` (ordre chronologique) :
 
 ### P0 résiduel — Dette révélée par types honnêtes
 Tous post-V1, **aucun ne bloque l'usage quotidien** (cf. section "Dette révélée" plus haut pour le détail) :
-1. ~~Recréer la vue `v_dossiers_complets` pour exposer `co_titulaire_id` et `apporteur_id`~~ → script `recreate-v-dossiers-complets-full.sql` écrit (2026-04-21) **à appliquer en prod + régénérer les types** puis supprimer les casts `as any` côté front.
+1. ~~Recréer la vue `v_dossiers_complets` pour exposer `co_titulaire_id` et `apporteur_id`~~ → **DONE 2026-04-21** : script appliqué en prod via Chrome/pg-meta (autorisation Maxine, pas de CLI service_role token), types TS patchés manuellement dans `database.ts`, `as any` co_titulaire retirés dans `dossier-detail-wrapper.tsx`. Smoke test validé : les 2 vues exposent bien `apporteur_id`, `co_titulaire_id`, `co_titulaire_nom`, `co_titulaire_prenom`.
 2. Harmoniser `document-checklist` / `client-relances` : élargir les interfaces locales vers les `Row` Supabase.
 3. Annotations `map/reduce` dans `kyc-section.tsx` (~15 implicit-any).
 4. Bump `tsconfig.target` à ES2018+ pour régler `parse-kyc/route.ts`.
