@@ -118,7 +118,13 @@ interface EmpruntRow {
   duree?: string
   taux?: number
   crd?: number
+  /** Date de fin (maturité) — format ISO 'YYYY-MM-DD'. Historiquement
+   *  mal nommé « échéance » dans l'UI (d'où l'ambiguïté — cf. Chantier #3). */
   echeance?: string
+  /** Montant de l'échéance mensuelle en euros. Obligatoire côté métier
+   *  pour le calcul du taux d'endettement (Chantier #3, 2026-04-21).
+   *  Optionnel côté type car les fiches legacy ne le renseignent pas encore. */
+  echeance_mensuelle?: number
   detenteur_type?: DetenteurType
   co_titulaire_client_id?: string | null
 }
@@ -1278,12 +1284,27 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         (data.revenus_fonciers || 0) +
         (data.autres_revenus || 0)
 
-      // Taux d'endettement = total échéances emprunts mensuelles / revenus mensuels
-      const empruntsArr = data.emprunts || []
+      // Taux d'endettement = (charges mensuelles totales / revenus mensuels) × 100
+      //
+      // Formule corrigée le 2026-04-21 (Chantier #3) : on somme désormais le
+      // champ numérique `echeance_mensuelle` de chaque emprunt (euros/mois)
+      // au lieu de l'ancien `echeance` qui était en réalité une DATE de fin
+      // — le sum précédent additionnait des chaînes de caractères et
+      // retournait systématiquement 0.
+      //
+      // `emprunts_incomplets` signale les fiches legacy où l'échéance
+      // mensuelle n'a jamais été renseignée : elles faussent le taux tant
+      // que les valeurs n'ont pas été remontées par le consultant.
+      const empruntsArr: EmpruntRow[] = (data.emprunts || []) as EmpruntRow[]
       const totalEcheancesMensuelles = empruntsArr.reduce(
-        (sum: number, e: any) => sum + (e.echeance || 0),
-        0
+        (sum, e) => sum + (typeof e.echeance_mensuelle === 'number' ? e.echeance_mensuelle : 0),
+        0,
       )
+      const empruntsIncomplets = empruntsArr.filter(
+        (e) =>
+          typeof e.echeance_mensuelle !== 'number' ||
+          !Number.isFinite(e.echeance_mensuelle),
+      ).length
       const revenusMensuels = totalRevenus / 12
       const tauxEndettement =
         revenusMensuels > 0
@@ -1407,6 +1428,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           {formatCurrency(totalEcheancesMensuelles)} /mois sur{' '}
                           {formatCurrency(revenusMensuels)} /mois de revenus
                         </p>
+                        {empruntsIncomplets > 0 && (
+                          <p className="text-[11px] text-orange-600 mt-0.5">
+                            ⚠ {empruntsIncomplets} emprunt
+                            {empruntsIncomplets > 1 ? 's' : ''} sans échéance
+                            mensuelle renseignée — le taux est sous-estimé.
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -1475,6 +1503,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           {formatCurrency(totalEcheancesMensuelles)} /mois sur{' '}
                           {formatCurrency(revenusMensuels)} /mois de revenus
                         </p>
+                        {empruntsIncomplets > 0 && (
+                          <p className="text-[11px] text-orange-600 mt-0.5">
+                            ⚠ {empruntsIncomplets} emprunt
+                            {empruntsIncomplets > 1 ? 's' : ''} sans échéance
+                            mensuelle renseignée — le taux est sous-estimé.
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -2412,6 +2447,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
               taux: 0,
               crd: 0,
               echeance: '',
+              echeance_mensuelle: 0,
             },
           ],
         })
@@ -2479,7 +2515,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             </th>
                             <th className="text-right py-1 px-1 font-semibold">CRD</th>
                             <th className="text-left py-1 px-1 font-semibold">
-                              Échéance
+                              Date fin
+                            </th>
+                            <th
+                              className="text-right py-1 px-1 font-semibold"
+                              title="Montant mensuel remboursé — utilisé pour le calcul du taux d'endettement"
+                            >
+                              Éch. mens. €
                             </th>
                             <th className="text-left py-1 px-1 font-semibold">
                               Détenteur
@@ -2582,6 +2624,28 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
                                 />
                               </td>
+                              <td className="py-1 px-1">
+                                <input
+                                  type="number"
+                                  value={row.echeance_mensuelle ?? ''}
+                                  placeholder="Obligatoire"
+                                  onChange={e =>
+                                    updateEmpruntRow(
+                                      idx,
+                                      'echeance_mensuelle',
+                                      e.target.value === ''
+                                        ? undefined
+                                        : parseFloat(e.target.value) || 0,
+                                    )
+                                  }
+                                  className={`w-full px-1 py-0.5 border rounded text-xs ${
+                                    typeof row.echeance_mensuelle !== 'number'
+                                      ? 'border-orange-400 bg-orange-50'
+                                      : 'border-gray-300'
+                                  }`}
+                                  title="Montant de la mensualité — requis pour le taux d'endettement"
+                                />
+                              </td>
                               <td className="py-1 px-1 min-w-[140px]">
                                 <DetenteurCell
                                   value={row.detenteur_type}
@@ -2653,7 +2717,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             </th>
                             <th className="text-right py-1 px-1 font-semibold">CRD</th>
                             <th className="text-left py-1 px-1 font-semibold">
-                              Échéance
+                              Date fin
+                            </th>
+                            <th
+                              className="text-right py-1 px-1 font-semibold"
+                              title="Montant de la mensualité — utilisé pour le taux d'endettement"
+                            >
+                              Éch. mens.
                             </th>
                             <th className="text-left py-1 px-1 font-semibold">
                               Détenteur
@@ -2686,6 +2756,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                               </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {row.echeance || '-'}
+                              </td>
+                              <td className="py-1 px-1 text-right text-gray-900">
+                                {typeof row.echeance_mensuelle === 'number'
+                                  ? formatCurrency(row.echeance_mensuelle)
+                                  : '—'}
                               </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {row.detenteur_type
