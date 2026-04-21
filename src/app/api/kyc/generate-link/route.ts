@@ -84,8 +84,14 @@ export async function POST(req: NextRequest) {
     // Pré-remplissage mailto : sujet + corps simples, le consultant peut
     // éditer dans Gmail avant envoi. On évite d'inclure des infos sensibles
     // (pas d'ID client, pas de données KYC dans le corps).
+    // NB : la colonne `clients.type_personne` est un text stockant
+    // 'physique' | 'morale' (valeurs saisies par le formulaire
+    // `dashboard/clients/nouveau`). Historiquement 'PM' était écrit ici,
+    // ce qui dégradait silencieusement la pré-salutation pour les PM
+    // (branche else empruntée à tort → "prenom nom" vides au lieu de la
+    // raison sociale). Fix 2026-04-21.
     const displayName =
-      client.type_personne === 'PM'
+      client.type_personne === 'morale'
         ? client.raison_sociale || ''
         : `${client.prenom || ''} ${client.nom || ''}`.trim()
     const subject = `Finalisation de votre dossier KYC — Private Equity Valley`

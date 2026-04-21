@@ -99,8 +99,12 @@ export function KycPublicClient({ token }: { token: string }) {
   }
 
   const isSigned = !!data.kyc_signed_at
+  // NB : la colonne `type_personne` stocke 'physique' | 'morale' (texte
+  // libre, valeurs saisies par le form `dashboard/clients/nouveau`).
+  // Anciennement 'PM' — jamais matché — donnait un nom vide sur le
+  // header public des clients PM. Fix 2026-04-21.
   const displayName =
-    data.type_personne === 'PM'
+    data.type_personne === 'morale'
       ? data.raison_sociale || ''
       : `${data.prenom || ''} ${data.nom || ''}`.trim()
 
