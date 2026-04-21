@@ -21,6 +21,7 @@ import CommunicationsTab from '@/components/google/CommunicationsTab'
 import { PiecesJointes } from '@/components/clients/pieces-jointes'
 import { KYCSection, KYCSectionHandle } from '@/components/clients/kyc-section'
 import { KYCUpload } from '@/components/clients/kyc-upload'
+import { KycPropositionDiff } from '@/components/clients/kyc-proposition-diff'
 
 import { formatCurrency } from '@/lib/formatting'
 
@@ -570,6 +571,15 @@ export default function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Proposition KYC pending — diff viewer (Chantier #4c) */}
+          <KycPropositionDiff
+            clientId={clientId}
+            onApplied={async () => {
+              const { data } = await supabase.from('clients').select('*').eq('id', clientId).single()
+              if (data) setClient(data as ClientInfo)
+            }}
+          />
 
           {/* KYC Section */}
           <KYCSection
