@@ -54,8 +54,47 @@ interface EditState {
   [key: string]: any
 }
 
-interface KYCSectionHandle {
+export interface KYCSectionHandle {
   populateFromKyc: (data: any) => void
+}
+
+// Shapes des lignes stockées dans les colonnes JSONB du client.
+// On reste volontairement en "partial" (tous champs optionnels) car
+// les entrées legacy peuvent manquer de colonnes récentes — les
+// composants de rendu gèrent déjà les cas `undefined`.
+interface ImmobilierRow {
+  type_bien?: string
+  designation?: string
+  date_acq?: string
+  valeur_acq?: number
+  valeur_actuelle?: number
+  detention?: string
+  proportion?: number | null
+  taux_credit?: number
+  duree_credit?: number
+  crd?: number
+  charges?: number
+}
+
+interface ProduitFinancierRow {
+  type_produit?: string
+  designation?: string
+  detenteur?: string
+  valeur?: number
+  date_ouverture?: string
+  versements_reguliers?: string
+  rendement?: number
+}
+
+interface EmpruntRow {
+  designation?: string
+  etablissement?: string
+  montant?: number
+  date?: string
+  duree?: string
+  taux?: number
+  crd?: number
+  echeance?: string
 }
 
 const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
@@ -1385,7 +1424,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     const PatrimoineImmobilierSection = () => {
       const section: SectionKey = 'patrimoine_immobilier'
       const isExpanded = expandedSections.has(section)
-      const immobilier = data.patrimoine_immobilier || []
+      const immobilier: ImmobilierRow[] = (data.patrimoine_immobilier || []) as ImmobilierRow[]
 
       // Detect if detention means community (50/50 split)
       // If detention is not specified, fall back to régime matrimonial
@@ -1590,7 +1629,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                 >
                                   <option value="">—</option>
                                   {row.type_bien &&
-                                    !TYPE_BIEN_IMMOBILIER_OPTIONS.includes(
+                                    !(TYPE_BIEN_IMMOBILIER_OPTIONS as readonly string[]).includes(
                                       row.type_bien
                                     ) && (
                                       <option value={row.type_bien}>
@@ -1670,7 +1709,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                 >
                                   <option value="">—</option>
                                   {row.detention &&
-                                    !TYPE_DETENTION_OPTIONS.includes(row.detention) && (
+                                    !(TYPE_DETENTION_OPTIONS as readonly string[]).includes(row.detention) && (
                                       <option value={row.detention}>
                                         {row.detention}
                                       </option>
@@ -1889,7 +1928,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     const ProduitsFinianciers = () => {
       const section: SectionKey = 'produits_financiers'
       const isExpanded = expandedSections.has(section)
-      const produits = data.produits_financiers || []
+      const produits: ProduitFinancierRow[] = (data.produits_financiers || []) as ProduitFinancierRow[]
 
       const addProduitRow = () => {
         setEditData({
@@ -1999,7 +2038,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                 >
                                   <option value="">—</option>
                                   {row.type_produit &&
-                                    !TYPE_PRODUIT_FINANCIER_OPTIONS.includes(
+                                    !(TYPE_PRODUIT_FINANCIER_OPTIONS as readonly string[]).includes(
                                       row.type_produit
                                     ) && (
                                       <option value={row.type_produit}>
@@ -2183,7 +2222,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     const EmpruntsSection = () => {
       const section: SectionKey = 'emprunts'
       const isExpanded = expandedSections.has(section)
-      const emprunts = data.emprunts || []
+      const emprunts: EmpruntRow[] = (data.emprunts || []) as EmpruntRow[]
 
       const addEmpruntRow = () => {
         setEditData({
