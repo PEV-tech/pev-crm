@@ -1,6 +1,6 @@
 # PEV CRM — État du repo
 
-**Mis à jour** : 2026-04-21 · **Commit de référence** : `dc3e267` (après batch 3 — audit logs)
+**Mis à jour** : 2026-04-21 · **Commit de référence** : `9a71c26` (KYC batch A + B + C livrés — PDF, email consultant, nettoyage types)
 
 Ce document est la **source de vérité** sur l'état réel du code. Toute session Claude qui ouvre ce repo doit le lire avant d'écrire du code. À maintenir à jour après chaque feature mergée ou fix important.
 
@@ -44,7 +44,7 @@ Légende : ✅ fonctionnel · ⚠️ partiel (visible mais incomplet) · 🚫 ca
 La régénération honnête des types (commit `cea09a9`) a fait remonter des incohérences que les types hand-edited masquaient :
 
 - **`v_dossiers_complets` n'expose pas `co_titulaire_id` / `apporteur_id`** (vue pas rafraîchie après `add-co-titulaire.sql`). Le code `dossier-detail-wrapper.tsx` (L164, L165, L191, L346, L347, L471, L596) lit ces champs → renvoie `undefined` au runtime. Traité comme "no co-titulaire" par la logique de falsy-check, donc pas de crash, mais la feature co-titulaire est **silencieusement partielle**. **Fix** : recréer la vue avec ces colonnes.
-- **kyc-section.tsx** : ~15 erreurs implicit-any dans des callbacks `map/reduce`. Pré-existant, annotations manquantes.
+- ~~**kyc-section.tsx** : ~15 erreurs implicit-any dans des callbacks `map/reduce`~~ → **DONE 2026-04-21 (commit `9a71c26`, Batch C)** : 22 erreurs réelles nettoyées en introduisant 3 interfaces locales (`ImmobilierRow`, `ProduitFinancierRow`, `EmpruntRow`) côté kyc-section + widening des `.includes()` sur enums `as const`. Export de `KYCSectionHandle` au passage (utilisé par `dashboard/clients/[id]/page.tsx`). Typecheck total : 39 → 17 erreurs (toutes hors-scope KYC).
 - **document-checklist / client-relances** : les `Row` types Supabase sont plus larges que les interfaces locales (ex: `statut: string` vs `"a_faire" | "fait" | …`). À harmoniser.
 - **clients/[id]/page.tsx(218,669)** : `Update` type de Supabase exclut `null` pour colonnes nullable-with-default ; `ClientInfo` local manque `ville`. Micro-fix.
 - **dossiers/nouveau page.tsx(201)** : `client_id: string | null` vs signature Insert qui veut `string | undefined`. Harmoniser.
@@ -129,7 +129,7 @@ Scripts dans `scripts/` (ordre chronologique) :
 Tous post-V1, **aucun ne bloque l'usage quotidien** (cf. section "Dette révélée" plus haut pour le détail) :
 1. ~~Recréer la vue `v_dossiers_complets` pour exposer `co_titulaire_id` et `apporteur_id`~~ → **DONE 2026-04-21** : script appliqué en prod via Chrome/pg-meta (autorisation Maxine, pas de CLI service_role token), types TS patchés manuellement dans `database.ts`, `as any` co_titulaire retirés dans `dossier-detail-wrapper.tsx`. Smoke test validé : les 2 vues exposent bien `apporteur_id`, `co_titulaire_id`, `co_titulaire_nom`, `co_titulaire_prenom`.
 2. Harmoniser `document-checklist` / `client-relances` : élargir les interfaces locales vers les `Row` Supabase.
-3. Annotations `map/reduce` dans `kyc-section.tsx` (~15 implicit-any).
+3. ~~Annotations `map/reduce` dans `kyc-section.tsx` (~15 implicit-any)~~ → **DONE** (commit `9a71c26`, Batch C KYC).
 4. Bump `tsconfig.target` à ES2018+ pour régler `parse-kyc/route.ts`.
 
 ### P1 — Dette technique
@@ -145,7 +145,8 @@ Cf. `/sessions/charming-jolly-ramanujan/mnt/.auto-memory/project_crm_roadmap.md`
 La V1 de la signature KYC (commit de ce jour) couvre : détection complétude, avertissement, double validation, saisie nom, persistance audit (IP, timestamp, champs manquants, consentements). **Non couvert, à livrer ensuite :**
 
 - ~~**Génération PDF du KYC signé**~~ → **Batch A livré 2026-04-21** : `pdf-lib` (+ `@pdf-lib/fontkit`) installés, `src/lib/kyc-pdf.ts` produit un PDF pur-serveur dispatché PP/PM (constantes cabinet Maxine Laisné / RCS 803 414 796 / maxine@private-equity-valley.com), upload vers bucket privé `kyc-documents` via service_role dans `/api/kyc/sign-public/route.ts` (graceful degradation si `SUPABASE_SERVICE_ROLE_KEY` absent), route `/api/kyc/pdf/[clientId]/route.ts` émet une signed URL 5 min pour téléchargement consultant, lien "Télécharger le PDF signé" affiché dans la bannière "Signé" de `kyc-section.tsx`. `.env.local.example` documente `SUPABASE_SERVICE_ROLE_KEY`. Migration `add-kyc-pdf-storage.sql` appliquée en prod.
-- **Notification consultant** lors d'une signature incomplète. Pas d'infra email en prod actuellement (seuls des `mailto:` côté UI). Deux options : (a) ajouter Resend/SendGrid + route `/api/notify-kyc-signed`, (b) banner/badge in-app sur le dashboard consultant (requête sur `kyc_incomplete_signed=true AND kyc_signed_at > now()-'7 days'`, déjà indexée via `idx_clients_kyc_incomplete_signed`).
+- ~~**Notification consultant** lors d'une signature incomplète~~ → **Batch B livré 2026-04-21 (commit `dc060be`)** : Resend ^6.12.2 installé, `src/lib/kyc-email.ts` résout l'email consultant via `clients.consultant_id → consultants.auth_user_id → admin.auth.admin.getUserById()`, notifie **à chaque signature (complète OU incomplète)** avec PDF en pièce jointe (bytes conservés depuis la génération) ou lien `/api/kyc/pdf/[clientId]`. Sujet et copy FR adaptés. Dégradation gracieuse : `skipped='no-api-key'|'no-consultant'|'no-consultant-email'|'no-client'`. `RESEND_API_KEY` et `RESEND_FROM` (optionnel, défaut `PEV KYC <kyc@private-equity-valley.com>`) à positionner côté Vercel.
+- **Test end-to-end documenté** → **Batch D livré 2026-04-21** : `docs/kyc-e2e-test.md` décrit 4 scénarios (PP complet, PP incomplet, PM, dégradations gracieuses) + vérifications ACPR/DDA côté BDD + pistes d'évolution (audit log immuable, eIDAS/PAdES, webhook Resend).
 - **Signature pad canvas** ou intégration Yousign/DocuSign pour remplacer la saisie texte du nom (V1 pragmatique, suffisante pour un CRM interne utilisé en présence du client, mais pas pour une signature à distance).
 
 ---
