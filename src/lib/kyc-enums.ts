@@ -90,3 +90,32 @@ export const TYPE_DETENTION_OPTIONS = [
   'Via société',
 ] as const
 export type TypeDetention = (typeof TYPE_DETENTION_OPTIONS)[number]
+
+/**
+ * Rôle du détenteur d'un actif (ou d'une dette) au sein d'un couple/dossier.
+ *
+ * - `client` : détenu exclusivement par le client principal de la fiche KYC.
+ * - `co_titulaire` : détenu exclusivement par le co-titulaire (conjoint,
+ *    partenaire de PACS, co-investisseur). L'actif est informatif côté fiche
+ *    du client mais n'est pas consolidé dans son patrimoine.
+ * - `joint` : détenu conjointement. Par convention la ligne est stockée UNE
+ *    SEULE FOIS sur la fiche du client principal, et référence le co-titulaire
+ *    via `co_titulaire_client_id`. À la lecture, la fiche du co-titulaire
+ *    voit automatiquement la ligne (sync bidirectionnelle, cf. lib/kyc-bidi.ts).
+ *
+ * Cette valeur est orthogonale à `TYPE_DETENTION_OPTIONS` qui décrit la forme
+ * juridique (pleine propriété, usufruit, indivision…).
+ */
+export const DETENTEUR_TYPE_OPTIONS = [
+  'client',
+  'co_titulaire',
+  'joint',
+] as const
+export type DetenteurType = (typeof DETENTEUR_TYPE_OPTIONS)[number]
+
+/** Libellés FR des types de détenteur pour affichage UI. */
+export const DETENTEUR_TYPE_LABELS: Record<DetenteurType, string> = {
+  client: 'Client',
+  co_titulaire: 'Co-titulaire',
+  joint: 'Joint',
+}

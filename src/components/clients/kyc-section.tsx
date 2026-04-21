@@ -30,8 +30,17 @@ import {
   TYPE_BIEN_IMMOBILIER_OPTIONS,
   TYPE_PRODUIT_FINANCIER_OPTIONS,
   TYPE_DETENTION_OPTIONS,
+  DETENTEUR_TYPE_OPTIONS,
+  DETENTEUR_TYPE_LABELS,
   needsRegimeMatrimonial,
+  type DetenteurType,
 } from '@/lib/kyc-enums'
+import {
+  fetchCoTitulaireOptions,
+  fetchExternalJointAssets,
+  type CoTitulaireOption,
+  type ExternalJointAsset,
+} from '@/lib/kyc-bidi'
 import { KYCSignatureDialog } from './kyc-signature-dialog'
 
 interface KYCSectionProps {
@@ -62,6 +71,12 @@ export interface KYCSectionHandle {
 // On reste volontairement en "partial" (tous champs optionnels) car
 // les entrées legacy peuvent manquer de colonnes récentes — les
 // composants de rendu gèrent déjà les cas `undefined`.
+//
+// Champs communs ajoutés 2026-04-21 (Chantier #2) :
+//   - `detenteur_type` : 'client' | 'co_titulaire' | 'joint'
+//      (rôle du détenteur au sein du couple/dossier — cf. kyc-enums.ts)
+//   - `co_titulaire_client_id` : UUID du client co-détenteur, requis
+//      pour 'co_titulaire' et 'joint', null sinon.
 interface ImmobilierRow {
   type_bien?: string
   designation?: string
@@ -74,16 +89,25 @@ interface ImmobilierRow {
   duree_credit?: number
   crd?: number
   charges?: number
+  detenteur_type?: DetenteurType
+  co_titulaire_client_id?: string | null
 }
 
 interface ProduitFinancierRow {
   type_produit?: string
   designation?: string
+  /**
+   * @deprecated champ texte libre historique — remplacé par `detenteur_type`
+   * + `co_titulaire_client_id`. Conservé pour back-compat lecture des fiches
+   * anciennes (sera supprimé quand les fiches existantes auront été migrées).
+   */
   detenteur?: string
   valeur?: number
   date_ouverture?: string
   versements_reguliers?: string
   rendement?: number
+  detenteur_type?: DetenteurType
+  co_titulaire_client_id?: string | null
 }
 
 interface EmpruntRow {
@@ -95,7 +119,14 @@ interface EmpruntRow {
   taux?: number
   crd?: number
   echeance?: string
+  detenteur_type?: DetenteurType
+  co_titulaire_client_id?: string | null
 }
+
+// DiversRow n'est pas encore rendu dans une table éditable (la section
+// "patrimoine_divers" est persistée mais sans UI dédiée en V1). Quand
+// elle le sera, elle devra suivre la même convention (detenteur_type +
+// co_titulaire_client_id) pour rester compatible avec la sync bidi.
 
 const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
   ({ client, onUpdate }, ref) => {
@@ -104,12 +135,47 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       new Set()
     )
     const [editData, setEditData] = React.useState<EditState>({})
+    // Options pour le <select> co-titulaire (autres clients PEV).
+    const [coTitulaireOptions, setCoTitulaireOptions] = React.useState<
+      CoTitulaireOption[]
+    >([])
+    // Actifs « joints » détenus par d'autres clients qui référencent le client
+    // courant — affichés en lecture seule (édition sur le dossier source).
+    const [externalJointAssets, setExternalJointAssets] = React.useState<
+      ExternalJointAsset[]
+    >([])
     const [saving, setSaving] = React.useState(false)
     const [signatureOpen, setSignatureOpen] = React.useState(false)
     const [linkBusy, setLinkBusy] = React.useState<null | 'copy' | 'email'>(null)
     const [linkFeedback, setLinkFeedback] = React.useState<string | null>(null)
 
     const supabase = React.useMemo(() => createClient(), [])
+
+    // Chargement asynchrone des données liées au Détenteur (Chantier #2) :
+    // - Liste des autres clients PEV pour peupler le <select> co-titulaire.
+    // - Actifs « joints » d'autres clients qui référencent le client courant,
+    //   affichés en lecture seule avec un badge d'origine.
+    // Tolérant aux erreurs (tableaux vides si la requête échoue).
+    React.useEffect(() => {
+      if (!client?.id) {
+        setCoTitulaireOptions([])
+        setExternalJointAssets([])
+        return
+      }
+      let cancelled = false
+      ;(async () => {
+        const [options, external] = await Promise.all([
+          fetchCoTitulaireOptions(supabase, client.id),
+          fetchExternalJointAssets(supabase, client.id),
+        ])
+        if (cancelled) return
+        setCoTitulaireOptions(options)
+        setExternalJointAssets(external)
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [client?.id, supabase])
 
     // Complétude calculée à partir du client actuel (recalculée à chaque
     // changement de props — les edits en cours ne comptent pas tant que
@@ -1420,6 +1486,63 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       )
     }
 
+    // Helper partagé par les 3 sections d'actifs éditables : rend la cellule
+    // « Détenteur » (select 'Client' / 'Co-titulaire' / 'Joint') + le sélecteur
+    // de co-titulaire (affiché uniquement quand le rôle le requiert).
+    // `onChange` reçoit le couple (type, co_titulaire_client_id) pour que
+    // l'appelant puisse les appliquer sur la ligne en une seule MAJ.
+    const DetenteurCell = ({
+      value,
+      coTitulaireId,
+      onChange,
+    }: {
+      value: DetenteurType | undefined
+      coTitulaireId: string | null | undefined
+      onChange: (type: DetenteurType | undefined, coTitId: string | null) => void
+    }) => {
+      const current: DetenteurType = (value ?? 'client') as DetenteurType
+      const needsPicker = current === 'co_titulaire' || current === 'joint'
+      return (
+        <div className="flex flex-col gap-1">
+          <select
+            value={current}
+            onChange={e => {
+              const t = e.target.value as DetenteurType
+              // Lorsqu'on repasse à 'client', on efface la référence co-titulaire.
+              onChange(t, t === 'client' ? null : coTitulaireId ?? null)
+            }}
+            className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+          >
+            {DETENTEUR_TYPE_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>
+                {DETENTEUR_TYPE_LABELS[opt]}
+              </option>
+            ))}
+          </select>
+          {needsPicker && (
+            <select
+              value={coTitulaireId ?? ''}
+              onChange={e => onChange(current, e.target.value || null)}
+              className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+            >
+              <option value="">— Sélectionner un client —</option>
+              {coTitulaireOptions.map(o => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )
+    }
+
+    // Lookup inverse UUID → libellé pour les affichages read-only.
+    const coTitulaireLabel = (id: string | null | undefined): string => {
+      if (!id) return '—'
+      return coTitulaireOptions.find(o => o.id === id)?.label ?? '—'
+    }
+
     // Patrimoine immobilier section
     const PatrimoineImmobilierSection = () => {
       const section: SectionKey = 'patrimoine_immobilier'
@@ -1608,6 +1731,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             <th className="text-right py-1 px-1 font-semibold">CRD</th>
                             <th className="text-right py-1 px-1 font-semibold">
                               Charges
+                            </th>
+                            <th className="text-left py-1 px-1 font-semibold">
+                              Détenteur
                             </th>
                             <th className="text-center py-1 px-1">Action</th>
                           </tr>
@@ -1802,6 +1928,24 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
                                 />
                               </td>
+                              <td className="py-1 px-1 min-w-[140px]">
+                                <DetenteurCell
+                                  value={row.detenteur_type}
+                                  coTitulaireId={row.co_titulaire_client_id}
+                                  onChange={(type, coTitId) => {
+                                    const updated = [...immobilier]
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      detenteur_type: type,
+                                      co_titulaire_client_id: coTitId,
+                                    }
+                                    setEditData({
+                                      ...editData,
+                                      patrimoine_immobilier: updated,
+                                    })
+                                  }}
+                                />
+                              </td>
                               <td className="py-1 px-1 text-center">
                                 <button
                                   onClick={() => removeImmobilierRow(idx)}
@@ -1860,6 +2004,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             <th className="text-right py-1 px-1 font-semibold">
                               Charges
                             </th>
+                            <th className="text-left py-1 px-1 font-semibold">
+                              Détenteur
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1908,6 +2055,17 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                   row.charges,
                                   row.detention,
                                   row.proportion
+                                )}
+                              </td>
+                              <td className="py-1 px-1 text-gray-900">
+                                {row.detenteur_type
+                                  ? DETENTEUR_TYPE_LABELS[row.detenteur_type]
+                                  : 'Client'}
+                                {(row.detenteur_type === 'co_titulaire' ||
+                                  row.detenteur_type === 'joint') && (
+                                  <span className="block text-gray-500 text-[10px]">
+                                    {coTitulaireLabel(row.co_titulaire_client_id)}
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -2062,14 +2220,22 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
                                 />
                               </td>
-                              <td className="py-1 px-1">
-                                <input
-                                  type="text"
-                                  value={row.detenteur}
-                                  onChange={e =>
-                                    updateProduitRow(idx, 'detenteur', e.target.value)
-                                  }
-                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                              <td className="py-1 px-1 min-w-[140px]">
+                                <DetenteurCell
+                                  value={row.detenteur_type}
+                                  coTitulaireId={row.co_titulaire_client_id}
+                                  onChange={(type, coTitId) => {
+                                    const updated = [...produits]
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      detenteur_type: type,
+                                      co_titulaire_client_id: coTitId,
+                                    }
+                                    setEditData({
+                                      ...editData,
+                                      produits_financiers: updated,
+                                    })
+                                  }}
                                 />
                               </td>
                               <td className="py-1 px-1">
@@ -2190,7 +2356,15 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                 {row.designation || '-'}
                               </td>
                               <td className="py-1 px-1 text-gray-900">
-                                {row.detenteur || '-'}
+                                {row.detenteur_type
+                                  ? DETENTEUR_TYPE_LABELS[row.detenteur_type]
+                                  : row.detenteur || 'Client'}
+                                {(row.detenteur_type === 'co_titulaire' ||
+                                  row.detenteur_type === 'joint') && (
+                                  <span className="block text-gray-500 text-[10px]">
+                                    {coTitulaireLabel(row.co_titulaire_client_id)}
+                                  </span>
+                                )}
                               </td>
                               <td className="py-1 px-1 text-right text-gray-900">
                                 {formatCurrency(row.valeur)}
@@ -2307,6 +2481,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             <th className="text-left py-1 px-1 font-semibold">
                               Échéance
                             </th>
+                            <th className="text-left py-1 px-1 font-semibold">
+                              Détenteur
+                            </th>
                             <th className="text-center py-1 px-1">Action</th>
                           </tr>
                         </thead>
@@ -2405,6 +2582,24 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
                                 />
                               </td>
+                              <td className="py-1 px-1 min-w-[140px]">
+                                <DetenteurCell
+                                  value={row.detenteur_type}
+                                  coTitulaireId={row.co_titulaire_client_id}
+                                  onChange={(type, coTitId) => {
+                                    const updated = [...emprunts]
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      detenteur_type: type,
+                                      co_titulaire_client_id: coTitId,
+                                    }
+                                    setEditData({
+                                      ...editData,
+                                      emprunts: updated,
+                                    })
+                                  }}
+                                />
+                              </td>
                               <td className="py-1 px-1 text-center">
                                 <button
                                   onClick={() => removeEmpruntRow(idx)}
@@ -2460,6 +2655,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             <th className="text-left py-1 px-1 font-semibold">
                               Échéance
                             </th>
+                            <th className="text-left py-1 px-1 font-semibold">
+                              Détenteur
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2488,6 +2686,17 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                               </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {row.echeance || '-'}
+                              </td>
+                              <td className="py-1 px-1 text-gray-900">
+                                {row.detenteur_type
+                                  ? DETENTEUR_TYPE_LABELS[row.detenteur_type]
+                                  : 'Client'}
+                                {(row.detenteur_type === 'co_titulaire' ||
+                                  row.detenteur_type === 'joint') && (
+                                  <span className="block text-gray-500 text-[10px]">
+                                    {coTitulaireLabel(row.co_titulaire_client_id)}
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -2971,6 +3180,99 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             {EmpruntsSection()}
             {FiscaliteSection()}
             {ObjectifsSection()}
+
+            {/*
+              Actifs joints « externes » — détenus par un autre client PEV qui
+              a déclaré cette fiche comme co-titulaire. Affichés en lecture
+              seule, l'édition se fait sur le dossier source (source de vérité).
+              Rend rien si la liste est vide. Cf. lib/kyc-bidi.ts.
+            */}
+            {externalJointAssets.length > 0 && !isEditMode && (
+              <div className="border-b border-gray-200 last:border-b-0">
+                <div className="p-3 bg-indigo-50/40">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={14} className="text-indigo-600" />
+                    <h3 className="font-semibold text-sm text-gray-900">
+                      Actifs joints détenus avec un autre client
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-gray-600 mb-2">
+                    Ces actifs sont enregistrés sur le dossier de
+                    l&apos;autre co-détenteur. Ils apparaissent ici en
+                    lecture seule — toute modification doit se faire sur
+                    le dossier source.
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-300">
+                          <th className="text-left py-1 px-1 font-semibold">
+                            Section
+                          </th>
+                          <th className="text-left py-1 px-1 font-semibold">
+                            Désignation
+                          </th>
+                          <th className="text-right py-1 px-1 font-semibold">
+                            Valeur
+                          </th>
+                          <th className="text-left py-1 px-1 font-semibold">
+                            Édité sur dossier
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {externalJointAssets.map((ext, i) => {
+                          const row = ext.row as Record<string, unknown>
+                          const designation =
+                            (row.designation as string | undefined) ||
+                            (row.type_bien as string | undefined) ||
+                            (row.type_produit as string | undefined) ||
+                            '-'
+                          const valeur =
+                            (row.valeur_actuelle as number | undefined) ??
+                            (row.valeur as number | undefined) ??
+                            (row.montant as number | undefined)
+                          const sectionLabel =
+                            ext.section === 'patrimoine_immobilier'
+                              ? 'Immobilier'
+                              : ext.section === 'produits_financiers'
+                              ? 'Financier'
+                              : ext.section === 'emprunts'
+                              ? 'Emprunt'
+                              : 'Divers'
+                          return (
+                            <tr
+                              key={`${ext.source_client_id}-${ext.section}-${ext.source_index}-${i}`}
+                              className="border-b border-gray-200"
+                            >
+                              <td className="py-1 px-1 text-gray-900">
+                                {sectionLabel}
+                              </td>
+                              <td className="py-1 px-1 text-gray-900">
+                                {designation}
+                              </td>
+                              <td className="py-1 px-1 text-right text-gray-900">
+                                {typeof valeur === 'number'
+                                  ? formatCurrency(valeur)
+                                  : '-'}
+                              </td>
+                              <td className="py-1 px-1">
+                                <a
+                                  href={`/dashboard/clients/${ext.source_client_id}`}
+                                  className="text-indigo-600 hover:underline"
+                                >
+                                  {ext.source_client_display}
+                                </a>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
 
