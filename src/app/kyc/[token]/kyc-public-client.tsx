@@ -369,24 +369,31 @@ export function KycPublicClient({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-500">Chargement…</div>
+      <main className="min-h-screen flex flex-col bg-[#f7f8fb]">
+        <PevBrandHeader />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-[#64748b] text-sm">Chargement…</div>
+        </div>
       </main>
     )
   }
 
   if (error || !initialData) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="max-w-md bg-white border border-gray-200 rounded-lg p-8 text-center">
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">
-            Lien indisponible
-          </h1>
-          <p className="text-gray-600 text-sm">
-            {error ||
-              'Ce lien n\'est plus valide. Contactez votre consultant pour en obtenir un nouveau.'}
-          </p>
+      <main className="min-h-screen flex flex-col bg-[#f7f8fb]">
+        <PevBrandHeader />
+        <div className="flex-1 flex items-center justify-center px-4 py-12">
+          <div className="max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-10 text-center">
+            <h1 className="text-xl font-serif text-[#243f6f] mb-2">
+              Lien indisponible
+            </h1>
+            <p className="text-slate-600 text-sm">
+              {error ||
+                'Ce lien n\'est plus valide. Contactez votre consultant pour en obtenir un nouveau.'}
+            </p>
+          </div>
         </div>
+        <PevBrandFooter />
       </main>
     )
   }
@@ -447,24 +454,28 @@ export function KycPublicClient({ token }: { token: string }) {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 py-10">
-      <div className="max-w-3xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">
-            Dossier KYC — Private Equity Valley
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Bonjour {displayName || '—'}, vous pouvez vérifier et compléter
-            les informations ci-dessous avant de signer électroniquement
-            votre dossier. Votre consultant validera ensuite vos
-            modifications.
+    <main className="min-h-screen bg-[#f7f8fb] flex flex-col">
+      <PevBrandHeader />
+      <div className="flex-1 w-full max-w-3xl mx-auto px-4 py-10">
+        {/* Header du dossier */}
+        <div className="mb-8">
+          <p className="text-[11px] tracking-[0.2em] uppercase text-[#243f6f]/70 font-medium mb-2">
+            Dossier KYC
           </p>
+          <h1 className="text-3xl font-serif text-[#243f6f] leading-tight">
+            Bonjour {displayName || '—'}
+          </h1>
+          <p className="text-sm text-slate-600 mt-3 leading-relaxed max-w-2xl">
+            Vous pouvez vérifier et compléter les informations ci-dessous
+            avant de signer électroniquement votre dossier. Votre
+            consultant validera ensuite vos modifications.
+          </p>
+          <div className="mt-4 h-px w-16 bg-[#243f6f]/40" />
         </div>
 
         {/* Bandeau de statut */}
         {isSigned ? (
-          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4">
+          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4">
             <p className="text-sm font-medium text-green-900">
               Dossier signé
             </p>
@@ -475,7 +486,7 @@ export function KycPublicClient({ token }: { token: string }) {
             </p>
           </div>
         ) : pendingProposition ? (
-          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <p className="text-sm font-medium text-amber-900">
               Soumission reçue — en attente de validation
             </p>
@@ -492,8 +503,8 @@ export function KycPublicClient({ token }: { token: string }) {
             </p>
           </div>
         ) : (
-          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <p className="text-sm text-blue-900">
+          <div className="mb-6 rounded-xl border-l-4 border-l-[#243f6f] border border-[#243f6f]/15 bg-white shadow-sm p-4">
+            <p className="text-sm text-slate-700 leading-relaxed">
               Merci de vérifier les informations ci-dessous. Toute
               modification sera soumise à votre consultant pour
               validation avant application.
@@ -509,9 +520,9 @@ export function KycPublicClient({ token }: { token: string }) {
           {SECTIONS.map((section) => (
             <section
               key={section.title}
-              className="bg-white border border-gray-200 rounded-lg p-5"
+              className="bg-white border border-slate-200 rounded-xl shadow-sm p-6"
             >
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">
+              <h2 className="text-[11px] tracking-[0.18em] uppercase text-[#243f6f] font-semibold mb-4 pb-3 border-b border-slate-100">
                 {section.title}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
@@ -573,11 +584,11 @@ export function KycPublicClient({ token }: { token: string }) {
 
         {/* Action */}
         {!isSigned && !pendingProposition && (
-          <div className="mt-6 flex justify-end">
+          <div className="mt-8 flex justify-end">
             <button
               type="button"
               onClick={() => setShowSubmit(true)}
-              className="inline-flex items-center gap-2 bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800"
+              className="inline-flex items-center gap-2 bg-[#243f6f] text-white px-6 py-3 rounded-lg text-sm font-medium hover:bg-[#1a2f54] transition-colors shadow-sm"
             >
               Signer et soumettre
             </button>
@@ -611,7 +622,7 @@ export function KycPublicClient({ token }: { token: string }) {
         })()}
 
         {/* Footer légal */}
-        <p className="mt-8 text-xs text-gray-500 leading-relaxed">
+        <p className="mt-10 text-xs text-slate-500 leading-relaxed">
           Les informations ci-dessus sont collectées par Private Equity
           Valley dans le cadre de ses obligations réglementaires (KYC /
           LCB-FT). En signant, vous certifiez l&apos;exactitude des
@@ -619,7 +630,82 @@ export function KycPublicClient({ token }: { token: string }) {
           transféré.
         </p>
       </div>
+      <PevBrandFooter />
     </main>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Charte PEV — header + footer aux couleurs de private-equity-valley.com */
+/* Retour Maxine #3 (2026-04-21) : le portail public doit porter la   */
+/* marque PEV (pas la charte neutre du dashboard interne). Navy        */
+/* #243f6f est la couleur déjà utilisée dans les emails transactionnels */
+/* (cohérence cross-canal).                                             */
+/* ------------------------------------------------------------------ */
+
+function PevBrandHeader() {
+  return (
+    <header className="w-full bg-[#243f6f] text-white">
+      <div className="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-white/10 border border-white/30 flex items-center justify-center text-sm font-serif">
+            PE
+          </div>
+          <div className="leading-tight">
+            <p className="text-[15px] font-serif tracking-wide">
+              Private Equity Valley
+            </p>
+            <p className="text-[11px] text-white/70 tracking-wider uppercase">
+              Valoriser aujourd&rsquo;hui, transmettre demain
+            </p>
+          </div>
+        </div>
+        <a
+          href="https://www.private-equity-valley.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden sm:inline-block text-[11px] tracking-wider uppercase text-white/80 hover:text-white transition-colors"
+        >
+          private-equity-valley.com
+        </a>
+      </div>
+    </header>
+  )
+}
+
+function PevBrandFooter() {
+  return (
+    <footer className="w-full border-t border-slate-200 bg-white mt-10">
+      <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+        <p className="text-[11px] text-slate-500">
+          © 2010-2026 Private Equity Valley · Tous droits réservés
+        </p>
+        <div className="flex items-center gap-4 text-[11px] text-slate-500">
+          <a
+            href="https://www.private-equity-valley.com/mentions-legales"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[#243f6f] transition-colors"
+          >
+            Mentions légales
+          </a>
+          <a
+            href="https://www.private-equity-valley.com/politiques-de-confidentialite"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[#243f6f] transition-colors"
+          >
+            Confidentialité
+          </a>
+          <a
+            href="mailto:contact@private-equity-valley.com"
+            className="hover:text-[#243f6f] transition-colors"
+          >
+            Contact
+          </a>
+        </div>
+      </div>
+    </footer>
   )
 }
 
@@ -674,7 +760,7 @@ function FieldInput({
   options?: readonly string[]
 }) {
   const baseClass =
-    'w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-0'
+    'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-[#243f6f] focus:ring-1 focus:ring-[#243f6f]/20 focus:outline-none transition-colors'
   // Pour un input `date` ou `number`, un `value={null}` casse React : on
   // garde '' comme valeur-sentinelle uniformément.
   const v = value == null ? '' : String(value)
@@ -809,12 +895,18 @@ function SubmitDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">
-          Signature et soumission
-        </h2>
-        <p className="text-sm text-gray-600 mb-4">
+    <div className="fixed inset-0 z-50 bg-[#243f6f]/40 backdrop-blur-sm flex items-center justify-center px-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
+        <div className="bg-[#243f6f] text-white px-6 py-4">
+          <h2 className="text-base font-serif tracking-wide">
+            Signature et soumission
+          </h2>
+          <p className="text-xs text-white/80 mt-1">
+            Private Equity Valley
+          </p>
+        </div>
+        <div className="p-6">
+        <p className="text-sm text-slate-600 mb-4">
           Saisissez votre nom complet et validez les mentions ci-dessous
           pour soumettre votre dossier KYC à votre consultant.
         </p>
@@ -861,7 +953,7 @@ function SubmitDialog({
               type="text"
               value={signerName}
               onChange={(e) => setSignerName(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-0"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-[#243f6f] focus:ring-1 focus:ring-[#243f6f]/20 focus:outline-none transition-colors"
               placeholder="Ex. Jean Dupont"
             />
           </div>
@@ -905,7 +997,7 @@ function SubmitDialog({
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 rounded text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            className="px-4 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
           >
             Annuler
           </button>
@@ -913,10 +1005,11 @@ function SubmitDialog({
             type="button"
             onClick={submit}
             disabled={!canSubmit}
-            className="px-4 py-2 rounded text-sm font-medium bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2 rounded-md text-sm font-medium bg-[#243f6f] text-white hover:bg-[#1a2f54] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             {submitting ? 'Envoi…' : 'Signer et soumettre'}
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -987,18 +1080,22 @@ function EditorShell({
   children: React.ReactNode
 }) {
   return (
-    <section className="bg-white border border-gray-200 rounded-lg p-5">
-      <div className="flex items-start justify-between gap-3 mb-3">
+    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+          <h2 className="text-[11px] tracking-[0.18em] uppercase text-[#243f6f] font-semibold">
+            {title}
+          </h2>
           {subtitle && (
-            <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-slate-500 mt-1 normal-case tracking-normal">
+              {subtitle}
+            </p>
           )}
         </div>
         <button
           type="button"
           onClick={onAdd}
-          className="shrink-0 inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          className="shrink-0 inline-flex items-center gap-1 rounded-md border border-[#243f6f]/30 bg-white px-3 py-1 text-xs font-medium text-[#243f6f] hover:bg-[#243f6f]/5 transition-colors"
         >
           + Ajouter
         </button>
@@ -1091,7 +1188,7 @@ function TxtCell({
             onChange(e.target.value)
           }
         }}
-        className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:ring-0"
+        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-[#243f6f] focus:ring-1 focus:ring-[#243f6f]/20 focus:outline-none transition-colors"
       />
     </div>
   )
@@ -1116,7 +1213,7 @@ function SelectCell({
       <select
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:ring-0"
+        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-[#243f6f] focus:ring-1 focus:ring-[#243f6f]/20 focus:outline-none transition-colors"
       >
         {options.map((o) => (
           <option key={o.v} value={o.v}>
