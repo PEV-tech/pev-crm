@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { generateAndStoreKycPdf } from '@/lib/kyc-pdf-storage'
-import { sendKycSignedNotification } from '@/lib/kyc-email'
+import { sendKycSignedNotifications } from '@/lib/kyc-email'
 
 /**
  * POST /api/kyc/apply-proposition
@@ -107,8 +107,11 @@ export async function POST(req: NextRequest) {
     //    les consents qui ne sont pas dans le snapshot).
     let pdfPath: string | null = null
     let pdfGenerated = false
-    let emailSent = false
-    let emailSkippedReason: string | null = null
+    let emailSentConsultant = false
+    let emailSentClient = false
+    let emailSkippedReasonConsultant: string | null = null
+    let emailSkippedReasonClient: string | null = null
+    let pjArchived = false
 
     if (result.status === 'fully_applied') {
       const admin = getAdminClient()
@@ -116,7 +119,8 @@ export async function POST(req: NextRequest) {
         console.warn(
           '[kyc/apply-proposition] SUPABASE_SERVICE_ROLE_KEY absent — PDF/email skippés',
         )
-        emailSkippedReason = 'service_role_key_missing'
+        emailSkippedReasonConsultant = 'service_role_key_missing'
+        emailSkippedReasonClient = 'service_role_key_missing'
       } else {
         type PropRow = {
           client_id: string
@@ -142,7 +146,8 @@ export async function POST(req: NextRequest) {
             '[kyc/apply-proposition] read proposition failed:',
             propErr?.message || 'not found',
           )
-          emailSkippedReason = 'proposition_read_failed'
+          emailSkippedReasonConsultant = 'proposition_read_failed'
+          emailSkippedReasonClient = 'proposition_read_failed'
         } else {
           const signedAt = prop.signed_at
             ? new Date(prop.signed_at)
@@ -169,14 +174,16 @@ export async function POST(req: NextRequest) {
           })
           pdfPath = pdfResult.path
           pdfGenerated = pdfResult.path != null
+          pjArchived = pdfResult.pjArchived === true
 
-          // Email au consultant (best effort, on ne bloque pas sur erreur).
-          // On remonte `email_sent` + `email_skipped_reason` pour que le
-          // diff-viewer consultant puisse afficher un message précis
-          // (retours Maxine #7 : elle avait signé sans recevoir d'email
-          //  et on n'avait aucun diagnostic côté UI).
+          // Emails consultant + client (retour Maxine #2 : le client
+          // signataire recevait rien avant ; maintenant il reçoit une
+          // copie PDF en pièce jointe). On n'échoue pas la requête si
+          // un des deux envois plante — on remonte les deux états séparés
+          // pour que le diff-viewer surface une erreur ciblée
+          // (correctif diagnostic #7).
           try {
-            const emailResult = await sendKycSignedNotification({
+            const batch = await sendKycSignedNotifications({
               admin,
               clientId,
               signerName,
@@ -187,22 +194,34 @@ export async function POST(req: NextRequest) {
               pdfBytes: pdfResult.bytes,
               pdfPath: pdfResult.path,
             })
-            if (!emailResult.sent) {
-              emailSkippedReason =
-                emailResult.skipped || emailResult.error || 'unknown'
+            emailSentConsultant = batch.consultant.sent === true
+            if (!emailSentConsultant) {
+              emailSkippedReasonConsultant =
+                batch.consultant.skipped ||
+                batch.consultant.error ||
+                'unknown'
               console.warn(
-                '[kyc/apply-proposition] email not sent:',
-                emailSkippedReason,
+                '[kyc/apply-proposition] email consultant not sent:',
+                emailSkippedReasonConsultant,
               )
-            } else {
-              emailSent = true
+            }
+            emailSentClient = batch.client.sent === true
+            if (!emailSentClient) {
+              emailSkippedReasonClient =
+                batch.client.skipped || batch.client.error || 'unknown'
+              console.warn(
+                '[kyc/apply-proposition] email client not sent:',
+                emailSkippedReasonClient,
+              )
             }
           } catch (emailErr: unknown) {
-            emailSkippedReason =
+            const msg =
               emailErr instanceof Error ? emailErr.message : 'threw'
+            emailSkippedReasonConsultant = msg
+            emailSkippedReasonClient = msg
             console.warn(
-              '[kyc/apply-proposition] email send threw:',
-              emailSkippedReason,
+              '[kyc/apply-proposition] email batch threw:',
+              msg,
             )
           }
         }
@@ -214,9 +233,16 @@ export async function POST(req: NextRequest) {
       applied: result.applied,
       rejected: result.rejected,
       pdf_generated: pdfGenerated,
-      email_sent: emailSent,
+      pj_archived: pjArchived,
+      email_sent_consultant: emailSentConsultant,
+      email_sent_client: emailSentClient,
       ...(pdfPath ? { pdf_path: pdfPath } : {}),
-      ...(emailSkippedReason ? { email_skipped_reason: emailSkippedReason } : {}),
+      ...(emailSkippedReasonConsultant
+        ? { email_skipped_reason_consultant: emailSkippedReasonConsultant }
+        : {}),
+      ...(emailSkippedReasonClient
+        ? { email_skipped_reason_client: emailSkippedReasonClient }
+        : {}),
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erreur interne'

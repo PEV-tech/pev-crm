@@ -35,6 +35,11 @@ export type KycPdfGenInput = {
 export type KycPdfGenResult = {
   path: string | null
   bytes: Uint8Array | null
+  /** Retour #2 — indique si le PDF a aussi été déposé comme pièce
+   *  jointe CRM (bucket `client-pj` + row `client_pj`). Séparé du
+   *  `path` car le PDF peut être déposé en kyc-documents même si
+   *  l'archivage PJ échoue. */
+  pjArchived?: boolean
 }
 
 export async function generateAndStoreKycPdf(
@@ -112,7 +117,61 @@ export async function generateAndStoreKycPdf(
       )
     }
 
-    return { path, bytes: pdfBytes }
+    // Retour #2 — archivage PJ CRM. On réutilise le bucket `client-pj`
+    // (déjà utilisé par le composant PiecesJointes) et on insère une
+    // ligne dans `client_pj` avec type_document='kyc_signe'. Le consultant
+    // voit alors le PDF signé dans sa liste de PJ standard, sans avoir
+    // à naviguer vers le bucket privé kyc-documents.
+    //
+    // Best effort : si l'upload bucket ou l'insert row échoue, on ne
+    // propage pas — le PDF canonical reste dans kyc-documents et l'email
+    // l'attache en direct. On logge juste un warning.
+    let pjArchived = false
+    try {
+      const pjPath = `${args.clientId}/kyc-signe-${stamp}.pdf`
+      const { error: pjUploadErr } = await admin.storage
+        .from('client-pj')
+        .upload(pjPath, pdfBytes, {
+          contentType: 'application/pdf',
+          upsert: true,
+        })
+      if (pjUploadErr) {
+        console.warn(
+          '[kyc-pdf-storage] client-pj upload failed:',
+          pjUploadErr.message,
+        )
+      } else {
+        const pjRow = {
+          client_id: args.clientId,
+          nom_fichier: `KYC-signe-${stamp}.pdf`,
+          storage_path: pjPath,
+          taille_octets: pdfBytes.byteLength,
+          type_mime: 'application/pdf',
+          type_document: 'kyc_signe',
+          date_document: signature.signedAt.toISOString().slice(0, 10),
+          // `uploaded_by` laissé null — c'est un upload système
+          // post-signature, pas un upload utilisateur.
+        }
+        const { error: pjInsertErr } = await admin
+          .from('client_pj' as never)
+          .insert(pjRow as never)
+        if (pjInsertErr) {
+          console.warn(
+            '[kyc-pdf-storage] client_pj insert failed:',
+            pjInsertErr.message,
+          )
+        } else {
+          pjArchived = true
+        }
+      }
+    } catch (pjErr: unknown) {
+      console.warn(
+        '[kyc-pdf-storage] PJ archive threw:',
+        pjErr instanceof Error ? pjErr.message : String(pjErr),
+      )
+    }
+
+    return { path, bytes: pdfBytes, pjArchived }
   } catch (err: unknown) {
     console.warn(
       '[kyc-pdf-storage] PDF gen caught error:',

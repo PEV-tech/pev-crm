@@ -228,8 +228,11 @@ export function KycPropositionDiff({
         rejected?: number
         pdf_path?: string
         pdf_generated?: boolean
-        email_sent?: boolean
-        email_skipped_reason?: string
+        pj_archived?: boolean
+        email_sent_consultant?: boolean
+        email_sent_client?: boolean
+        email_skipped_reason_consultant?: string
+        email_skipped_reason_client?: string
       }
       if (!res.ok) {
         setError(data.error || `HTTP ${res.status}`)
@@ -254,11 +257,25 @@ export function KycPropositionDiff({
           data.pdf_generated ? 'PDF signé généré.' : 'PDF NON généré.',
         )
         parts.push(
-          data.email_sent
+          data.pj_archived
+            ? 'PDF archivé dans les pièces jointes.'
+            : "PDF NON archivé dans les pièces jointes.",
+        )
+        parts.push(
+          data.email_sent_consultant
             ? 'Email envoyé au consultant.'
-            : `Email NON envoyé${
-                data.email_skipped_reason
-                  ? ` (${data.email_skipped_reason})`
+            : `Email consultant NON envoyé${
+                data.email_skipped_reason_consultant
+                  ? ` (${data.email_skipped_reason_consultant})`
+                  : ''
+              }.`,
+        )
+        parts.push(
+          data.email_sent_client
+            ? 'Email envoyé au client.'
+            : `Email client NON envoyé${
+                data.email_skipped_reason_client
+                  ? ` (${data.email_skipped_reason_client})`
                   : ''
               }.`,
         )

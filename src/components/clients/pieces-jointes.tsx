@@ -14,6 +14,7 @@ interface PiecesJointesProps {
 }
 
 const PJ_TYPES = [
+  { value: 'kyc_signe', label: 'KYC signé' },
   { value: 'piece_identite', label: 'Pièce d\'identité' },
   { value: 'rib', label: 'RIB' },
   { value: 'justificatif_domicile', label: 'Justificatif domicile' },
@@ -27,6 +28,7 @@ const PJ_TYPES = [
 ]
 
 const PJ_TYPE_COLORS: Record<string, string> = {
+  kyc_signe: 'bg-emerald-100 text-emerald-700',
   piece_identite: 'bg-blue-100 text-blue-700',
   rib: 'bg-green-100 text-green-700',
   justificatif_domicile: 'bg-amber-100 text-amber-700',
