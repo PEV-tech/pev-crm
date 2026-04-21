@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { generateKycPdfBytes, type KycPdfSignature } from '@/lib/kyc-pdf'
+import { sendKycSignedNotification } from '@/lib/kyc-email'
 
 /**
  * POST /api/kyc/sign-public
@@ -139,19 +140,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: rpcErr.message }, { status: 400 })
     }
 
-    // --- PDF generation post-RPC (best-effort, n'invalide pas la signature) ---
+    // --- PDF generation + email notification post-RPC
+    // Best-effort : tout échec à ce stade logge un warning mais n'invalide
+    // jamais la signature (persistée par la RPC en amont).
     const clientId = extractClientId(rpcData)
-    const pdfPath = clientId
-      ? await generateAndStoreKycPdf({
-          clientId,
-          signerName,
-          signerIp: ip,
-          completionRate: roundedRate,
-          missingFields: missingArr,
-          consentIncomplete,
-          consentAccuracy,
-        })
-      : null
+    const signedAt = new Date()
+    let pdfPath: string | null = null
+    let pdfBytes: Uint8Array | null = null
+
+    if (clientId) {
+      const pdfResult = await generateAndStoreKycPdf({
+        clientId,
+        signerName,
+        signerIp: ip,
+        completionRate: roundedRate,
+        missingFields: missingArr,
+        consentIncomplete,
+        consentAccuracy,
+        signedAt,
+      })
+      pdfPath = pdfResult.path
+      pdfBytes = pdfResult.bytes
+
+      // Email au consultant (complet ou incomplet — Maxine 2026-04-21)
+      const admin = getAdminClient()
+      if (admin) {
+        try {
+          const emailResult = await sendKycSignedNotification({
+            admin,
+            clientId,
+            signerName,
+            signedAt,
+            completionRate: roundedRate,
+            missingFields: missingArr,
+            isIncomplete: roundedRate < 100,
+            pdfBytes,
+            pdfPath,
+          })
+          if (!emailResult.sent) {
+            console.warn(
+              '[kyc/sign-public] email not sent:',
+              emailResult.skipped || emailResult.error
+            )
+          }
+        } catch (emailErr: unknown) {
+          console.warn(
+            '[kyc/sign-public] email send threw:',
+            emailErr instanceof Error ? emailErr.message : String(emailErr)
+          )
+        }
+      }
+    }
 
     return NextResponse.json({
       ok: true,
@@ -172,24 +211,37 @@ function extractClientId(rpcData: unknown): string | null {
 
 /**
  * Génère le PDF de synthèse KYC et l'upload dans Supabase Storage.
- * Renvoie le chemin d'objet (ex: "clients/uuid/kyc-2026-04-21T10-12.pdf")
- * ou null en cas d'échec (graceful degradation — log mais ne throw pas).
+ * Renvoie { path, bytes } :
+ *   · `path` : chemin d'objet dans le bucket `kyc-documents`
+ *     (ex: "clients/uuid/kyc-2026-04-21T10-12.pdf") ou `null` si échec.
+ *   · `bytes` : Uint8Array du PDF généré, conservé pour pièce jointe email
+ *     consultant. `null` si PDF pas généré (clé admin absente / read KO).
+ *
+ * Les bytes sont renvoyés MÊME si l'upload a échoué, ce qui permet à
+ * l'email de partir avec le PDF en attachement quand le stockage est KO
+ * mais que la génération a réussi. Degradation gracieuse : aucune
+ * exception remontée à l'appelant.
+ *
+ * Batch B (2026-04-21, Maxine) : exposer les bytes a été ajouté pour
+ * permettre la notification consultant avec PDF inline sans nouveau
+ * round-trip de téléchargement depuis le bucket.
  */
 async function generateAndStoreKycPdf(args: {
   clientId: string
   signerName: string
   signerIp: string | null
+  signedAt: Date
   completionRate: number
   missingFields: string[]
   consentIncomplete: boolean
   consentAccuracy: boolean
-}): Promise<string | null> {
+}): Promise<{ path: string | null; bytes: Uint8Array | null }> {
   const admin = getAdminClient()
   if (!admin) {
     console.warn(
       '[kyc/sign-public] SUPABASE_SERVICE_ROLE_KEY manquant — PDF non généré'
     )
-    return null
+    return { path: null, bytes: null }
   }
 
   try {
@@ -204,12 +256,12 @@ async function generateAndStoreKycPdf(args: {
         '[kyc/sign-public] read client failed:',
         readErr?.message || 'not found'
       )
-      return null
+      return { path: null, bytes: null }
     }
 
     const signature: KycPdfSignature = {
       signerName: args.signerName,
-      signedAt: new Date(),
+      signedAt: args.signedAt,
       signerIp: args.signerIp,
       completionRate: args.completionRate,
       missingFields: args.missingFields,
@@ -238,7 +290,8 @@ async function generateAndStoreKycPdf(args: {
 
     if (uploadErr) {
       console.warn('[kyc/sign-public] upload failed:', uploadErr.message)
-      return null
+      // On renvoie les bytes quand même pour permettre l'email.
+      return { path: null, bytes: pdfBytes }
     }
 
     const { error: updateErr } = await admin
@@ -258,12 +311,12 @@ async function generateAndStoreKycPdf(args: {
       // On peut quand même retourner le chemin pour que l'appelant logge.
     }
 
-    return path
+    return { path, bytes: pdfBytes }
   } catch (err: unknown) {
     console.warn(
       '[kyc/sign-public] PDF gen caught error:',
       err instanceof Error ? err.message : String(err)
     )
-    return null
+    return { path: null, bytes: null }
   }
 }
