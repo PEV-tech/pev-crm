@@ -47,7 +47,10 @@ import { sendKycSignedNotification } from '@/lib/kyc-email'
  *
  * Retour :
  *   200 { ok: true, pdf_path?: string } si OK
- *   400 / 500 avec `{ error }` sinon (message remonté depuis la RPC)
+ *   400 pour les erreurs de validation de payload
+ *   409 pour les conflits d'état (ex: "Ce dossier a déjà été signé")
+ *   500 pour les erreurs internes inattendues
+ *   Le message remonté depuis la RPC est passé tel quel dans `{ error }`.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -136,8 +139,19 @@ export async function POST(req: NextRequest) {
     if (rpcErr) {
       // Les erreurs métier (KYC déjà signé, consentement manquant) remontent
       // en texte lisible — on les renvoie telles quelles pour affichage UI.
+      // On mappe "déjà signé" vers 409 Conflict (sémantique HTTP correcte
+      // pour un conflit d'état ressource) ; les autres restent en 400.
+      // Pattern résilient : accepte à la fois l'ancien message EN
+      // ("KYC already signed") et le nouveau FR ("déjà été signé"),
+      // pour couvrir une fenêtre de rollout où l'un et l'autre peuvent
+      // coexister entre DB et app.
       console.error('[kyc/sign-public] rpc error:', rpcErr.message)
-      return NextResponse.json({ error: rpcErr.message }, { status: 400 })
+      const isConflict =
+        /d[ée]j[àa]\s+[ée]t[ée]\s+sign|already\s+signed/i.test(rpcErr.message)
+      return NextResponse.json(
+        { error: rpcErr.message },
+        { status: isConflict ? 409 : 400 }
+      )
     }
 
     // --- PDF generation + email notification post-RPC

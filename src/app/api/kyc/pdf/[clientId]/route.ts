@@ -20,7 +20,9 @@ import { getAdminClient } from '@/lib/supabase/admin'
  *
  * Behaviour :
  *   · 404 si la fiche n'a pas de kyc_pdf_storage_path renseigné.
- *   · 403 si l'utilisateur non authentifié.
+ *   · 401 si l'utilisateur non authentifié (sémantiquement correct :
+ *     l'utilisateur n'est pas identifié ; 403 serait "identifié mais
+ *     interdit"). Remonté à 401 le 2026-04-21 suite à l'audit post-E2E.
  *   · 404 si l'utilisateur n'a pas accès à la fiche via RLS.
  *   · 503 si SUPABASE_SERVICE_ROLE_KEY manquant (PDF jamais générés).
  */
@@ -36,7 +38,9 @@ export async function GET(
   const supabase = await createClient()
   const { data: authData } = await supabase.auth.getUser()
   if (!authData?.user) {
-    return NextResponse.json({ error: 'Non authentifié' }, { status: 403 })
+    // 401 Unauthorized : sémantiquement l'utilisateur n'est pas identifié.
+    // Cf. RFC 7235 — 403 est réservé à "authentifié mais interdit".
+    return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
   }
 
   // 1. Vérif d'accès à la fiche via RLS utilisateur (pas via admin)

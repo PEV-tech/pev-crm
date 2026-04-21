@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { computeKycCompletion } from '@/lib/kyc-completion'
 
 type KycData = Record<string, unknown> & {
   id?: string
@@ -222,23 +223,29 @@ export function KycPublicClient({ token }: { token: string }) {
           </div>
         )}
 
-        {/* Dialog signature */}
-        {showSign && !isSigned && (
-          <SignDialog
-            token={token}
-            missingFields={(data.kyc_missing_fields as string[]) || []}
-            completionRate={
-              typeof data.kyc_completion_rate === 'number'
-                ? data.kyc_completion_rate
-                : 100
-            }
-            onClose={() => setShowSign(false)}
-            onSigned={async () => {
-              setShowSign(false)
-              await reload()
-            }}
-          />
-        )}
+        {/* Dialog signature — complétion calculée EN DIRECT sur la fiche
+            via `computeKycCompletion` (même logique que le dashboard
+            consultant). Avant ce fix, on lisait `data.kyc_completion_rate`
+            qui n'est jamais rempli AVANT signature : la colonne est
+            écrite UNIQUEMENT au moment du sign. La fallback naïve à 100
+            masquait des KYC très incomplets au signataire, qui pouvait
+            donc cocher « j'atteste de l'exactitude » sans voir passer
+            le warning d'incomplétude. Fix 2026-04-21. */}
+        {showSign && !isSigned && (() => {
+          const live = computeKycCompletion(data as Record<string, unknown>)
+          return (
+            <SignDialog
+              token={token}
+              missingFields={live.missingLabels}
+              completionRate={live.rate}
+              onClose={() => setShowSign(false)}
+              onSigned={async () => {
+                setShowSign(false)
+                await reload()
+              }}
+            />
+          )
+        })()}
 
         {/* Footer légal */}
         <p className="mt-8 text-xs text-gray-500 leading-relaxed">
