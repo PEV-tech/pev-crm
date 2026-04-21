@@ -509,8 +509,23 @@ export function KycPropositionDiff({
     setApplying(true)
     setError(null)
     setSuccess(null)
+    // Correctif bug bloquant 2026-04-21 (Maxine) : la RPC
+    // `kyc_apply_proposition` (cf. scripts/add-kyc-propositions.sql l.402)
+    // itère sur JSONB_OBJECT_KEYS(proposed_data) — c.-à-d. sur TOUS les
+    // champs soumis par le portail public, pas juste ceux modifiés — et
+    // throw `Missing decision for field X` si un seul manque. Or le
+    // portail public repousse les valeurs courantes du client (nom,
+    // prénom, etc.) même inchangées, donc `proposed_data` contient bien
+    // ces clés. Le diff-viewer n'exige une décision manuelle QUE sur les
+    // `diffKeys` (champs réellement différents). On complète donc le
+    // payload par un `accept` implicite sur les clés inchangées — l'UPDATE
+    // SQL est un no-op (valeur identique au snapshot) mais la RPC reçoit
+    // la décision qu'elle attend pour chaque clé proposée.
     const payload: Record<string, Decision> = {}
     for (const k of diffKeys) payload[k] = decisions[k]
+    for (const k of Object.keys(proposed)) {
+      if (!(k in payload)) payload[k] = 'accept'
+    }
 
     // On passe par l'endpoint /api/kyc/apply-proposition (et plus par la
     // RPC direct) pour que la génération PDF + email se fassent côté
