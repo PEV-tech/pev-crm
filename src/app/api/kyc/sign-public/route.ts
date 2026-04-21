@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getAdminClient } from '@/lib/supabase/admin'
+import { generateKycPdfBytes, type KycPdfSignature } from '@/lib/kyc-pdf'
 
 /**
  * POST /api/kyc/sign-public
@@ -19,6 +21,19 @@ import { createClient } from '@/lib/supabase/server'
  *     SECURITY DEFINER et contrôle déjà strictement ce qu'un token
  *     permet de faire.
  *
+ * Effets post-RPC (Batch A KYC PDF — 2026-04-21) :
+ *   · On récupère le client_id retourné par la RPC.
+ *   · On lit la fiche client complète via le client admin (service_role).
+ *   · On génère le PDF de synthèse (PP ou PM selon type_personne).
+ *   · On l'upload dans le bucket privé `kyc-documents` (policy INSERT
+ *     service_role uniquement).
+ *   · On écrit le chemin + timestamp sur la fiche client.
+ *   · En cas d'échec à n'importe quelle étape (admin client absent, upload
+ *     KO, ...), on LOG un warning mais on renvoie quand même {ok:true} :
+ *     la signature elle-même est persistée par la RPC et ne doit pas
+ *     être invalidée par un souci de génération PDF qu'on peut rejouer
+ *     ultérieurement via un job de réparation.
+ *
  * Body JSON attendu :
  * {
  *   token: string,
@@ -30,7 +45,7 @@ import { createClient } from '@/lib/supabase/server'
  * }
  *
  * Retour :
- *   200 { ok: true } si OK
+ *   200 { ok: true, pdf_path?: string } si OK
  *   400 / 500 avec `{ error }` sinon (message remonté depuis la RPC)
  */
 export async function POST(req: NextRequest) {
@@ -98,15 +113,21 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createClient()
 
-    const { error: rpcErr } = await supabase.rpc(
+    const signerName = signer_name.trim()
+    const roundedRate = Math.round(completion_rate)
+    const missingArr = (missing_fields as unknown[]).map((m) => String(m))
+    const consentIncomplete = consent_incomplete === true
+    const consentAccuracy = consent_accuracy === true
+
+    const { data: rpcData, error: rpcErr } = await supabase.rpc(
       'kyc_sign_by_token' as never,
       {
         p_token: token,
-        p_signer_name: signer_name.trim(),
-        p_completion_rate: Math.round(completion_rate),
-        p_missing_fields: missing_fields as never,
-        p_consent_incomplete: consent_incomplete === true,
-        p_consent_accuracy: consent_accuracy === true,
+        p_signer_name: signerName,
+        p_completion_rate: roundedRate,
+        p_missing_fields: missingArr as never,
+        p_consent_incomplete: consentIncomplete,
+        p_consent_accuracy: consentAccuracy,
         p_signer_ip: ip,
       } as never
     )
@@ -118,10 +139,131 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: rpcErr.message }, { status: 400 })
     }
 
-    return NextResponse.json({ ok: true })
+    // --- PDF generation post-RPC (best-effort, n'invalide pas la signature) ---
+    const clientId = extractClientId(rpcData)
+    const pdfPath = clientId
+      ? await generateAndStoreKycPdf({
+          clientId,
+          signerName,
+          signerIp: ip,
+          completionRate: roundedRate,
+          missingFields: missingArr,
+          consentIncomplete,
+          consentAccuracy,
+        })
+      : null
+
+    return NextResponse.json({
+      ok: true,
+      ...(pdfPath ? { pdf_path: pdfPath } : {}),
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erreur interne'
     console.error('[kyc/sign-public] unexpected:', message)
     return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+function extractClientId(rpcData: unknown): string | null {
+  if (!rpcData || typeof rpcData !== 'object') return null
+  const maybe = (rpcData as Record<string, unknown>).client_id
+  return typeof maybe === 'string' ? maybe : null
+}
+
+/**
+ * Génère le PDF de synthèse KYC et l'upload dans Supabase Storage.
+ * Renvoie le chemin d'objet (ex: "clients/uuid/kyc-2026-04-21T10-12.pdf")
+ * ou null en cas d'échec (graceful degradation — log mais ne throw pas).
+ */
+async function generateAndStoreKycPdf(args: {
+  clientId: string
+  signerName: string
+  signerIp: string | null
+  completionRate: number
+  missingFields: string[]
+  consentIncomplete: boolean
+  consentAccuracy: boolean
+}): Promise<string | null> {
+  const admin = getAdminClient()
+  if (!admin) {
+    console.warn(
+      '[kyc/sign-public] SUPABASE_SERVICE_ROLE_KEY manquant — PDF non généré'
+    )
+    return null
+  }
+
+  try {
+    const { data: client, error: readErr } = await admin
+      .from('clients')
+      .select('*')
+      .eq('id', args.clientId)
+      .single()
+
+    if (readErr || !client) {
+      console.warn(
+        '[kyc/sign-public] read client failed:',
+        readErr?.message || 'not found'
+      )
+      return null
+    }
+
+    const signature: KycPdfSignature = {
+      signerName: args.signerName,
+      signedAt: new Date(),
+      signerIp: args.signerIp,
+      completionRate: args.completionRate,
+      missingFields: args.missingFields,
+      isIncomplete: args.completionRate < 100,
+      consentIncomplete: args.consentIncomplete,
+      consentAccuracy: args.consentAccuracy,
+    }
+
+    const pdfBytes = await generateKycPdfBytes(
+      client as Record<string, unknown>,
+      signature
+    )
+
+    const stamp = signature.signedAt
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .replace('Z', '')
+    const path = `clients/${args.clientId}/kyc-${stamp}.pdf`
+
+    const { error: uploadErr } = await admin.storage
+      .from('kyc-documents')
+      .upload(path, pdfBytes, {
+        contentType: 'application/pdf',
+        upsert: true,
+      })
+
+    if (uploadErr) {
+      console.warn('[kyc/sign-public] upload failed:', uploadErr.message)
+      return null
+    }
+
+    const { error: updateErr } = await admin
+      .from('clients')
+      .update({
+        kyc_pdf_storage_path: path,
+        kyc_pdf_generated_at: signature.signedAt.toISOString(),
+      })
+      .eq('id', args.clientId)
+
+    if (updateErr) {
+      console.warn(
+        '[kyc/sign-public] update clients failed:',
+        updateErr.message
+      )
+      // Le PDF est bien dans le bucket mais le lien n'est pas persisté.
+      // On peut quand même retourner le chemin pour que l'appelant logge.
+    }
+
+    return path
+  } catch (err: unknown) {
+    console.warn(
+      '[kyc/sign-public] PDF gen caught error:',
+      err instanceof Error ? err.message : String(err)
+    )
+    return null
   }
 }

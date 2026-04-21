@@ -393,6 +393,8 @@ export type Database = {
           impot_revenu_n1: number | null
           impot_revenu_n2: number | null
           kyc_date_signature: string | null
+          kyc_pdf_generated_at: string | null
+          kyc_pdf_storage_path: string | null
           kyc_uploaded_at: string | null
           lieu_naissance: string | null
           lm: boolean | null
@@ -456,6 +458,8 @@ export type Database = {
           impot_revenu_n1?: number | null
           impot_revenu_n2?: number | null
           kyc_date_signature?: string | null
+          kyc_pdf_generated_at?: string | null
+          kyc_pdf_storage_path?: string | null
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null
@@ -519,6 +523,8 @@ export type Database = {
           impot_revenu_n1?: number | null
           impot_revenu_n2?: number | null
           kyc_date_signature?: string | null
+          kyc_pdf_generated_at?: string | null
+          kyc_pdf_storage_path?: string | null
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null

@@ -81,6 +81,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     const kycIncompleteSigned: boolean = client?.kyc_incomplete_signed === true
     const kycSignerName: string | null = client?.kyc_signer_name ?? null
     const kycCompletionAtSign: number | null = client?.kyc_completion_rate ?? null
+    const kycPdfPath: string | null = client?.kyc_pdf_storage_path ?? null
+    const kycPdfUrl: string | null =
+      kycPdfPath && client?.id ? `/api/kyc/pdf/${client.id}` : null
 
     // Statut dérivé du workflow lien public : Brouillon → Envoyé → En cours → Signé.
     // "Signé incomplet" est un sous-état de Signé traité visuellement via
@@ -2892,6 +2895,18 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       ? ' — consentement explicite enregistré.'
                       : '.'}
                   </p>
+                  {kycPdfUrl && (
+                    <p className="text-xs mt-1">
+                      <a
+                        href={kycPdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline font-medium"
+                      >
+                        Télécharger le PDF signé
+                      </a>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
