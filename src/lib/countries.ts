@@ -11,7 +11,22 @@
  * préserver la lisibilité des exports CSV, des bannières d'audit et des
  * fiches PDF signées. Un champ `code` ISO-2 est fourni pour d'éventuels
  * appels API externes.
+ *
+ * ### Filtrage sanctions
+ *
+ * La liste exportée `COUNTRIES` est filtrée au chargement pour exclure les
+ * juridictions sous GAFI call-for-action et sous sanctions financières UE
+ * complètes (voir `pays-blacklist.ts` pour la liste et les sources). Les
+ * valeurs historiquement stockées en base pour un client continuent de
+ * s'afficher grâce au fallback « valeur existante » des <select> côté UI et
+ * à `normalizeCountry()` qui reste lookup-exhaustif (y compris les pays
+ * filtrés), de sorte que la lecture du legacy ne se casse pas.
+ *
+ * Si besoin de la liste complète non filtrée (export, audit, statistiques) :
+ * utiliser `COUNTRIES_ALL` / `COUNTRY_NAMES_ALL`.
  */
+
+import { BLACKLIST_CODES } from './pays-blacklist'
 
 export interface Country {
   name: string
@@ -223,25 +238,50 @@ const OTHERS: Country[] = [
   { name: 'Zimbabwe', code: 'ZW' },
 ]
 
-/** Liste complète, PINNED d'abord puis OTHERS alpha. */
-export const COUNTRIES: Country[] = [...PINNED, ...OTHERS]
+/**
+ * Liste complète non filtrée (ISO 3166-1 entière), utile pour :
+ *  - les fonctions de lookup/normalisation qui doivent reconnaître les noms
+ *    historiques même quand ils sont devenus bloqués (sinon `normalizeCountry`
+ *    renverrait `undefined` pour un client créé avant la revue de la liste
+ *    noire, et le champ disparaîtrait à la relecture),
+ *  - les exports/statistiques d'audit qui doivent pouvoir présenter tous les
+ *    pays saisis en base sans masquer silencieusement les cas legacy.
+ */
+export const COUNTRIES_ALL: readonly Country[] = [...PINNED, ...OTHERS]
 
-/** Noms seulement (pratique pour les select simples). */
+/**
+ * Liste exposée aux saisies utilisateur — les juridictions sous sanctions
+ * (GAFI call-for-action + UE financières complètes) sont retirées. Voir
+ * `pays-blacklist.ts` pour les codes exclus et leurs sources.
+ */
+export const COUNTRIES: Country[] = COUNTRIES_ALL.filter(
+  (c) => !BLACKLIST_CODES.has(c.code),
+)
+
+/** Noms seulement (pratique pour les select simples). Liste filtrée. */
 export const COUNTRY_NAMES: string[] = COUNTRIES.map((c) => c.name)
+
+/** Variante non filtrée (pour exports / audit). */
+export const COUNTRY_NAMES_ALL: string[] = COUNTRIES_ALL.map((c) => c.name)
 
 /**
  * Tente de résoudre une saisie libre legacy (ex: "france", "FR", "France ")
  * vers un nom canonique. Renvoie undefined si inconnu.
+ *
+ * Important : le lookup se fait sur `COUNTRIES_ALL` (liste non filtrée) pour
+ * que les valeurs historiques de clients créés avant la mise en place de la
+ * blacklist restent affichables. L'appelant qui veut un check conformité
+ * doit utiliser `isBlacklisted()` depuis `pays-blacklist.ts`.
  */
 export function normalizeCountry(input: string | null | undefined): string | undefined {
   if (!input) return undefined
   const clean = input.trim()
   if (!clean) return undefined
   const lower = clean.toLowerCase()
-  const byName = COUNTRIES.find((c) => c.name.toLowerCase() === lower)
+  const byName = COUNTRIES_ALL.find((c) => c.name.toLowerCase() === lower)
   if (byName) return byName.name
   const upper = clean.toUpperCase()
-  const byCode = COUNTRIES.find((c) => c.code === upper)
+  const byCode = COUNTRIES_ALL.find((c) => c.code === upper)
   if (byCode) return byCode.name
   return undefined
 }
