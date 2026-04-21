@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 /**
  * POST /api/kyc/generate-link
@@ -19,6 +20,12 @@ import { createClient } from '@/lib/supabase/server'
  */
 export async function POST(req: NextRequest) {
   try {
+    // Rate-limit par IP avant auth : protège `supabase.auth.getUser()`
+    // et la RPC `kyc_generate_token` d'un flood. Seuil large (20/min)
+    // pour ne pas gêner l'usage consultant normal.
+    const rl = await enforceRateLimit(req, RATE_LIMITS.KYC_GENERATE_LINK)
+    if (!rl.allowed) return rl.response
+
     const body = await req.json().catch(() => null)
     const clientId =
       body && typeof body === 'object' && typeof (body as any).client_id === 'string'

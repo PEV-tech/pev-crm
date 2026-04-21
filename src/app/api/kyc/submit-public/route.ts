@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 /**
  * POST /api/kyc/submit-public
@@ -40,6 +41,11 @@ import { createClient } from '@/lib/supabase/server'
  */
 export async function POST(req: NextRequest) {
   try {
+    // Rate-limit en premier — endpoint public, même logique anti-abus
+    // que `/api/kyc/sign-public`.
+    const rl = await enforceRateLimit(req, RATE_LIMITS.KYC_SUBMIT_PUBLIC)
+    if (!rl.allowed) return rl.response
+
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json(

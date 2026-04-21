@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { generateKycPdfBytes, type KycPdfSignature } from '@/lib/kyc-pdf'
 import { sendKycSignedNotification } from '@/lib/kyc-email'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 /**
  * POST /api/kyc/sign-public
@@ -54,6 +55,11 @@ import { sendKycSignedNotification } from '@/lib/kyc-email'
  */
 export async function POST(req: NextRequest) {
   try {
+    // Rate-limit en premier — avant tout parsing de body — pour se
+    // prémunir d'un abus par volume (brute-force de token, floods).
+    const rl = await enforceRateLimit(req, RATE_LIMITS.KYC_SIGN_PUBLIC)
+    if (!rl.allowed) return rl.response
+
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json(

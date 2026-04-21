@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 // Dynamic imports to handle dependencies in Node.js environment
 let pdfParse: any
@@ -1191,6 +1192,12 @@ function parseKYCDocx(html: string): ParsedKYC {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate-limit avant formData parsing : le parsing PDF/DOCX est CPU-
+    // lourd et upload-lourd, on veut rejeter les abus avant d'allouer
+    // de la mémoire. 10 hits / 5 min par IP.
+    const rl = await enforceRateLimit(request, RATE_LIMITS.PARSE_KYC)
+    if (!rl.allowed) return rl.response
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 
