@@ -27,6 +27,19 @@ function addDays(days: number): string {
   return d.toISOString().split('T')[0]
 }
 
+const RELANCE_STATUTS = ['a_faire', 'fait', 'ignore', 'reporte'] as const
+type RelanceStatut = (typeof RELANCE_STATUTS)[number]
+
+function toRelanceStatut(value: unknown): RelanceStatut {
+  return typeof value === 'string' && (RELANCE_STATUTS as readonly string[]).includes(value)
+    ? (value as RelanceStatut)
+    : 'a_faire'
+}
+
+// La colonne `statut` est `text` en DB (pas un enum Postgres), donc le
+// Row Supabase remonte `string`. On conserve l'union typée côté UI
+// via `toRelanceStatut` appliqué au chargement, pour garder les
+// comparaisons exhaustives dans les filtres/badges en aval.
 interface Relance {
   id: string
   client_id: string
@@ -35,7 +48,7 @@ interface Relance {
   description: string
   date_echeance: string
   rappel_date: string | null
-  statut: 'a_faire' | 'fait' | 'ignore' | 'reporte'
+  statut: RelanceStatut
   created_at: string
 }
 
@@ -83,7 +96,8 @@ export function ClientRelances({ clientId, dossierId, dossiers, compact }: Clien
     }
 
     const { data } = await query
-    setRelances(data || [])
+    const rows = (data || []) as Array<Omit<Relance, 'statut'> & { statut: string | null }>
+    setRelances(rows.map((r) => ({ ...r, statut: toRelanceStatut(r.statut) })))
     setLoading(false)
   }, [clientId, dossierId, supabase])
 

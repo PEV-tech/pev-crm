@@ -5,11 +5,15 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FileText, Check, X, Clock, AlertCircle } from 'lucide-react'
 
+// Alignement avec les `Row` Supabase : certaines colonnes booléennes
+// ou numériques n'ont pas de DEFAULT NOT NULL côté DB et reviennent
+// donc nullable. On élargit l'interface locale plutôt que de caster,
+// et on coerce à la lecture côté UI (null → false / tri neutre).
 interface DocItem {
   id: string
   dossier_id: string
   document_nom: string
-  recu: boolean
+  recu: boolean | null
   date_reception: string | null
   commentaire: string | null
 }
@@ -18,8 +22,8 @@ interface DocTemplate {
   id: string
   produit_categorie: string
   document_nom: string
-  obligatoire: boolean
-  sort_order: number
+  obligatoire: boolean | null
+  sort_order: number | null
 }
 
 interface DocumentChecklistProps {
