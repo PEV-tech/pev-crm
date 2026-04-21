@@ -596,6 +596,35 @@ export function KycPublicClient({ token }: { token: string }) {
 /* Composants internes                                                  */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Retour Maxine #5 — bornes date : on limite tous les champs date à
+ * [1900 .. année courante + 10], ce qui suffit pour naissance / emploi /
+ * acquisition de bien / échéance emprunt. Côté navigateur ça améliore
+ * deux choses :
+ *   - le calendrier natif s'ouvre sur une plage lisible (et pas à l'an
+ *     0001 quand le champ est vide),
+ *   - la saisie clavier "19" est moins souvent interprétée comme année 19.
+ * Les clefs ci-dessous correspondent aux dates qui DOIVENT être dans le
+ * passé strict (sinon on permet jusqu'à +10 ans pour les dates projet /
+ * échéance).
+ */
+const PAST_ONLY_DATE_KEYS = new Set<string>([
+  'date_naissance',
+  'date_debut_emploi',
+  'date_acq',
+  'date_ouverture',
+  'emprunt_date_depart',
+])
+const DATE_MIN_ISO = '1900-01-01'
+function dateMaxIso(fieldKey?: string): string {
+  const now = new Date()
+  const isPastOnly = fieldKey ? PAST_ONLY_DATE_KEYS.has(fieldKey) : false
+  const year = isPastOnly ? now.getFullYear() : now.getFullYear() + 10
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${year}-${m}-${d}`
+}
+
 function FieldInput({
   fieldKey,
   label,
@@ -620,6 +649,10 @@ function FieldInput({
     id: `kyc-${fieldKey}`,
     placeholder,
   }
+  const dateBounds =
+    type === 'date'
+      ? { min: DATE_MIN_ISO, max: dateMaxIso(fieldKey) }
+      : {}
   return (
     <div className={type === 'textarea' ? 'sm:col-span-2' : ''}>
       <label
@@ -627,6 +660,11 @@ function FieldInput({
         className="block text-xs font-medium text-gray-700 mb-1"
       >
         {label}
+        {type === 'date' && (
+          <span className="ml-1 text-[10px] text-gray-400 font-normal">
+            (JJ/MM/AAAA)
+          </span>
+        )}
       </label>
       {type === 'textarea' ? (
         <textarea
@@ -639,6 +677,7 @@ function FieldInput({
       ) : (
         <input
           {...commonProps}
+          {...dateBounds}
           type={type}
           value={v}
           onChange={(e) =>
@@ -734,12 +773,35 @@ function SubmitDialog({
         </p>
 
         {isIncomplete && (
-          <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            Votre dossier est complété à {completionRate}%. En signant,
-            vous acceptez que certaines informations (
-            {missingFields.length} champ
-            {missingFields.length > 1 ? 's' : ''}) ne soient pas
-            renseignées pour l&rsquo;instant.
+          <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">
+            <div>
+              Votre dossier est complété à{' '}
+              <span className="font-semibold">{completionRate}%</span>. En
+              signant, vous acceptez que les{' '}
+              <span className="font-semibold">
+                {missingFields.length} champ
+                {missingFields.length > 1 ? 's' : ''} ci-dessous
+              </span>{' '}
+              ne soi{missingFields.length > 1 ? 'ent' : 't'} pas
+              renseigné{missingFields.length > 1 ? 's' : ''} pour
+              l&rsquo;instant :
+            </div>
+            {/* Retour Maxine #6 : lister explicitement les noms des champs
+                non remplis (et pas juste le compte). Affichage en pastilles
+                pour rester lisible même avec 10+ entrées, auto-scroll au-
+                delà de ~160px. */}
+            {missingFields.length > 0 && (
+              <ul className="flex flex-wrap gap-1 max-h-40 overflow-y-auto pr-1">
+                {missingFields.map((label, i) => (
+                  <li
+                    key={`${label}-${i}`}
+                    className="inline-flex items-center rounded-full bg-white border border-amber-300 px-2 py-0.5 text-[11px] text-amber-800"
+                  >
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
@@ -936,6 +998,7 @@ function TxtCell({
   placeholder,
   type = 'text',
   span2 = false,
+  fieldKey,
 }: {
   label: string
   value: string | number | undefined
@@ -943,17 +1006,32 @@ function TxtCell({
   placeholder?: string
   type?: 'text' | 'number' | 'date'
   span2?: boolean
+  // Optionnel : sert pour les dates, on l'utilise pour distinguer les
+  // dates passé-seul (date_acq, date_naissance...) des dates qui peuvent
+  // être dans le futur (date de fin d'emprunt, date de départ d'un bien
+  // diversifié...). Cf. retour Maxine #5.
+  fieldKey?: string
 }) {
   const v = value == null ? '' : String(value)
+  const dateBounds =
+    type === 'date'
+      ? { min: DATE_MIN_ISO, max: dateMaxIso(fieldKey) }
+      : {}
   return (
     <div className={span2 ? 'sm:col-span-2' : ''}>
       <label className="block text-[11px] font-medium text-gray-600 mb-0.5">
         {label}
+        {type === 'date' && (
+          <span className="ml-1 text-[10px] text-gray-400 font-normal">
+            (JJ/MM/AAAA)
+          </span>
+        )}
       </label>
       <input
         type={type}
         value={v}
         placeholder={placeholder}
+        {...dateBounds}
         onChange={(e) => {
           if (type === 'number') {
             if (e.target.value === '') {
@@ -1091,6 +1169,7 @@ function ImmobilierEditor({
           <TxtCell
             label="Date d'acquisition"
             type="date"
+            fieldKey="date_acq"
             value={row.date_acq}
             onChange={(v) => patch(i, { date_acq: String(v) })}
           />
@@ -1206,6 +1285,7 @@ function ProduitsFinanciersEditor({
           <TxtCell
             label="Date d'ouverture"
             type="date"
+            fieldKey="date_ouverture"
             value={row.date_ouverture}
             onChange={(v) => patch(i, { date_ouverture: String(v) })}
           />
@@ -1345,6 +1425,7 @@ function EmpruntsEditor({
           <TxtCell
             label="Date de départ"
             type="date"
+            fieldKey="emprunt_date_depart"
             value={row.date}
             onChange={(v) => patch(i, { date: String(v) })}
           />

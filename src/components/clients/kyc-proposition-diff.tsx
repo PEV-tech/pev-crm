@@ -227,23 +227,43 @@ export function KycPropositionDiff({
         applied?: number
         rejected?: number
         pdf_path?: string
+        pdf_generated?: boolean
+        email_sent?: boolean
+        email_skipped_reason?: string
       }
       if (!res.ok) {
         setError(data.error || `HTTP ${res.status}`)
         setApplying(false)
         return
       }
-      setSuccess(
-        `Proposition ${
-          data.status === 'fully_applied'
-            ? 'entièrement appliquée'
-            : data.status === 'partially_applied'
-              ? 'partiellement appliquée'
-              : 'refusée'
-        } — ${data.applied ?? 0} champ(s) accepté(s), ${data.rejected ?? 0} refusé(s)${
-          data.pdf_path ? '. PDF généré.' : '.'
-        }`,
-      )
+      // Message enrichi : on sépare "proposition appliquée" (côté DB) vs
+      // "PDF généré" vs "email envoyé" pour que le consultant voie
+      // immédiatement si la chaîne s'est arrêtée quelque part (retour
+      // Maxine #7 — diagnostic du non-envoi PDF par mail).
+      const statusLabel =
+        data.status === 'fully_applied'
+          ? 'entièrement appliquée'
+          : data.status === 'partially_applied'
+            ? 'partiellement appliquée'
+            : 'refusée'
+      const parts: string[] = [
+        `Proposition ${statusLabel} — ${data.applied ?? 0} champ(s) accepté(s), ${data.rejected ?? 0} refusé(s).`,
+      ]
+      if (data.status === 'fully_applied') {
+        parts.push(
+          data.pdf_generated ? 'PDF signé généré.' : 'PDF NON généré.',
+        )
+        parts.push(
+          data.email_sent
+            ? 'Email envoyé au consultant.'
+            : `Email NON envoyé${
+                data.email_skipped_reason
+                  ? ` (${data.email_skipped_reason})`
+                  : ''
+              }.`,
+        )
+      }
+      setSuccess(parts.join(' '))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur réseau')
       setApplying(false)
@@ -291,9 +311,30 @@ export function KycPropositionDiff({
           {proposition.signer_ip && (
             <> depuis {proposition.signer_ip}</>
           )}
-          . Vous devez vous prononcer sur chaque champ modifié avant
-          d&apos;appliquer la proposition au dossier client.
+          .
         </p>
+        {/* Bandeau pédagogique — corrige le retour Maxine #8 : les gens
+            cliquaient sur "Accepter" par champ et pensaient que c'était
+            sauvegardé. On explique explicitement le flux en 2 étapes. */}
+        <div className="mt-3 rounded border border-amber-300 bg-white p-3 text-xs text-gray-700 leading-relaxed">
+          <span className="font-semibold text-amber-900">
+            Comment valider cette proposition :
+          </span>
+          <ol className="mt-1 ml-4 list-decimal space-y-0.5">
+            <li>
+              Pour chaque champ modifié, marquez&nbsp;
+              <span className="font-medium text-green-700">Accepter</span> ou&nbsp;
+              <span className="font-medium text-red-700">Refuser</span> (vos
+              choix sont gardés en brouillon, rien n&apos;est encore envoyé).
+            </li>
+            <li>
+              Cliquez sur le bouton&nbsp;
+              <span className="font-medium">Appliquer la proposition</span>&nbsp;
+              en bas pour enregistrer : le dossier client est mis à jour, le
+              PDF signé est généré et envoyé par email.
+            </li>
+          </ol>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && (
@@ -350,32 +391,57 @@ export function KycPropositionDiff({
                     className="rounded border border-gray-200 bg-white p-3"
                   >
                     <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="text-sm font-medium text-gray-900">
-                        {humanize(k)}
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900">
+                          {humanize(k)}
+                        </div>
+                        {!d && (
+                          <span className="text-[10px] font-medium text-amber-700 bg-amber-100 rounded px-1.5 py-0.5 uppercase tracking-wide">
+                            À décider
+                          </span>
+                        )}
+                        {d && (
+                          <span className="text-[10px] font-medium text-gray-500 italic">
+                            brouillon — non encore appliqué
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      {/* Toggle segmenté accept / reject — on stylise comme un
+                          choix (radio group) plutôt qu'un bouton action pour
+                          que ce soit visuellement clair que ça ne sauvegarde
+                          pas en DB. */}
+                      <div
+                        className="flex items-center rounded-md border border-gray-300 overflow-hidden shrink-0"
+                        role="radiogroup"
+                        aria-label={`Décision pour ${humanize(k)}`}
+                      >
                         <button
                           type="button"
+                          role="radio"
+                          aria-checked={d === 'accept'}
                           onClick={() =>
                             setDecisions((prev) => ({ ...prev, [k]: 'accept' }))
                           }
-                          className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+                          className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 transition-colors ${
                             d === 'accept'
-                              ? 'bg-green-600 text-white border-green-600'
-                              : 'border-gray-300 text-gray-700 hover:bg-green-50 hover:border-green-300'
+                              ? 'bg-green-600 text-white'
+                              : 'bg-white text-gray-700 hover:bg-green-50'
                           }`}
                         >
                           <CheckCircle size={12} /> Accepter
                         </button>
+                        <div className="w-px self-stretch bg-gray-300" />
                         <button
                           type="button"
+                          role="radio"
+                          aria-checked={d === 'reject'}
                           onClick={() =>
                             setDecisions((prev) => ({ ...prev, [k]: 'reject' }))
                           }
-                          className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+                          className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 transition-colors ${
                             d === 'reject'
-                              ? 'bg-red-600 text-white border-red-600'
-                              : 'border-gray-300 text-gray-700 hover:bg-red-50 hover:border-red-300'
+                              ? 'bg-red-600 text-white'
+                              : 'bg-white text-gray-700 hover:bg-red-50'
                           }`}
                         >
                           <XCircle size={12} /> Refuser
@@ -418,16 +484,67 @@ export function KycPropositionDiff({
           </details>
         )}
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200">
-          <Button
-            type="button"
-            disabled={applying || (diffKeys.length > 0 && !allDecided)}
-            onClick={apply}
-            className="bg-gray-900 hover:bg-gray-800"
-          >
-            {applying && <Loader2 size={14} className="mr-1.5 animate-spin" />}
-            Appliquer la proposition
-          </Button>
+        {/* Barre "Appliquer" proéminente et sticky — corrige le retour
+            Maxine #8 ("j'ai accepté mais cela ne s'est pas sauvegardé") :
+            on donne un signal fort que les décisions par champ sont un
+            brouillon tant que ce bouton n'est pas cliqué.
+              - fond amber tant que ce n'est pas prêt → gris/foncé quand
+                ready, avec une ring pulse pour attirer l'œil.
+              - compteur "X / N décisions prises" bien visible à gauche.
+              - warning explicite en dessous quand allDecided === false. */}
+        <div
+          className={`sticky bottom-0 -mx-6 -mb-6 px-6 py-3 border-t ${
+            allDecided
+              ? 'bg-gray-900 border-gray-900'
+              : 'bg-amber-100 border-amber-300'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div
+              className={`text-xs sm:text-sm ${
+                allDecided ? 'text-amber-200' : 'text-amber-900'
+              }`}
+            >
+              {diffKeys.length === 0 ? (
+                <span>
+                  Aucun changement à valider — vous pouvez clôturer la
+                  proposition.
+                </span>
+              ) : allDecided ? (
+                <span className="font-medium">
+                  ✓ Toutes les décisions sont prises. Cliquez pour envoyer
+                  au client.
+                </span>
+              ) : (
+                <span>
+                  <span className="font-semibold">
+                    {Object.keys(decisions).length} / {diffKeys.length}
+                  </span>{' '}
+                  décision(s) prise(s) —{' '}
+                  <span className="font-semibold">
+                    {diffKeys.length - Object.keys(decisions).length}
+                  </span>{' '}
+                  à compléter avant d&apos;appliquer.
+                </span>
+              )}
+            </div>
+            <Button
+              type="button"
+              disabled={applying || (diffKeys.length > 0 && !allDecided)}
+              onClick={apply}
+              size="lg"
+              className={`shrink-0 ${
+                allDecided
+                  ? 'bg-white text-gray-900 hover:bg-gray-100 shadow-lg ring-2 ring-white/50'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {applying && <Loader2 size={16} className="mr-2 animate-spin" />}
+              {applying
+                ? 'Application en cours…'
+                : 'Appliquer la proposition'}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

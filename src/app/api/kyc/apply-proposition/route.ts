@@ -106,6 +106,9 @@ export async function POST(req: NextRequest) {
     //    kyc_propositions (la policy SELECT passe mais on veut l'IP et
     //    les consents qui ne sont pas dans le snapshot).
     let pdfPath: string | null = null
+    let pdfGenerated = false
+    let emailSent = false
+    let emailSkippedReason: string | null = null
 
     if (result.status === 'fully_applied') {
       const admin = getAdminClient()
@@ -113,6 +116,7 @@ export async function POST(req: NextRequest) {
         console.warn(
           '[kyc/apply-proposition] SUPABASE_SERVICE_ROLE_KEY absent — PDF/email skippés',
         )
+        emailSkippedReason = 'service_role_key_missing'
       } else {
         type PropRow = {
           client_id: string
@@ -138,6 +142,7 @@ export async function POST(req: NextRequest) {
             '[kyc/apply-proposition] read proposition failed:',
             propErr?.message || 'not found',
           )
+          emailSkippedReason = 'proposition_read_failed'
         } else {
           const signedAt = prop.signed_at
             ? new Date(prop.signed_at)
@@ -163,8 +168,13 @@ export async function POST(req: NextRequest) {
             consentAccuracy,
           })
           pdfPath = pdfResult.path
+          pdfGenerated = pdfResult.path != null
 
-          // Email au consultant (best effort, on ne bloque pas sur erreur)
+          // Email au consultant (best effort, on ne bloque pas sur erreur).
+          // On remonte `email_sent` + `email_skipped_reason` pour que le
+          // diff-viewer consultant puisse afficher un message précis
+          // (retours Maxine #7 : elle avait signé sans recevoir d'email
+          //  et on n'avait aucun diagnostic côté UI).
           try {
             const emailResult = await sendKycSignedNotification({
               admin,
@@ -178,15 +188,21 @@ export async function POST(req: NextRequest) {
               pdfPath: pdfResult.path,
             })
             if (!emailResult.sent) {
+              emailSkippedReason =
+                emailResult.skipped || emailResult.error || 'unknown'
               console.warn(
                 '[kyc/apply-proposition] email not sent:',
-                emailResult.skipped || emailResult.error,
+                emailSkippedReason,
               )
+            } else {
+              emailSent = true
             }
           } catch (emailErr: unknown) {
+            emailSkippedReason =
+              emailErr instanceof Error ? emailErr.message : 'threw'
             console.warn(
               '[kyc/apply-proposition] email send threw:',
-              emailErr instanceof Error ? emailErr.message : String(emailErr),
+              emailSkippedReason,
             )
           }
         }
@@ -197,7 +213,10 @@ export async function POST(req: NextRequest) {
       status: result.status,
       applied: result.applied,
       rejected: result.rejected,
+      pdf_generated: pdfGenerated,
+      email_sent: emailSent,
       ...(pdfPath ? { pdf_path: pdfPath } : {}),
+      ...(emailSkippedReason ? { email_skipped_reason: emailSkippedReason } : {}),
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erreur interne'
