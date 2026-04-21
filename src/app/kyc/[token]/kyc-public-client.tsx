@@ -188,14 +188,77 @@ const SECTIONS: Array<{
   },
 ]
 
-// Clés JSONB transmises telles quelles à la RPC (non éditables en #4b.1).
-const READONLY_JSONB_KEYS = [
+// Clés JSONB éditables depuis le portail (#4b.2 : patrimoine + emprunts).
+// Les 4 tableaux ci-dessous sont rendus sous forme de tableaux éditables
+// avec ajout/suppression de lignes. Le format de ligne reste simple
+// (pas de résolution FK côté client : le consultant résout les
+// co-titulaires à la validation).
+const EDITABLE_JSONB_KEYS = [
   'patrimoine_immobilier',
   'produits_financiers',
   'patrimoine_divers',
   'emprunts',
-  'enfants_details',
 ] as const
+
+// Clés JSONB transmises telles quelles à la RPC (non éditables ici).
+// `enfants_details` reste géré côté consultant en V1 (nombre_enfants
+// reste éditable par le client).
+const READONLY_JSONB_KEYS = ['enfants_details'] as const
+
+// Shapes simplifiées — miroir des interfaces consultant (kyc-section.tsx)
+// sans les FK UUID (co_titulaire_client_id). Côté client, le co-titulaire
+// est saisi en texte libre (`co_titulaire_nom`) ; le consultant résout
+// le lien au moment d'accepter la proposition.
+type DetenteurType = 'client' | 'conjoint' | 'commun' | 'autre' | ''
+
+type ImmobilierRow = {
+  type_bien?: string
+  designation?: string
+  date_acq?: string
+  valeur_acq?: number | ''
+  valeur_actuelle?: number | ''
+  detenteur_type?: DetenteurType
+  co_titulaire_nom?: string
+  proportion?: number | ''
+  taux_credit?: number | ''
+  duree_credit?: number | ''
+  crd?: number | ''
+  charges?: number | ''
+}
+
+type ProduitFinancierRow = {
+  type_produit?: string
+  designation?: string
+  etablissement?: string
+  valeur?: number | ''
+  date_ouverture?: string
+  versements_reguliers?: string
+  rendement?: number | ''
+  detenteur_type?: DetenteurType
+  co_titulaire_nom?: string
+}
+
+type EmpruntRow = {
+  designation?: string
+  etablissement?: string
+  montant?: number | ''
+  date?: string
+  duree?: string
+  taux?: number | ''
+  crd?: number | ''
+  echeance?: string
+  echeance_mensuelle?: number | ''
+  detenteur_type?: DetenteurType
+  co_titulaire_nom?: string
+}
+
+type DiversRow = {
+  type_bien?: string
+  designation?: string
+  valeur?: number | ''
+  detenteur_type?: DetenteurType
+  co_titulaire_nom?: string
+}
 
 export function KycPublicClient({ token }: { token: string }) {
   const supabase = useMemo(() => createClient(), [])
@@ -240,6 +303,11 @@ export function KycPublicClient({ token }: { token: string }) {
     init.type_personne = data.type_personne
     for (const k of READONLY_JSONB_KEYS) {
       init[k] = data[k]
+    }
+    // JSONB éditables : toujours normaliser vers un array (vide si null).
+    for (const k of EDITABLE_JSONB_KEYS) {
+      const v = data[k]
+      init[k] = Array.isArray(v) ? v : []
     }
     setFormData(init)
 
@@ -335,6 +403,15 @@ export function KycPublicClient({ token }: { token: string }) {
       const v = initialData[k]
       if (v != null) out[k] = v
     }
+    // JSONB éditables : on prend la version courante du formulaire,
+    // pas l'initialData. On n'envoie la clé que si l'array existe (même
+    // vide — un array vide est un signal volontaire "j'ai tout supprimé").
+    for (const k of EDITABLE_JSONB_KEYS) {
+      const v = formData[k]
+      if (Array.isArray(v)) {
+        out[k] = sanitizeJsonbRows(v)
+      }
+    }
     // type_personne est readonly (défini par le consultant) mais on le
     // renvoie pour cohérence.
     if (initialData.type_personne) {
@@ -429,18 +506,38 @@ export function KycPublicClient({ token }: { token: string }) {
             </section>
           ))}
 
-          {/* Bandeau patrimoine (non éditable dans #4b.1) */}
-          <section className="bg-white border border-dashed border-gray-300 rounded-lg p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-2">
-              Patrimoine et emprunts
-            </h2>
-            <p className="text-xs text-gray-600">
-              L&apos;édition détaillée de votre patrimoine (immobilier,
-              produits financiers, divers) et de vos emprunts sera bientôt
-              disponible ici. En attendant, merci de contacter directement
-              votre consultant pour toute mise à jour de ces sections.
-            </p>
-          </section>
+          {/* Patrimoine immobilier (JSONB éditable) */}
+          <ImmobilierEditor
+            rows={(formData.patrimoine_immobilier as ImmobilierRow[]) || []}
+            onChange={(rows) => setField('patrimoine_immobilier', rows)}
+          />
+
+          {/* Produits financiers (JSONB éditable) */}
+          <ProduitsFinanciersEditor
+            rows={(formData.produits_financiers as ProduitFinancierRow[]) || []}
+            onChange={(rows) => setField('produits_financiers', rows)}
+          />
+
+          {/* Patrimoine divers (JSONB éditable) */}
+          <DiversEditor
+            rows={(formData.patrimoine_divers as DiversRow[]) || []}
+            onChange={(rows) => setField('patrimoine_divers', rows)}
+          />
+
+          {/* Emprunts (JSONB éditable, avec échéance mensuelle pour le
+              taux d'endettement — Chantier #3) */}
+          <EmpruntsEditor
+            rows={(formData.emprunts as EmpruntRow[]) || []}
+            onChange={(rows) => setField('emprunts', rows)}
+          />
+
+          <p className="text-xs text-gray-500 italic">
+            Si vous détenez un bien, un placement ou un emprunt en commun
+            avec une autre personne (conjoint, enfant, société, …),
+            saisissez simplement son nom dans le champ « Co-titulaire ».
+            Votre consultant rattachera la fiche au dossier concerné lors
+            de la validation.
+          </p>
         </fieldset>
 
         {/* Action */}
@@ -714,5 +811,581 @@ function SubmitDialog({
         </div>
       </div>
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Helpers JSONB                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Nettoie un array de lignes JSONB avant envoi :
+ *   - transforme '' en null pour les number,
+ *   - drop les lignes 100% vides (toutes les valeurs falsy),
+ *   - trim les strings.
+ * Conserve l'ordre des lignes.
+ */
+function sanitizeJsonbRows(rows: unknown[]): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = []
+  for (const raw of rows) {
+    if (!raw || typeof raw !== 'object') continue
+    const src = raw as Record<string, unknown>
+    const cleaned: Record<string, unknown> = {}
+    let hasAny = false
+    for (const [k, v] of Object.entries(src)) {
+      if (typeof v === 'string') {
+        const t = v.trim()
+        if (t) {
+          cleaned[k] = t
+          hasAny = true
+        }
+      } else if (typeof v === 'number' && Number.isFinite(v)) {
+        cleaned[k] = v
+        hasAny = true
+      } else if (v === '' || v == null) {
+        // skip : cellule vide
+      } else {
+        cleaned[k] = v
+        hasAny = true
+      }
+    }
+    if (hasAny) out.push(cleaned)
+  }
+  return out
+}
+
+const DETENTEUR_OPTIONS: Array<{ v: DetenteurType; label: string }> = [
+  { v: '', label: '—' },
+  { v: 'client', label: 'Moi seul(e)' },
+  { v: 'conjoint', label: 'Mon conjoint seul(e)' },
+  { v: 'commun', label: 'En commun' },
+  { v: 'autre', label: 'Autre (précisez le nom)' },
+]
+
+/* ------------------------------------------------------------------ */
+/* Row editors — un par type de patrimoine                              */
+/* ------------------------------------------------------------------ */
+
+function EditorShell({
+  title,
+  subtitle,
+  onAdd,
+  children,
+}: {
+  title: string
+  subtitle?: string
+  onAdd: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <section className="bg-white border border-gray-200 rounded-lg p-5">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+          {subtitle && (
+            <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="shrink-0 inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        >
+          + Ajouter
+        </button>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function RowCard({
+  idx,
+  onRemove,
+  children,
+}: {
+  idx: number
+  onRemove: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="border border-gray-200 rounded-md p-3 mb-2 last:mb-0 relative">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] uppercase tracking-wide text-gray-400">
+          Ligne {idx + 1}
+        </span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-xs text-red-600 hover:text-red-800"
+        >
+          Supprimer
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function TxtCell({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  span2 = false,
+}: {
+  label: string
+  value: string | number | undefined
+  onChange: (v: string | number | '') => void
+  placeholder?: string
+  type?: 'text' | 'number' | 'date'
+  span2?: boolean
+}) {
+  const v = value == null ? '' : String(value)
+  return (
+    <div className={span2 ? 'sm:col-span-2' : ''}>
+      <label className="block text-[11px] font-medium text-gray-600 mb-0.5">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={v}
+        placeholder={placeholder}
+        onChange={(e) => {
+          if (type === 'number') {
+            if (e.target.value === '') {
+              onChange('')
+            } else {
+              const n = parseFloat(e.target.value)
+              onChange(Number.isFinite(n) ? n : '')
+            }
+          } else {
+            onChange(e.target.value)
+          }
+        }}
+        className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:ring-0"
+      />
+    </div>
+  )
+}
+
+function SelectCell({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string | undefined
+  onChange: (v: string) => void
+  options: Array<{ v: string; label: string }>
+}) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-gray-600 mb-0.5">
+        {label}
+      </label>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:ring-0"
+      >
+        {options.map((o) => (
+          <option key={o.v} value={o.v}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function DetenteurFields<
+  T extends { detenteur_type?: DetenteurType; co_titulaire_nom?: string },
+>({
+  row,
+  onPatch,
+}: {
+  row: T
+  onPatch: (patch: Partial<T>) => void
+}) {
+  const needsName =
+    row.detenteur_type === 'commun' || row.detenteur_type === 'autre'
+  return (
+    <>
+      <SelectCell
+        label="Détenteur"
+        value={row.detenteur_type}
+        onChange={(v) =>
+          onPatch({
+            detenteur_type: v as DetenteurType,
+            // on vide le nom si on repasse à un détenteur solo
+            co_titulaire_nom:
+              v === 'commun' || v === 'autre' ? row.co_titulaire_nom : '',
+          } as Partial<T>)
+        }
+        options={DETENTEUR_OPTIONS.map((o) => ({ v: o.v, label: o.label }))}
+      />
+      {needsName && (
+        <TxtCell
+          label="Co-titulaire (nom)"
+          value={row.co_titulaire_nom}
+          placeholder="Ex. Marie Dupont"
+          onChange={(v) =>
+            onPatch({ co_titulaire_nom: String(v) } as Partial<T>)
+          }
+        />
+      )}
+    </>
+  )
+}
+
+function ImmobilierEditor({
+  rows,
+  onChange,
+}: {
+  rows: ImmobilierRow[]
+  onChange: (rows: ImmobilierRow[]) => void
+}) {
+  const patch = (i: number, p: Partial<ImmobilierRow>) => {
+    const next = rows.slice()
+    next[i] = { ...next[i], ...p }
+    onChange(next)
+  }
+  const add = () =>
+    onChange([...rows, { detenteur_type: 'client' } as ImmobilierRow])
+  const remove = (i: number) => {
+    const next = rows.slice()
+    next.splice(i, 1)
+    onChange(next)
+  }
+
+  return (
+    <EditorShell
+      title="Patrimoine immobilier"
+      subtitle="Résidence principale, secondaire, investissement locatif, SCPI détenues en direct, etc."
+      onAdd={add}
+    >
+      {rows.length === 0 && (
+        <p className="text-xs text-gray-400 italic">
+          Aucune ligne. Cliquez « Ajouter » si vous détenez un bien
+          immobilier.
+        </p>
+      )}
+      {rows.map((row, i) => (
+        <RowCard key={i} idx={i} onRemove={() => remove(i)}>
+          <TxtCell
+            label="Type de bien"
+            value={row.type_bien}
+            placeholder="Ex. Résidence principale"
+            onChange={(v) => patch(i, { type_bien: String(v) })}
+          />
+          <TxtCell
+            label="Désignation / adresse"
+            value={row.designation}
+            onChange={(v) => patch(i, { designation: String(v) })}
+          />
+          <TxtCell
+            label="Date d'acquisition"
+            type="date"
+            value={row.date_acq}
+            onChange={(v) => patch(i, { date_acq: String(v) })}
+          />
+          <TxtCell
+            label="Valeur d'acquisition (€)"
+            type="number"
+            value={row.valeur_acq}
+            onChange={(v) =>
+              patch(i, { valeur_acq: v === '' ? '' : Number(v) })
+            }
+          />
+          <TxtCell
+            label="Valeur actuelle (€)"
+            type="number"
+            value={row.valeur_actuelle}
+            onChange={(v) =>
+              patch(i, { valeur_actuelle: v === '' ? '' : Number(v) })
+            }
+          />
+          <TxtCell
+            label="Quote-part (%)"
+            type="number"
+            value={row.proportion}
+            onChange={(v) =>
+              patch(i, { proportion: v === '' ? '' : Number(v) })
+            }
+          />
+          <TxtCell
+            label="CRD emprunt (€)"
+            type="number"
+            value={row.crd}
+            onChange={(v) => patch(i, { crd: v === '' ? '' : Number(v) })}
+          />
+          <TxtCell
+            label="Charges mensuelles (€)"
+            type="number"
+            value={row.charges}
+            onChange={(v) =>
+              patch(i, { charges: v === '' ? '' : Number(v) })
+            }
+          />
+          <DetenteurFields
+            row={row}
+            onPatch={(p) => patch(i, p as Partial<ImmobilierRow>)}
+          />
+        </RowCard>
+      ))}
+    </EditorShell>
+  )
+}
+
+function ProduitsFinanciersEditor({
+  rows,
+  onChange,
+}: {
+  rows: ProduitFinancierRow[]
+  onChange: (rows: ProduitFinancierRow[]) => void
+}) {
+  const patch = (i: number, p: Partial<ProduitFinancierRow>) => {
+    const next = rows.slice()
+    next[i] = { ...next[i], ...p }
+    onChange(next)
+  }
+  const add = () =>
+    onChange([
+      ...rows,
+      { detenteur_type: 'client' } as ProduitFinancierRow,
+    ])
+  const remove = (i: number) => {
+    const next = rows.slice()
+    next.splice(i, 1)
+    onChange(next)
+  }
+
+  return (
+    <EditorShell
+      title="Produits financiers"
+      subtitle="Livrets, assurance-vie, PEA, comptes-titres, PER, épargne entreprise, etc."
+      onAdd={add}
+    >
+      {rows.length === 0 && (
+        <p className="text-xs text-gray-400 italic">
+          Aucune ligne. Cliquez « Ajouter » pour déclarer un placement.
+        </p>
+      )}
+      {rows.map((row, i) => (
+        <RowCard key={i} idx={i} onRemove={() => remove(i)}>
+          <TxtCell
+            label="Type de produit"
+            value={row.type_produit}
+            placeholder="Ex. Assurance-vie"
+            onChange={(v) => patch(i, { type_produit: String(v) })}
+          />
+          <TxtCell
+            label="Désignation"
+            value={row.designation}
+            placeholder="Ex. Contrat Afer"
+            onChange={(v) => patch(i, { designation: String(v) })}
+          />
+          <TxtCell
+            label="Établissement"
+            value={row.etablissement}
+            onChange={(v) => patch(i, { etablissement: String(v) })}
+          />
+          <TxtCell
+            label="Valeur actuelle (€)"
+            type="number"
+            value={row.valeur}
+            onChange={(v) =>
+              patch(i, { valeur: v === '' ? '' : Number(v) })
+            }
+          />
+          <TxtCell
+            label="Date d'ouverture"
+            type="date"
+            value={row.date_ouverture}
+            onChange={(v) => patch(i, { date_ouverture: String(v) })}
+          />
+          <TxtCell
+            label="Versements réguliers"
+            value={row.versements_reguliers}
+            placeholder="Ex. 300 €/mois"
+            onChange={(v) =>
+              patch(i, { versements_reguliers: String(v) })
+            }
+          />
+          <DetenteurFields
+            row={row}
+            onPatch={(p) => patch(i, p as Partial<ProduitFinancierRow>)}
+          />
+        </RowCard>
+      ))}
+    </EditorShell>
+  )
+}
+
+function DiversEditor({
+  rows,
+  onChange,
+}: {
+  rows: DiversRow[]
+  onChange: (rows: DiversRow[]) => void
+}) {
+  const patch = (i: number, p: Partial<DiversRow>) => {
+    const next = rows.slice()
+    next[i] = { ...next[i], ...p }
+    onChange(next)
+  }
+  const add = () =>
+    onChange([...rows, { detenteur_type: 'client' } as DiversRow])
+  const remove = (i: number) => {
+    const next = rows.slice()
+    next.splice(i, 1)
+    onChange(next)
+  }
+
+  return (
+    <EditorShell
+      title="Patrimoine divers"
+      subtitle="Véhicules, œuvres d'art, bijoux, parts sociales, objets de valeur, etc."
+      onAdd={add}
+    >
+      {rows.length === 0 && (
+        <p className="text-xs text-gray-400 italic">
+          Aucune ligne.
+        </p>
+      )}
+      {rows.map((row, i) => (
+        <RowCard key={i} idx={i} onRemove={() => remove(i)}>
+          <TxtCell
+            label="Nature du bien"
+            value={row.type_bien}
+            placeholder="Ex. Véhicule"
+            onChange={(v) => patch(i, { type_bien: String(v) })}
+          />
+          <TxtCell
+            label="Désignation"
+            value={row.designation}
+            onChange={(v) => patch(i, { designation: String(v) })}
+            span2
+          />
+          <TxtCell
+            label="Valeur estimée (€)"
+            type="number"
+            value={row.valeur}
+            onChange={(v) =>
+              patch(i, { valeur: v === '' ? '' : Number(v) })
+            }
+          />
+          <DetenteurFields
+            row={row}
+            onPatch={(p) => patch(i, p as Partial<DiversRow>)}
+          />
+        </RowCard>
+      ))}
+    </EditorShell>
+  )
+}
+
+function EmpruntsEditor({
+  rows,
+  onChange,
+}: {
+  rows: EmpruntRow[]
+  onChange: (rows: EmpruntRow[]) => void
+}) {
+  const patch = (i: number, p: Partial<EmpruntRow>) => {
+    const next = rows.slice()
+    next[i] = { ...next[i], ...p }
+    onChange(next)
+  }
+  const add = () =>
+    onChange([...rows, { detenteur_type: 'client' } as EmpruntRow])
+  const remove = (i: number) => {
+    const next = rows.slice()
+    next.splice(i, 1)
+    onChange(next)
+  }
+
+  return (
+    <EditorShell
+      title="Emprunts en cours"
+      subtitle="Prêts immobiliers, crédits conso, prêts étudiants, LOA, etc. Indiquez bien l'échéance mensuelle pour permettre le calcul de votre taux d'endettement."
+      onAdd={add}
+    >
+      {rows.length === 0 && (
+        <p className="text-xs text-gray-400 italic">
+          Aucun emprunt en cours.
+        </p>
+      )}
+      {rows.map((row, i) => (
+        <RowCard key={i} idx={i} onRemove={() => remove(i)}>
+          <TxtCell
+            label="Désignation"
+            value={row.designation}
+            placeholder="Ex. Prêt résidence principale"
+            onChange={(v) => patch(i, { designation: String(v) })}
+          />
+          <TxtCell
+            label="Établissement prêteur"
+            value={row.etablissement}
+            onChange={(v) => patch(i, { etablissement: String(v) })}
+          />
+          <TxtCell
+            label="Montant initial (€)"
+            type="number"
+            value={row.montant}
+            onChange={(v) =>
+              patch(i, { montant: v === '' ? '' : Number(v) })
+            }
+          />
+          <TxtCell
+            label="Date de départ"
+            type="date"
+            value={row.date}
+            onChange={(v) => patch(i, { date: String(v) })}
+          />
+          <TxtCell
+            label="Durée"
+            value={row.duree}
+            placeholder="Ex. 25 ans"
+            onChange={(v) => patch(i, { duree: String(v) })}
+          />
+          <TxtCell
+            label="Taux (%)"
+            type="number"
+            value={row.taux}
+            onChange={(v) => patch(i, { taux: v === '' ? '' : Number(v) })}
+          />
+          <TxtCell
+            label="Capital restant dû (€)"
+            type="number"
+            value={row.crd}
+            onChange={(v) => patch(i, { crd: v === '' ? '' : Number(v) })}
+          />
+          <TxtCell
+            label="Date de fin"
+            type="date"
+            value={row.echeance}
+            onChange={(v) => patch(i, { echeance: String(v) })}
+          />
+          <TxtCell
+            label="Échéance mensuelle (€)"
+            type="number"
+            value={row.echeance_mensuelle}
+            onChange={(v) =>
+              patch(i, { echeance_mensuelle: v === '' ? '' : Number(v) })
+            }
+          />
+          <DetenteurFields
+            row={row}
+            onPatch={(p) => patch(i, p as Partial<EmpruntRow>)}
+          />
+        </RowCard>
+      ))}
+    </EditorShell>
   )
 }
