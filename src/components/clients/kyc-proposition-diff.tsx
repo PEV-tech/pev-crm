@@ -121,16 +121,261 @@ function valuesDiffer(a: unknown, b: unknown): boolean {
   }
 }
 
-function formatValue(v: unknown): string {
-  if (v == null || v === '') return '—'
-  if (typeof v === 'object') {
+// ---------------------------------------------------------------------
+// Rendu human-readable des JSONB arrays (retour Maxine 2026-04-21 :
+// « le language est ici trop codé »). On intercepte
+// `patrimoine_immobilier`, `produits_financiers`, `emprunts`,
+// `patrimoine_divers` pour les afficher comme listes au lieu du
+// JSON.stringify brut historique (qui rendait le diff illisible).
+// ---------------------------------------------------------------------
+
+const DETENTEUR_LABELS: Record<string, string> = {
+  client: 'client',
+  conjoint: 'conjoint',
+  commun: 'commun',
+  autre: 'autre',
+}
+
+function fmtEuro(v: unknown): string | null {
+  if (v == null || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return null
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(n)
+}
+
+function fmtPct(v: unknown): string | null {
+  if (v == null || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return null
+  return `${n}%`
+}
+
+function fmtDate(v: unknown): string | null {
+  if (typeof v !== 'string' || v === '') return null
+  // ISO yyyy-mm-dd → dd/mm/yyyy (sans parsing Date pour éviter les
+  // décalages TZ).
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v)
+  if (!m) return v
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
+function fmtDetenteur(row: Record<string, unknown>): string | null {
+  const t = row.detenteur_type
+  if (typeof t !== 'string' || t === '') return null
+  const label = DETENTEUR_LABELS[t] || t
+  if (t === 'autre' && typeof row.co_titulaire_nom === 'string' && row.co_titulaire_nom) {
+    return `${label} (${row.co_titulaire_nom})`
+  }
+  return label
+}
+
+type RowLine = { label: string; value: string }
+
+function joinChips(parts: Array<string | null | undefined>): string {
+  return parts.filter(Boolean).join(' · ')
+}
+
+function describeImmobilier(row: Record<string, unknown>): {
+  title: string
+  subtitle: string | null
+  lines: RowLine[]
+} {
+  const title = (row.type_bien as string) || 'Bien immobilier'
+  const subtitle =
+    (row.designation as string) ||
+    joinChips([fmtDate(row.date_acq) && `acquis le ${fmtDate(row.date_acq)}`])
+  const lines: RowLine[] = []
+  const valAcq = fmtEuro(row.valeur_acq)
+  const valAct = fmtEuro(row.valeur_actuelle)
+  if (valAcq || valAct) {
+    lines.push({
+      label: 'Valeur',
+      value: joinChips([
+        valAct && `actuelle ${valAct}`,
+        valAcq && `acquise ${valAcq}`,
+      ]) || '—',
+    })
+  }
+  const prop = fmtPct(row.proportion)
+  if (prop) lines.push({ label: 'Quote-part', value: prop })
+  const crd = fmtEuro(row.crd)
+  if (crd) lines.push({ label: 'CRD emprunt', value: crd })
+  const charges = fmtEuro(row.charges)
+  if (charges) lines.push({ label: 'Charges', value: `${charges}/mois` })
+  const det = fmtDetenteur(row)
+  if (det) lines.push({ label: 'Détenteur', value: det })
+  return { title, subtitle: subtitle || null, lines }
+}
+
+function describeProduit(row: Record<string, unknown>): {
+  title: string
+  subtitle: string | null
+  lines: RowLine[]
+} {
+  const title = (row.type_produit as string) || 'Produit financier'
+  const subtitle = joinChips([
+    row.etablissement as string,
+    row.designation as string,
+  ])
+  const lines: RowLine[] = []
+  const val = fmtEuro(row.valeur)
+  if (val) lines.push({ label: 'Valeur', value: val })
+  const rdmt = fmtPct(row.rendement)
+  if (rdmt) lines.push({ label: 'Rendement', value: rdmt })
+  const ouv = fmtDate(row.date_ouverture)
+  if (ouv) lines.push({ label: 'Ouverture', value: ouv })
+  if (typeof row.versements_reguliers === 'string' && row.versements_reguliers) {
+    lines.push({
+      label: 'Versements',
+      value: String(row.versements_reguliers),
+    })
+  }
+  const det = fmtDetenteur(row)
+  if (det) lines.push({ label: 'Détenteur', value: det })
+  return { title, subtitle: subtitle || null, lines }
+}
+
+function describeEmprunt(row: Record<string, unknown>): {
+  title: string
+  subtitle: string | null
+  lines: RowLine[]
+} {
+  const title = (row.designation as string) || 'Emprunt'
+  const subtitle = (row.etablissement as string) || null
+  const lines: RowLine[] = []
+  const mnt = fmtEuro(row.montant)
+  if (mnt) lines.push({ label: 'Montant', value: mnt })
+  const crd = fmtEuro(row.crd)
+  if (crd) lines.push({ label: 'CRD', value: crd })
+  const taux = fmtPct(row.taux)
+  if (taux) lines.push({ label: 'Taux', value: taux })
+  const mens = fmtEuro(row.echeance_mensuelle)
+  if (mens) lines.push({ label: 'Mensualité', value: mens })
+  if (typeof row.duree === 'string' && row.duree) {
+    lines.push({ label: 'Durée', value: String(row.duree) })
+  }
+  const dep = fmtDate(row.date)
+  if (dep) lines.push({ label: 'Départ', value: dep })
+  const ech = fmtDate(row.echeance)
+  if (ech) lines.push({ label: 'Échéance', value: ech })
+  const det = fmtDetenteur(row)
+  if (det) lines.push({ label: 'Détenteur', value: det })
+  return { title, subtitle, lines }
+}
+
+function describeDivers(row: Record<string, unknown>): {
+  title: string
+  subtitle: string | null
+  lines: RowLine[]
+} {
+  const title = (row.type_bien as string) || 'Autre bien'
+  const subtitle = (row.designation as string) || null
+  const lines: RowLine[] = []
+  const val = fmtEuro(row.valeur)
+  if (val) lines.push({ label: 'Valeur', value: val })
+  const det = fmtDetenteur(row)
+  if (det) lines.push({ label: 'Détenteur', value: det })
+  return { title, subtitle, lines }
+}
+
+type StructuredDescriber = (row: Record<string, unknown>) => {
+  title: string
+  subtitle: string | null
+  lines: RowLine[]
+}
+
+const STRUCTURED_FIELDS: Record<string, StructuredDescriber> = {
+  patrimoine_immobilier: describeImmobilier,
+  produits_financiers: describeProduit,
+  emprunts: describeEmprunt,
+  patrimoine_divers: describeDivers,
+}
+
+/**
+ * Rendu lisible d'une valeur de champ dans le diff. Pour les JSONB
+ * arrays (patrimoine, produits, emprunts), on déroule chaque ligne en
+ * petit bloc au lieu d'afficher le JSON brut.
+ */
+function ValueBlock({
+  fieldKey,
+  value,
+  tone,
+}: {
+  fieldKey: string
+  value: unknown
+  tone: 'current' | 'proposed'
+}) {
+  const describe = STRUCTURED_FIELDS[fieldKey]
+  const textClass = tone === 'proposed' ? 'text-amber-900' : 'text-gray-700'
+  const emptyClass = tone === 'proposed' ? 'text-amber-600 italic' : 'text-gray-400 italic'
+
+  // JSONB array → affichage structuré
+  if (describe && Array.isArray(value)) {
+    if (value.length === 0) {
+      return <div className={`text-xs ${emptyClass}`}>Aucune ligne</div>
+    }
+    return (
+      <ul className="space-y-2">
+        {value.map((r, i) => {
+          const row = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>
+          const d = describe(row)
+          return (
+            <li
+              key={i}
+              className={`rounded border ${
+                tone === 'proposed'
+                  ? 'border-amber-200 bg-white/60'
+                  : 'border-gray-200 bg-white'
+              } p-2`}
+            >
+              <div className={`text-xs font-semibold ${textClass}`}>
+                {d.title}
+              </div>
+              {d.subtitle && (
+                <div className={`text-[11px] ${textClass} opacity-80`}>
+                  {d.subtitle}
+                </div>
+              )}
+              {d.lines.length > 0 && (
+                <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
+                  {d.lines.map((l, j) => (
+                    <React.Fragment key={j}>
+                      <dt className="text-gray-500">{l.label}</dt>
+                      <dd className={textClass}>{l.value}</dd>
+                    </React.Fragment>
+                  ))}
+                </dl>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    )
+  }
+
+  // JSONB objet inattendu / tableau sans describer → fallback JSON mais
+  // compact (moins intimidant que JSON.stringify brut).
+  if (value != null && typeof value === 'object') {
     try {
-      return JSON.stringify(v, null, 2)
+      return (
+        <pre className={`whitespace-pre-wrap break-words font-sans text-[11px] ${textClass}`}>
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      )
     } catch {
-      return String(v)
+      return <span className={textClass}>{String(value)}</span>
     }
   }
-  return String(v)
+
+  // Scalars.
+  if (value == null || value === '') {
+    return <span className={emptyClass}>—</span>
+  }
+  return <span className={textClass}>{String(value)}</span>
 }
 
 export function KycPropositionDiff({
@@ -185,7 +430,65 @@ export function KycPropositionDiff({
     )
   }
 
-  if (!proposition) return null
+  // Retour Maxine 2026-04-21 : « appliquer n'a pas fonctionné / ne s'est
+  // pas sauvegardé ». Cause réelle identifiée — après un apply réussi,
+  // `load()` remet `proposition = null` donc le composant rendait null
+  // et le message de succès disparaissait avant d'être lu. On garde
+  // désormais un bandeau de confirmation persistant tant que le
+  // consultant ne l'a pas fermé.
+  if (!proposition) {
+    if (success || error) {
+      return (
+        <Card
+          className={
+            error
+              ? 'border-red-300 bg-red-50/50'
+              : 'border-green-300 bg-green-50/50'
+          }
+        >
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 mt-0.5">
+                {error ? (
+                  <XCircle size={18} className="text-red-600" />
+                ) : (
+                  <CheckCircle size={18} className="text-green-700" />
+                )}
+              </div>
+              <div className="flex-1 text-sm">
+                <div
+                  className={`font-semibold mb-0.5 ${
+                    error ? 'text-red-800' : 'text-green-800'
+                  }`}
+                >
+                  {error
+                    ? "Erreur lors de l'application"
+                    : 'Proposition traitée'}
+                </div>
+                <div
+                  className={error ? 'text-red-700' : 'text-green-700'}
+                >
+                  {error || success}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setError(null)
+                  setSuccess(null)
+                }}
+              >
+                Fermer
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )
+    }
+    return null
+  }
 
   // Calcul du diff : on ne montre que les champs VRAIMENT modifiés.
   const snapshot = proposition.original_snapshot ?? {}
@@ -221,7 +524,12 @@ export function KycPropositionDiff({
           field_decisions: payload,
         }),
       })
-      const data = (await res.json().catch(() => ({}))) as {
+      // Récupère le body en texte d'abord pour pouvoir logger même si
+      // le JSON est corrompu / vide (retour Maxine 2026-04-21 : on
+      // voulait diagnostiquer pourquoi "appliquer" semblait échouer
+      // silencieusement — on surface tout en console + dans l'UI).
+      const rawText = await res.text().catch(() => '')
+      let data: {
         error?: string
         status?: 'fully_applied' | 'partially_applied' | 'rejected'
         applied?: number
@@ -233,9 +541,24 @@ export function KycPropositionDiff({
         email_sent_client?: boolean
         email_skipped_reason_consultant?: string
         email_skipped_reason_client?: string
+      } = {}
+      try {
+        data = rawText ? JSON.parse(rawText) : {}
+      } catch {
+        // body non JSON — on va surface rawText brut comme erreur.
       }
+      // Log console pour que Maxine puisse copier-coller si besoin.
+      console.log('[kyc-apply] response', res.status, data, rawText)
       if (!res.ok) {
-        setError(data.error || `HTTP ${res.status}`)
+        const msg =
+          data.error ||
+          (rawText && rawText.length < 500 ? rawText : '') ||
+          `HTTP ${res.status}`
+        setError(
+          `${msg} (status ${res.status}). ` +
+            `La proposition n'a pas été appliquée côté serveur. ` +
+            `Ouvrez la console navigateur pour le détail.`,
+        )
         setApplying(false)
         return
       }
@@ -467,20 +790,24 @@ export function KycPropositionDiff({
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       <div className="rounded bg-gray-50 border border-gray-200 p-2">
-                        <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">
+                        <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
                           Valeur actuelle
                         </div>
-                        <pre className="whitespace-pre-wrap break-words text-gray-700 font-sans">
-                          {formatValue(current)}
-                        </pre>
+                        <ValueBlock
+                          fieldKey={k}
+                          value={current}
+                          tone="current"
+                        />
                       </div>
                       <div className="rounded bg-amber-50 border border-amber-200 p-2">
-                        <div className="text-[10px] uppercase tracking-wide text-amber-700 mb-0.5">
+                        <div className="text-[10px] uppercase tracking-wide text-amber-700 mb-1">
                           Proposition
                         </div>
-                        <pre className="whitespace-pre-wrap break-words text-amber-900 font-sans">
-                          {formatValue(next)}
-                        </pre>
+                        <ValueBlock
+                          fieldKey={k}
+                          value={next}
+                          tone="proposed"
+                        />
                       </div>
                     </div>
                   </div>
