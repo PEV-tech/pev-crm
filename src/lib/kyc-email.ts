@@ -13,8 +13,16 @@
  * et on expose un helper groupé `sendKycSignedNotifications` qui fait les
  * deux en parallèle.
  *
+ * Migration 2026-04-21 : abandon de Resend au profit de Google Workspace
+ * SMTP (voir `src/lib/email-transport.ts` pour les détails). Le domaine
+ * `private-equity-valley.com` est hébergé chez IONOS en DNS payant, donc
+ * impossible de valider le DKIM/SPF/DMARC requis par Resend. Google
+ * Workspace est déjà configuré sur le domaine (MX aspmx.l.google.com) et
+ * gère l'authentification sortante sans modif DNS supplémentaire.
+ *
  * Approche :
- *   · Utilise Resend (installé 2026-04-21). Clé `RESEND_API_KEY` côté server.
+ *   · Transport : helper `sendEmail()` du module `email-transport.ts`
+ *     (Nodemailer + smtp.gmail.com:465 avec app password Google).
  *   · Résolution destinataire consultant : clients.consultant_id →
  *     consultants.auth_user_id → admin.auth.admin.getUserById(...).
  *   · Résolution destinataire client : clients.email (champ direct de la
@@ -22,17 +30,17 @@
  *   · Pièce jointe : si on a les bytes du PDF (passés en paramètre par la
  *     route post-génération), on attache directement. Sinon on envoie un
  *     lien vers `/api/kyc/pdf/[clientId]` (consultant auth sera vérifiée).
- *   · Le `from:` est configurable via RESEND_FROM (défaut :
- *     'PEV KYC <kyc@private-equity-valley.com>').
+ *   · `from:` : défaut calculé depuis GOOGLE_SMTP_USER ; override via
+ *     GOOGLE_SMTP_FROM. Google Workspace impose que l'expéditeur soit le
+ *     compte authentifié ou un alias déclaré, sinon le From est réécrit.
  *
  * Dégradation gracieuse :
- *   · Pas de clé → `skipped: 'no-api-key'` (log warning).
+ *   · Pas de credentials SMTP → `skipped: 'no-api-key'` (log warning).
  *   · Pas d'email consultant/client → `skipped: 'no-*-email'`.
- *   · Erreur Resend → `error` propagé mais la route appelante renvoie quand
+ *   · Erreur SMTP → `error` propagé mais la route appelante renvoie quand
  *     même {ok:true} — la signature reste valide en DB.
  */
 
-import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import {
@@ -42,13 +50,16 @@ import {
   titleForTemplateKey,
   type EmailTemplateVariables,
 } from '@/lib/kyc-email-templates'
+import {
+  sendEmail,
+  defaultFromAddress,
+  hasCredentials,
+} from '@/lib/email-transport'
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ||
   process.env.NEXT_PUBLIC_SITE_URL ||
   'https://pev-crm.vercel.app'
-
-const DEFAULT_FROM = 'PEV KYC <kyc@private-equity-valley.com>'
 
 export interface KycEmailContext {
   admin: SupabaseClient<Database>
@@ -83,10 +94,9 @@ export interface KycEmailBatchResult {
 export async function sendKycSignedNotification(
   ctx: KycEmailContext
 ): Promise<KycEmailResult> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
+  if (!hasCredentials()) {
     console.warn(
-      '[kyc-email] RESEND_API_KEY manquant — notification consultant non envoyée'
+      '[kyc-email] GOOGLE_SMTP_USER/PASSWORD manquant — notification consultant non envoyée'
     )
     return { sent: false, skipped: 'no-api-key' }
   }
@@ -199,9 +209,8 @@ export async function sendKycSignedNotification(
     text = built.text
   }
 
-  // 3. Send via Resend
-  const resend = new Resend(apiKey)
-  const from = process.env.RESEND_FROM || DEFAULT_FROM
+  // 3. Send via Google Workspace SMTP (Nodemailer helper)
+  const from = defaultFromAddress()
   const attachments: Array<{
     filename: string
     content: Buffer
@@ -213,25 +222,18 @@ export async function sendKycSignedNotification(
     })
   }
 
-  try {
-    const result = await resend.emails.send({
-      from,
-      to: consultantEmail,
-      subject,
-      html,
-      text,
-      attachments: attachments.length ? attachments : undefined,
-    })
-    if (result.error) {
-      return { sent: false, error: result.error.message }
-    }
-    return { sent: true, messageId: result.data?.id }
-  } catch (err: unknown) {
-    return {
-      sent: false,
-      error: err instanceof Error ? err.message : String(err),
-    }
+  const result = await sendEmail({
+    from,
+    to: consultantEmail,
+    subject,
+    html,
+    text,
+    attachments: attachments.length ? attachments : undefined,
+  })
+  if (result.error) {
+    return { sent: false, error: result.error.message }
   }
+  return { sent: true, messageId: result.data?.id }
 }
 
 // =====================================================
@@ -344,8 +346,7 @@ function escapeAttr(s: string): string {
 export async function sendKycSignedNotificationToClient(
   ctx: KycEmailContext,
 ): Promise<KycEmailResult> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) {
+  if (!hasCredentials()) {
     return { sent: false, skipped: 'no-api-key' }
   }
 
@@ -438,8 +439,7 @@ export async function sendKycSignedNotificationToClient(
     text = built.text
   }
 
-  const resend = new Resend(apiKey)
-  const from = process.env.RESEND_FROM || DEFAULT_FROM
+  const from = defaultFromAddress()
   const attachments: Array<{ filename: string; content: Buffer }> = []
   if (ctx.pdfBytes) {
     attachments.push({
@@ -448,25 +448,18 @@ export async function sendKycSignedNotificationToClient(
     })
   }
 
-  try {
-    const result = await resend.emails.send({
-      from,
-      to: clientEmail,
-      subject: subjectStr,
-      html,
-      text,
-      attachments: attachments.length ? attachments : undefined,
-    })
-    if (result.error) {
-      return { sent: false, error: result.error.message }
-    }
-    return { sent: true, messageId: result.data?.id }
-  } catch (err: unknown) {
-    return {
-      sent: false,
-      error: err instanceof Error ? err.message : String(err),
-    }
+  const result = await sendEmail({
+    from,
+    to: clientEmail,
+    subject: subjectStr,
+    html,
+    text,
+    attachments: attachments.length ? attachments : undefined,
+  })
+  if (result.error) {
+    return { sent: false, error: result.error.message }
   }
+  return { sent: true, messageId: result.data?.id }
 }
 
 /**
