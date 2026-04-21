@@ -3,6 +3,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { computeKycCompletion } from '@/lib/kyc-completion'
+// Retour #4 — source unique des dropdowns pour éviter que le client
+// saisisse une valeur que le CRM ne peut pas relire.
+import {
+  LOGEMENT_OPTIONS,
+  SITUATION_MATRIMONIALE_OPTIONS,
+  REGIME_MATRIMONIAL_OPTIONS,
+  TYPE_BIEN_IMMOBILIER_OPTIONS,
+  TYPE_PRODUIT_FINANCIER_OPTIONS,
+  needsRegimeMatrimonial,
+} from '@/lib/kyc-enums'
 
 /**
  * Portail KYC public /kyc/[token]
@@ -58,9 +68,13 @@ const SECTIONS: Array<{
   fields: Array<{
     key: string
     label: string
-    type?: 'text' | 'email' | 'tel' | 'number' | 'date' | 'textarea'
+    type?: 'text' | 'email' | 'tel' | 'number' | 'date' | 'textarea' | 'select'
     placeholder?: string
     cond?: (d: KycData) => boolean
+    // Retour #4 — si fourni, le champ est rendu comme un <select> aligné
+    // sur les enums CRM. On stocke le LIBELLÉ tel quel (pas un code), pour
+    // que le consultant relise la même chaîne qu'il verrait dans le CRM.
+    options?: readonly string[]
   }>
 }> = [
   {
@@ -100,6 +114,8 @@ const SECTIONS: Array<{
       {
         key: 'proprietaire_locataire',
         label: 'Propriétaire ou locataire',
+        type: 'select',
+        options: LOGEMENT_OPTIONS,
       },
     ],
   },
@@ -109,8 +125,18 @@ const SECTIONS: Array<{
       {
         key: 'situation_matrimoniale',
         label: 'Situation matrimoniale',
+        type: 'select',
+        options: SITUATION_MATRIMONIALE_OPTIONS,
       },
-      { key: 'regime_matrimonial', label: 'Régime matrimonial' },
+      {
+        key: 'regime_matrimonial',
+        label: 'Régime matrimonial',
+        type: 'select',
+        options: REGIME_MATRIMONIAL_OPTIONS,
+        // N'apparaît que si la situation l'implique (marié·e / pacsé·e) —
+        // même règle que la section KYC consultant (kyc-section.tsx).
+        cond: (d) => needsRegimeMatrimonial(d.situation_matrimoniale as string | null | undefined),
+      },
       {
         key: 'nombre_enfants',
         label: 'Nombre d\'enfants',
@@ -490,7 +516,11 @@ export function KycPublicClient({ token }: { token: string }) {
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                 {section.fields
-                  .filter((f) => !f.cond || f.cond(initialData))
+                  // Retour #4 — on évalue la condition sur `formData` (pas
+                  // `initialData`) : si le client change sa situation
+                  // matrimoniale, le champ régime apparaît/disparaît en
+                  // temps réel, comme dans le CRM.
+                  .filter((f) => !f.cond || f.cond(formData as KycData))
                   .map((f) => (
                     <FieldInput
                       key={f.key}
@@ -498,6 +528,7 @@ export function KycPublicClient({ token }: { token: string }) {
                       label={f.label}
                       type={f.type || 'text'}
                       placeholder={f.placeholder}
+                      options={f.options}
                       value={formData[f.key] as ScalarValue}
                       onChange={(v) => setField(f.key, v)}
                     />
@@ -632,13 +663,15 @@ function FieldInput({
   placeholder,
   value,
   onChange,
+  options,
 }: {
   fieldKey: string
   label: string
-  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'textarea'
+  type: 'text' | 'email' | 'tel' | 'number' | 'date' | 'textarea' | 'select'
   placeholder?: string
   value: ScalarValue
   onChange: (v: ScalarValue) => void
+  options?: readonly string[]
 }) {
   const baseClass =
     'w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-0'
@@ -674,6 +707,20 @@ function FieldInput({
           onChange={(e) => onChange(e.target.value)}
           className={baseClass}
         />
+      ) : type === 'select' ? (
+        <select
+          {...commonProps}
+          value={v}
+          onChange={(e) => onChange(e.target.value)}
+          className={baseClass}
+        >
+          <option value="">—</option>
+          {(options || []).map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
       ) : (
         <input
           {...commonProps}
@@ -1155,11 +1202,20 @@ function ImmobilierEditor({
       )}
       {rows.map((row, i) => (
         <RowCard key={i} idx={i} onRemove={() => remove(i)}>
-          <TxtCell
+          {/* Retour #4 — dropdown aligné sur TYPE_BIEN_IMMOBILIER_OPTIONS
+              (kyc-enums). Le client ne peut plus saisir une valeur
+              libre que le consultant n'aurait pas dans sa liste. */}
+          <SelectCell
             label="Type de bien"
             value={row.type_bien}
-            placeholder="Ex. Résidence principale"
-            onChange={(v) => patch(i, { type_bien: String(v) })}
+            onChange={(v) => patch(i, { type_bien: v })}
+            options={[
+              { v: '', label: '— Sélectionner —' },
+              ...TYPE_BIEN_IMMOBILIER_OPTIONS.map((o) => ({
+                v: o,
+                label: o,
+              })),
+            ]}
           />
           <TxtCell
             label="Désignation / adresse"
@@ -1257,11 +1313,19 @@ function ProduitsFinanciersEditor({
       )}
       {rows.map((row, i) => (
         <RowCard key={i} idx={i} onRemove={() => remove(i)}>
-          <TxtCell
+          {/* Retour #4 — dropdown aligné sur TYPE_PRODUIT_FINANCIER_OPTIONS
+              (kyc-enums). Coherence CRM ↔ portail. */}
+          <SelectCell
             label="Type de produit"
             value={row.type_produit}
-            placeholder="Ex. Assurance-vie"
-            onChange={(v) => patch(i, { type_produit: String(v) })}
+            onChange={(v) => patch(i, { type_produit: v })}
+            options={[
+              { v: '', label: '— Sélectionner —' },
+              ...TYPE_PRODUIT_FINANCIER_OPTIONS.map((o) => ({
+                v: o,
+                label: o,
+              })),
+            ]}
           />
           <TxtCell
             label="Désignation"
