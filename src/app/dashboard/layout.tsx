@@ -51,6 +51,14 @@ export default function DashboardLayout({
     loadUserData()
   }, [router])
 
+  // IMPORTANT : tous les hooks doivent être appelés inconditionnellement,
+  // AVANT tout `return` précoce, sinon React error #310
+  // ("Rendered more hooks than during the previous render").
+  const contextValue = useMemo(
+    () => ({ user, consultant, isLoading: loading, error: null }),
+    [user, consultant, loading]
+  )
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -71,13 +79,6 @@ export default function DashboardLayout({
     await supabase.auth.signOut()
     router.push('/login')
   }
-
-  // Stabiliser la référence pour éviter de re-render tous les useUser()
-  // consumers à chaque render du layout (hygiène perf).
-  const contextValue = useMemo(
-    () => ({ user, consultant, isLoading: false, error: null }),
-    [user, consultant]
-  )
 
   return (
     <UserContext.Provider value={contextValue}>
