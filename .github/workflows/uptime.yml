@@ -1,0 +1,129 @@
+name: Uptime
+
+# Monitoring externe gratuit — remplace BetterStack/Pingdom par un cron GitHub
+# Actions. Pas de SaaS tiers, pas d'onboarding, pas de compte à gérer.
+#
+# Fonctionnement :
+#   - Toutes les 5 minutes (limite cron GitHub : 5 min min).
+#   - GET sur https://${{ vars.PROD_URL }}/api/healthcheck avec timeout 10s.
+#   - Si le code HTTP ≠ 200, on ouvre une GitHub Issue labellisée `incident`.
+#   - Si une issue `incident` est déjà ouverte pour le même incident, on ne
+#     spamme pas — on se contente d'un commentaire horodaté sur l'existante.
+#   - Quand le site remonte et qu'une issue `incident` est ouverte, on la
+#     clôture avec un commentaire "résolu à HH:MM UTC".
+#
+# Variables repository (Settings → Secrets and variables → Actions → Variables) :
+#   - PROD_URL : `pev-crm.vercel.app` (sans protocole, le workflow ajoute https://)
+#
+# Limitation connue : les schedules GitHub Actions sont "best-effort" —
+# sous forte charge de la plateforme, un run peut être reporté de quelques
+# minutes. Pour du monitoring critique, on passera sur BetterStack plus tard.
+# Pour l'instant (phase 0 prod, ~5 utilisateurs), c'est largement suffisant.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # permet de trigger manuellement pour tester
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  probe:
+    name: Probe healthcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Ping healthcheck
+        id: probe
+        run: |
+          URL="https://${{ vars.PROD_URL }}/api/healthcheck"
+          echo "Probing $URL"
+          # -s silent, -S show errors, -L follow redirects, -o capture body,
+          # -w get http code, --max-time 10s timeout total.
+          HTTP_CODE=$(curl -sSL -o /tmp/body.json -w "%{http_code}" --max-time 10 "$URL" || echo "000")
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          echo "=== Response body ==="
+          cat /tmp/body.json || true
+          echo ""
+          echo "=== HTTP code: $HTTP_CODE ==="
+          # On ne fail pas le step ici — la décision (ouvrir issue ou non)
+          # est prise par les steps suivants, qui ont besoin du code HTTP.
+
+      - name: Find existing open incident issue
+        id: find-issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # On cherche une issue open avec le label `incident`. On prend la
+          # plus récente (en théorie il ne devrait y en avoir qu'une).
+          ISSUE_NUMBER=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --state open \
+            --label incident \
+            --limit 1 \
+            --json number \
+            --jq '.[0].number // empty')
+          echo "existing_issue=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "Existing open incident: ${ISSUE_NUMBER:-none}"
+
+      - name: Open incident issue (site down, no existing issue)
+        if: steps.probe.outputs.http_code != '200' && steps.find-issue.outputs.existing_issue == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TS=$(date -u '+%Y-%m-%d %H:%M UTC')
+          BODY=$(cat <<EOF
+          Le healthcheck a retourné **HTTP ${{ steps.probe.outputs.http_code }}** à $TS.
+
+          URL sondée : \`https://${{ vars.PROD_URL }}/api/healthcheck\`
+
+          Réponse :
+          \`\`\`
+          $(cat /tmp/body.json 2>/dev/null | head -c 2000)
+          \`\`\`
+
+          Étapes de diag :
+          1. Vérifier le dashboard Vercel — déploiement récent ? erreur de build ?
+          2. Vérifier le statut Supabase — https://status.supabase.com
+          3. Si la DB est KO : \`select 1\` dans le SQL editor Supabase
+          4. Si Vercel est KO : https://www.vercel-status.com
+
+          Cette issue sera automatiquement fermée dès que le healthcheck repasse à 200.
+          EOF
+          )
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "🚨 Site down — HTTP ${{ steps.probe.outputs.http_code }} at $TS" \
+            --label incident \
+            --body "$BODY"
+
+      - name: Comment on existing incident (still down)
+        if: steps.probe.outputs.http_code != '200' && steps.find-issue.outputs.existing_issue != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TS=$(date -u '+%Y-%m-%d %H:%M UTC')
+          gh issue comment "${{ steps.find-issue.outputs.existing_issue }}" \
+            --repo "${{ github.repository }}" \
+            --body "Toujours down à $TS — HTTP ${{ steps.probe.outputs.http_code }}."
+
+      - name: Close incident (site recovered)
+        if: steps.probe.outputs.http_code == '200' && steps.find-issue.outputs.existing_issue != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TS=$(date -u '+%Y-%m-%d %H:%M UTC')
+          gh issue comment "${{ steps.find-issue.outputs.existing_issue }}" \
+            --repo "${{ github.repository }}" \
+            --body "✅ Résolu à $TS — healthcheck repasse à 200."
+          gh issue close "${{ steps.find-issue.outputs.existing_issue }}" \
+            --repo "${{ github.repository }}" \
+            --reason completed
