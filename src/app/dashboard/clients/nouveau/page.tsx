@@ -34,6 +34,7 @@ interface FormData {
   typePersonne: TypePersonne
   // Commun
   ville: string
+  codePostal: string
   pays: string
   adresse: string
   email: string
@@ -41,9 +42,12 @@ interface FormData {
   dateEntreeRelation: string
   consultantId: string
   commentaire: string
-  // PP
+  // PP (état civil enrichi — template KYC)
+  titre: string
   nom: string
   prenom: string
+  dateNaissance: string
+  nationalite: string
   situationMatrimoniale: string
   // PM
   raisonSociale: string
@@ -54,6 +58,15 @@ interface FormData {
   capitalSocial: string
   dateCreation: string
 }
+
+const TITRES = ['Monsieur', 'Madame'] as const
+
+// Regex validation simples (non-exhaustives mais attrapent les typos courantes).
+// SIREN = 9 chiffres, SIRET = 14 chiffres (avec espaces tolérés, strip au submit).
+// Email = forme minimale locale@domain.tld, laisse faire le MTA pour le reste.
+const SIREN_REGEX = /^\d{9}$/
+const SIRET_REGEX = /^\d{14}$/
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const SITUATIONS_MATRIMONIALES = [
   'Célibataire',
@@ -112,6 +125,7 @@ function NewClientContent() {
   const [formData, setFormData] = React.useState<FormData>({
     typePersonne: 'physique',
     ville: '',
+    codePostal: '',
     pays: '',
     adresse: '',
     email: '',
@@ -119,8 +133,11 @@ function NewClientContent() {
     dateEntreeRelation: new Date().toISOString().split('T')[0],
     consultantId: '',
     commentaire: '',
+    titre: '',
     nom: '',
     prenom: '',
+    dateNaissance: '',
+    nationalite: '',
     situationMatrimoniale: '',
     raisonSociale: '',
     formeJuridique: '',
@@ -264,6 +281,28 @@ function NewClientContent() {
         }
       }
 
+      // Validation formats — on refuse tôt pour éviter les typos (casse les
+      // exports fiscaux et les lookups INSEE/DGFiP). Les chiffres seuls sont
+      // acceptés, espaces strippés avant comparaison.
+      const sirenDigits = formData.siren.replace(/\s+/g, '')
+      if (isPM && sirenDigits && !SIREN_REGEX.test(sirenDigits)) {
+        setError('Le SIREN doit contenir exactement 9 chiffres.')
+        setLoading(false)
+        return
+      }
+      const siretDigits = formData.siret.replace(/\s+/g, '')
+      if (isPM && siretDigits && !SIRET_REGEX.test(siretDigits)) {
+        setError('Le SIRET doit contenir exactement 14 chiffres.')
+        setLoading(false)
+        return
+      }
+      const emailTrimmed = formData.email.trim()
+      if (emailTrimmed && !EMAIL_REGEX.test(emailTrimmed)) {
+        setError(`L'email "${emailTrimmed}" n'est pas valide.`)
+        setLoading(false)
+        return
+      }
+
       const paysResolved = formData.pays.trim() || 'Non renseigné'
 
       // Pour une PM, on stocke la raison sociale dans nom (compat recherche)
@@ -279,8 +318,9 @@ function NewClientContent() {
         nom: nomResolved,
         pays: paysResolved,
         ville: formData.ville.trim() || null,
+        code_postal: formData.codePostal.trim() || null,
         adresse: formData.adresse.trim() || null,
-        email: formData.email.trim() || null,
+        email: emailTrimmed || null,
         telephone: formData.telephone.trim() || null,
         consultant_id: formData.consultantId || null,
         date_entree_relation: formData.dateEntreeRelation || null,
@@ -289,16 +329,22 @@ function NewClientContent() {
       }
 
       if (isPM) {
+        payload.titre = null
+        payload.date_naissance = null
+        payload.nationalite = null
         payload.prenom = null
         payload.situation_matrimoniale = null
         payload.raison_sociale = formData.raisonSociale.trim()
         payload.forme_juridique = formData.formeJuridique || null
-        payload.siren = formData.siren.trim() || null
-        payload.siret = formData.siret.trim() || null
+        payload.siren = sirenDigits || null
+        payload.siret = siretDigits || null
         payload.representant_legal_id = representantLegal?.id || null
         payload.capital_social = Number.isFinite(capital) ? capital : null
         payload.date_creation = formData.dateCreation || null
       } else {
+        payload.titre = formData.titre || null
+        payload.date_naissance = formData.dateNaissance || null
+        payload.nationalite = formData.nationalite || null
         payload.prenom = formData.prenom.trim() || null
         payload.situation_matrimoniale = formData.situationMatrimoniale || null
         // Les champs PM restent null
@@ -511,7 +557,22 @@ function NewClientContent() {
               </>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-[120px_1fr_1fr] gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Titre</label>
+                    <Select
+                      name="titre"
+                      value={formData.titre}
+                      onChange={handleInputChange}
+                    >
+                      <option value="">—</option>
+                      {TITRES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
                     <Input
@@ -530,6 +591,38 @@ function NewClientContent() {
                       onChange={handleInputChange}
                       placeholder="Jean"
                     />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date de naissance
+                    </label>
+                    <Input
+                      name="dateNaissance"
+                      type="date"
+                      value={formData.dateNaissance}
+                      onChange={handleInputChange}
+                      min="1900-01-01"
+                      max={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nationalité
+                    </label>
+                    <Select
+                      name="nationalite"
+                      value={formData.nationalite}
+                      onChange={handleInputChange}
+                    >
+                      <option value="">— Non renseignée —</option>
+                      {COUNTRY_NAMES.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
                 </div>
                 <div>
@@ -569,48 +662,69 @@ function NewClientContent() {
                 placeholder={isPM ? '5 rue du Siège, Bat A' : '15 rue de la Paix'}
               />
             </div>
-            {/* Ordre FR : Ville AVANT Pays. */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ville</label>
-              <Input
-                name="ville"
-                value={formData.ville}
-                onChange={handleInputChange}
-                placeholder="Paris"
-              />
+            {/* Ordre FR : Code postal + Ville AVANT Pays. */}
+            <div className="grid grid-cols-[140px_1fr] gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Code postal</label>
+                <Input
+                  name="codePostal"
+                  value={formData.codePostal}
+                  onChange={handleInputChange}
+                  placeholder="75008"
+                  inputMode="numeric"
+                  maxLength={10}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ville</label>
+                <Input
+                  name="ville"
+                  value={formData.ville}
+                  onChange={handleInputChange}
+                  placeholder="Paris"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pays</label>
               {addingPays ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={newPaysDraft}
-                    onChange={(e) => setNewPaysDraft(e.target.value)}
-                    placeholder="Nom du nouveau pays"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        confirmNewPays()
-                      } else if (e.key === 'Escape') {
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={newPaysDraft}
+                      onChange={(e) => setNewPaysDraft(e.target.value)}
+                      placeholder="Nom du nouveau pays"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          confirmNewPays()
+                        } else if (e.key === 'Escape') {
+                          setAddingPays(false)
+                          setNewPaysDraft('')
+                        }
+                      }}
+                    />
+                    <Button type="button" onClick={confirmNewPays} disabled={!newPaysDraft.trim()}>
+                      Ajouter
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
                         setAddingPays(false)
                         setNewPaysDraft('')
-                      }
-                    }}
-                  />
-                  <Button type="button" onClick={confirmNewPays} disabled={!newPaysDraft.trim()}>
-                    Ajouter
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setAddingPays(false)
-                      setNewPaysDraft('')
-                    }}
-                  >
-                    Annuler
-                  </Button>
+                      }}
+                    >
+                      Annuler
+                    </Button>
+                  </div>
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    ⚠️ Hors référentiel ISO 3166-1 / sanctions UE / GAFI. Cette saisie
+                    n&apos;est pas filtrée automatiquement. Assurez-vous que la juridiction
+                    ne figure pas sur la liste noire (Corée du Nord, Iran, Russie, Bélarus,
+                    Syrie, Myanmar, Afghanistan, Cuba, Venezuela).
+                  </p>
                 </div>
               ) : (
                 <Select name="pays" value={formData.pays} onChange={handlePaysChange}>
@@ -620,7 +734,9 @@ function NewClientContent() {
                       {p}
                     </option>
                   ))}
-                  <option value="__add_new__">+ Ajouter un nouveau pays…</option>
+                  {isManager && (
+                    <option value="__add_new__">+ Ajouter un nouveau pays (hors ISO)…</option>
+                  )}
                 </Select>
               )}
             </div>

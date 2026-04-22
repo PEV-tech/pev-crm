@@ -221,9 +221,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         residence_fiscale: client?.residence_fiscale,
         nif: client?.nif,
         adresse: client?.adresse,
+        code_postal: client?.code_postal,
         ville: client?.ville,
         pays: client?.pays,
         proprietaire_locataire: client?.proprietaire_locataire,
+        montant_loyer: client?.montant_loyer,
         situation_matrimoniale: client?.situation_matrimoniale,
         regime_matrimonial: client?.regime_matrimonial,
         nombre_enfants: client?.nombre_enfants,
@@ -286,9 +288,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             residence_fiscale: data.residence_fiscale,
             nif: data.nif,
             adresse: data.adresse,
+            code_postal: data.code_postal,
             ville: data.ville,
             pays: data.pays,
             proprietaire_locataire: proprio,
+            montant_loyer: data.montant_loyer,
             situation_matrimoniale: sitMatri,
             regime_matrimonial: data.regime_matrimonial,
             nombre_enfants: data.nombre_enfants,
@@ -430,9 +434,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           residence_fiscale: editData.residence_fiscale,
           nif: editData.nif,
           adresse: editData.adresse,
+          code_postal: editData.code_postal,
           ville: editData.ville,
           pays: editData.pays,
           proprietaire_locataire: editData.proprietaire_locataire,
+          montant_loyer: editData.montant_loyer,
           situation_matrimoniale: editData.situation_matrimoniale,
           regime_matrimonial: editData.regime_matrimonial,
           nombre_enfants: editData.nombre_enfants,
@@ -484,9 +490,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         residence_fiscale: client?.residence_fiscale,
         nif: client?.nif,
         adresse: client?.adresse,
+        code_postal: client?.code_postal,
         ville: client?.ville,
         pays: client?.pays,
         proprietaire_locataire: client?.proprietaire_locataire,
+        montant_loyer: client?.montant_loyer,
         situation_matrimoniale: client?.situation_matrimoniale,
         regime_matrimonial: client?.regime_matrimonial,
         nombre_enfants: client?.nombre_enfants,
@@ -746,8 +754,24 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     />
                   </div>
 
-                  {/* Ordre d'usage FR : Ville AVANT Pays. */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Ordre d'usage FR : Code postal + Ville AVANT Pays. */}
+                  <div className="grid grid-cols-[140px_1fr] gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600">
+                        Code postal
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={10}
+                        value={data.code_postal || ''}
+                        onChange={e =>
+                          setEditData({ ...editData, code_postal: e.target.value })
+                        }
+                        placeholder="75008"
+                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                      />
+                    </div>
                     <div>
                       <label className="text-xs font-semibold text-gray-600">
                         Ville
@@ -762,62 +786,96 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
                       />
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600">
-                        Pays
-                      </label>
-                      <select
-                        value={data.pays || ''}
-                        onChange={e =>
-                          setEditData({ ...editData, pays: e.target.value })
-                        }
-                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                      >
-                        <option value="">— Sélectionner —</option>
-                        {data.pays && !COUNTRY_NAMES.includes(data.pays) && (
-                          <option value={data.pays}>
-                            {data.pays} (valeur existante)
-                          </option>
-                        )}
-                        {COUNTRY_NAMES.map(name => (
-                          <option key={`pays-${name}`} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
 
                   <div>
                     <label className="text-xs font-semibold text-gray-600">
-                      Statut de logement
+                      Pays
                     </label>
                     <select
-                      value={data.proprietaire_locataire || ''}
+                      value={data.pays || ''}
                       onChange={e =>
-                        setEditData({
-                          ...editData,
-                          proprietaire_locataire: e.target.value,
-                        })
+                        setEditData({ ...editData, pays: e.target.value })
                       }
                       className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
                     >
                       <option value="">— Sélectionner —</option>
-                      {/* Garde les valeurs legacy si elles ne figurent pas dans la liste. */}
-                      {data.proprietaire_locataire &&
-                        !LOGEMENT_OPTIONS.includes(
-                          data.proprietaire_locataire as any
-                        ) && (
-                          <option value={data.proprietaire_locataire}>
-                            {data.proprietaire_locataire} (valeur existante)
-                          </option>
-                        )}
-                      {LOGEMENT_OPTIONS.map(opt => (
-                        <option key={opt} value={opt}>
-                          {opt}
+                      {data.pays && !COUNTRY_NAMES.includes(data.pays) && (
+                        <option value={data.pays}>
+                          {data.pays} (valeur existante)
+                        </option>
+                      )}
+                      {COUNTRY_NAMES.map(name => (
+                        <option key={`pays-${name}`} value={name}>
+                          {name}
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600">
+                        Statut de logement
+                      </label>
+                      <select
+                        value={data.proprietaire_locataire || ''}
+                        onChange={e =>
+                          setEditData({
+                            ...editData,
+                            proprietaire_locataire: e.target.value,
+                          })
+                        }
+                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                      >
+                        <option value="">— Sélectionner —</option>
+                        {/* Garde les valeurs legacy si elles ne figurent pas dans la liste. */}
+                        {data.proprietaire_locataire &&
+                          !LOGEMENT_OPTIONS.includes(
+                            data.proprietaire_locataire as any
+                          ) && (
+                            <option value={data.proprietaire_locataire}>
+                              {data.proprietaire_locataire} (valeur existante)
+                            </option>
+                          )}
+                        {LOGEMENT_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Montant du loyer conditionnel : affiché dès que le statut
+                        contient "locataire" (case-insensitive pour accepter
+                        "Locataire" saisi par le picker + "locataire" mappé
+                        depuis populateFromKyc). Saisie = euros par mois TTC. */}
+                    {(data.proprietaire_locataire || '').toLowerCase().includes('locataire') && (
+                      <div>
+                        <label className="text-xs font-semibold text-gray-600">
+                          Montant du loyer (€/mois)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={
+                            data.montant_loyer === null || data.montant_loyer === undefined
+                              ? ''
+                              : String(data.montant_loyer)
+                          }
+                          onChange={e => {
+                            const raw = e.target.value.trim()
+                            const parsed = raw === '' ? null : Number(raw)
+                            setEditData({
+                              ...editData,
+                              montant_loyer: Number.isFinite(parsed as number) ? parsed : null,
+                            })
+                          }}
+                          placeholder="1200"
+                          className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                        />
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
@@ -896,26 +954,48 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-[140px_1fr] gap-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Code postal</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {displayValue(data.code_postal)}
+                      </p>
+                    </div>
                     <div>
                       <p className="text-xs text-gray-500">Ville</p>
                       <p className="text-sm font-medium text-gray-900">
                         {displayValue(data.ville)}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Pays</p>
-                      <p className="text-sm font-medium text-gray-900">
-                        {displayValue(data.pays)}
-                      </p>
-                    </div>
                   </div>
 
                   <div>
-                    <p className="text-xs text-gray-500">Statut de logement</p>
+                    <p className="text-xs text-gray-500">Pays</p>
                     <p className="text-sm font-medium text-gray-900">
-                      {displayValue(data.proprietaire_locataire)}
+                      {displayValue(data.pays)}
                     </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Statut de logement</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {displayValue(data.proprietaire_locataire)}
+                      </p>
+                    </div>
+                    {(data.proprietaire_locataire || '').toLowerCase().includes('locataire') && (
+                      <div>
+                        <p className="text-xs text-gray-500">Montant du loyer</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {data.montant_loyer != null
+                            ? `${Number(data.montant_loyer).toLocaleString('fr-FR', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              })} € / mois`
+                            : '-'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
