@@ -356,7 +356,7 @@ function NewClientContent() {
     )
   }
 
-  const isManager = consultant?.role === 'manager' || consultant?.role === 'gestionnaire'
+  const isManager = consultant?.role === 'manager'
 
   return (
     <div className="space-y-6">

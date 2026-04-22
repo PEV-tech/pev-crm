@@ -15,7 +15,7 @@ export async function updateSession(request: NextRequest) {
   const publicRoutes = ['/login', '/auth', '/kyc']
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request: {
       headers: request.headers,
     },

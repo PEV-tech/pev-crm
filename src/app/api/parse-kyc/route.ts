@@ -6,12 +6,14 @@ let pdfParse: any
 let mammoth: any
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   pdfParse = require('pdf-parse')
 } catch {
   pdfParse = null
 }
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   mammoth = require('mammoth')
 } catch {
   mammoth = null
@@ -94,7 +96,7 @@ function parseNumber(value: string | null | undefined): number | null {
 
   // mammoth sometimes renders € as "C" at end of number strings (e.g. "125 000C")
   // Also strip annotations like "(99K fixe, 66K bonus)" keeping only the main number
-  let normalized = trimmed
+  const normalized = trimmed
     .replace(/\s*\(.*?\)\s*/g, '') // Remove parenthetical annotations
     .replace(/€/g, '')
     .replace(/EUR/gi, '')
@@ -1070,11 +1072,11 @@ function parseKYCDocx(html: string): ParsedKYC {
   // Columns: Désignation | Détenteur | Valeur | Date d'ouverture | Versements réguliers | Rendement
   // Identified by having "Détenteur" AND "Rendement" in header.
   // NOTE: In some docx formats, the header row is in one table and data rows in the NEXT table.
-  let prodTable = findTableByHeaders(tables, [/d[ée]tenteur/i, /rendement/i])
+  const prodTable = findTableByHeaders(tables, [/d[ée]tenteur/i, /rendement/i])
     || findTable(tables, /PRODUITS FINANCIERS/i)
   if (prodTable) {
     const produits: KYCData['produits_financiers'] = []
-    let headerIdx = prodTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
+    const headerIdx = prodTable.findIndex(r => r.some(c => /d[ée]signation/i.test(c)))
     let headers = headerIdx >= 0 ? prodTable[headerIdx] : []
     let dataRows: string[][] = []
 

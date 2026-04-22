@@ -20,7 +20,7 @@ export function MaClienteleClientWrapper() {
         const supabase = createClient()
 
         // Always filter by current user's prenom — Ma Clientèle = MES dossiers
-        let query = supabase
+        const query = supabase
           .from('v_dossiers_complets')
           .select('id, client_id, statut, montant, financement, date_operation, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_nom, consultant_prenom, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee')
           .eq('consultant_prenom', consultant?.prenom || '')

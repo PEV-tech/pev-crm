@@ -81,7 +81,7 @@ export function FacturationConsultant({ consultantId, dossiers, resteAFacturer }
     const supabase = createClient()
     const { error } = await supabase.from('facturation_consultant').insert({
       consultant_id: consultantId,
-      montant_ht: Number(formMontant),
+      montant: Number(formMontant),
       date_facture: formDate,
     })
 

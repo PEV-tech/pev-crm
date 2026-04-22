@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Settings, Users, Package, Grid3x3, Edit2, Trash2, Check, X, Plus, TrendingUp, Target, Eye, Shield, Lock, Unlock, Mail } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
 import { formatCurrency } from '@/lib/formatting'
+import { TablesUpdate } from '@/types/database'
 import { EmailTemplatesTab } from '@/components/parametres/email-templates-tab'
 
 const formatPercentage = (value: number | null | undefined): string => {
@@ -351,9 +352,10 @@ export default function ParametresPage() {
   const handleToggleVisibility = async (settingId: string, field: 'consultant_visible' | 'back_office_visible', currentValue: boolean) => {
     setSavingVisibility(settingId + field)
     try {
+      const payload: TablesUpdate<'visibility_settings'> = { [field]: !currentValue }
       const { error } = await supabase
         .from('visibility_settings')
-        .update({ [field]: !currentValue })
+        .update(payload)
         .eq('id', settingId)
       if (error) throw error
       setVisibilitySettings(prev => prev.map(s =>

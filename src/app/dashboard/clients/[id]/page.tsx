@@ -4,6 +4,7 @@ import * as React from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
+import { TablesUpdate } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +51,7 @@ interface ClientInfo {
   nom: string
   prenom: string | null
   pays: string
+  ville: string | null
   email: string | null
   telephone: string | null
   numero_compte: string | null
@@ -259,16 +261,18 @@ export default function ClientDetailPage() {
   const handleSaveContact = async () => {
     if (!client) return
     setSavingContact(true)
+    // `pays` est non-nullable côté DB — on ne l'écrit que s'il est renseigné.
+    const updatePayload: TablesUpdate<'clients'> = {
+      email: editContact.email || null,
+      telephone: editContact.telephone || null,
+      ville: editContact.ville || null,
+      numero_compte: editContact.numero_compte || null,
+      google_drive_url: editContact.google_drive_url || null,
+    }
+    if (editContact.pays) updatePayload.pays = editContact.pays
     const { error } = await supabase
       .from('clients')
-      .update({
-        email: editContact.email || null,
-        telephone: editContact.telephone || null,
-        pays: editContact.pays || null,
-        ville: editContact.ville || null,
-        numero_compte: editContact.numero_compte || null,
-        google_drive_url: editContact.google_drive_url || null,
-      })
+      .update(updatePayload)
       .eq('id', clientId)
     if (error) {
       console.error('[clients/[id]] handleSaveContact failed:', error)

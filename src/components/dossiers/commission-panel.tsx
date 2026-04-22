@@ -40,7 +40,7 @@ interface CommissionPanelProps {
   editApporteurExt: boolean
   editApporteurExtNom: string
   editApporteurExtTaux: string
-  apporteurs?: { id: string; nom: string; prenom: string; taux_commission: number }[]
+  apporteurs?: { id: string; nom: string; prenom: string; taux_commission: number | null }[]
   editApporteurId?: string
   editApporteurTaux?: string
   showNewApporteurModal?: boolean
@@ -199,7 +199,7 @@ export function CommissionPanel({
                     <div>
                       <label className="text-sm font-medium text-gray-700 block mb-1">Apporteur</label>
                       <div className="flex gap-1">
-                        <select value={editApporteurId} onChange={(e) => { onEditApporteurIdChange?.(e.target.value); const f = apporteurs.find(a => a.id === e.target.value); if (f && f.taux_commission > 0) onEditApporteurTauxChange?.((f.taux_commission * 100).toFixed(2)); }} className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                        <select value={editApporteurId} onChange={(e) => { onEditApporteurIdChange?.(e.target.value); const f = apporteurs.find(a => a.id === e.target.value); if (f && f.taux_commission !== null && f.taux_commission > 0) onEditApporteurTauxChange?.((f.taux_commission * 100).toFixed(2)); }} className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
                           <option value="">— Sélectionner —</option>
                           {apporteurs.map(a => (<option key={a.id} value={a.id}>{a.prenom} {a.nom}</option>))}
                         </select>

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Produit, Compagnie, Consultant, TauxProduitCompagnie } from '@/types/database'
+import { Produit, Compagnie, Consultant, TauxProduitCompagnie, TablesInsert } from '@/types/database'
 import { useUser } from '@/hooks/use-user'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Heart, X, Search } from 'lucide-react'
@@ -197,21 +197,22 @@ function NewDossierContent() {
         clientIdForDossier = clientData.id
       }
 
+      const dossierPayload: TablesInsert<'dossiers'> = {
+        client_id: clientIdForDossier,
+        co_titulaire_id: coTitulaire?.id || null,
+        consultant_id: formData.consultantId,
+        produit_id: formData.produitId || null,
+        compagnie_id: formData.compagnieId || null,
+        montant: parseFloat(formData.montant),
+        financement: (formData.financement as any) || null,
+        date_operation: formData.dateOperation || new Date().toISOString().split('T')[0],
+        date_signature: formData.dateSignature || null,
+        mode_detention: (formData.modeDetention || null) as any,
+        statut: formData.statut as any,
+        commentaire: formData.commentaire || null,
+      }
       const { data: dossierData, error: dossierError } = await supabase
-        .from('dossiers').insert({
-          client_id: clientIdForDossier,
-          co_titulaire_id: coTitulaire?.id || null,
-          consultant_id: formData.consultantId,
-          produit_id: formData.produitId || null,
-          compagnie_id: formData.compagnieId || null,
-          montant: parseFloat(formData.montant),
-          financement: (formData.financement as any) || null,
-          date_operation: formData.dateOperation || null,
-          date_signature: formData.dateSignature || null,
-          mode_detention: (formData.modeDetention || null) as any,
-          statut: formData.statut as any,
-          commentaire: formData.commentaire || null,
-        }).select().single()
+        .from('dossiers').insert(dossierPayload).select().single()
       if (dossierError) throw dossierError
 
       // Facture is auto-created by on_dossier_finalise trigger on INSERT.

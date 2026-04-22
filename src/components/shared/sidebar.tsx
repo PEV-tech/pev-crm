@@ -113,7 +113,7 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
   }
 
   const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse']
-  const isManagerOrBO = (userRole === 'manager' || userRole === 'gestionnaire') || userRole === 'back_office'
+  const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
   // Back office: no "Ma Clientèle" (pas de clientèle propre), no "Rémunérations" (suivi seulement)
   const backOfficeHiddenLabels = ['Ma Clientèle', 'Rémunérations']
 

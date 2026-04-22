@@ -1,11 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  // TS strict au build : plus de tolérance aux erreurs.
+  // ESLint : on laisse le build faire passer les erreurs (toutes dégradées en warn
+  // dans .eslintrc.json — on garde la visibilité sans bloquer pendant qu'on nettoie
+  // progressivement rules-of-hooks + unused-vars + any + etc).
   async headers() {
     return [
       {

@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
-import { VDossiersComplets } from '@/types/database'
+import { VDossiersComplets, TablesUpdate } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -73,7 +73,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [editApporteurExtTaux, setEditApporteurExtTaux] = React.useState('')
   const [editVille, setEditVille] = React.useState<string>('')
   // Apporteurs
-  const [apporteurs, setApporteurs] = React.useState<{ id: string; nom: string; prenom: string; taux_commission: number }[]>([])
+  const [apporteurs, setApporteurs] = React.useState<{ id: string; nom: string; prenom: string; taux_commission: number | null }[]>([])
   const [editApporteurId, setEditApporteurId] = React.useState<string>('')
   const [editApporteurTaux, setEditApporteurTaux] = React.useState<string>('')
   const [showNewApporteurModal, setShowNewApporteurModal] = React.useState(false)
@@ -271,7 +271,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     setSaveError('')
     try {
       // 1. Update dossier fields (only columns that exist on dossiers table)
-      const dossierUpdate: Record<string, any> = {
+      const dossierUpdate: TablesUpdate<'dossiers'> = {
         statut: editForm.statut,
         montant: parseFloat(editForm.montant) || 0,
         financement: editForm.financement || null,
@@ -296,24 +296,27 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       if (newMontant !== dossier?.montant && newMontant > 0) {
         const taux = effectiveTauxEntree
         if (taux && taux > 0) {
-          const commUpdate: Record<string, any> = {
-            commission_brute: newMontant * taux,
+          const commissionBrute = newMontant * taux
+          const commUpdate: TablesUpdate<'commissions'> = {
+            commission_brute: commissionBrute,
           }
 
           // Deduct apporteur ext share
-          let commissionNette = commUpdate.commission_brute
+          let commissionNette = commissionBrute
           if (dossier?.has_apporteur_ext && dossier?.taux_apporteur_ext) {
-            commUpdate.rem_apporteur_ext = commUpdate.commission_brute * dossier.taux_apporteur_ext
-            commissionNette = commUpdate.commission_brute - commUpdate.rem_apporteur_ext
+            const remApporteurExt = commissionBrute * dossier.taux_apporteur_ext
+            commUpdate.rem_apporteur_ext = remApporteurExt
+            commissionNette = commissionBrute - remApporteurExt
           } else {
             commUpdate.rem_apporteur_ext = 0
           }
 
           if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-            commUpdate.rem_apporteur = commissionNette * consultantTauxRemuneration
-            commUpdate.part_cabinet = commissionNette - commUpdate.rem_apporteur
-            commUpdate.pct_cabinet = commUpdate.commission_brute > 0
-              ? commUpdate.part_cabinet / commUpdate.commission_brute : 0
+            const remApporteur = commissionNette * consultantTauxRemuneration
+            const partCabinet = commissionNette - remApporteur
+            commUpdate.rem_apporteur = remApporteur
+            commUpdate.part_cabinet = partCabinet
+            commUpdate.pct_cabinet = commissionBrute > 0 ? partCabinet / commissionBrute : 0
           }
           await supabase.from('commissions').update(commUpdate).eq('dossier_id', id)
         }
@@ -322,7 +325,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       // 2. Update client fields (réglementaire + pays — columns on clients table)
       const clientId = dossier?.client_id
       if (clientId) {
-        const clientUpdate: Record<string, any> = {
+        const clientUpdate: TablesUpdate<'clients'> = {
           statut_kyc: editForm.statut_kyc || 'non',
           der: editForm.der === 'oui',
           pi: editForm.pi === 'oui',
@@ -424,7 +427,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       }
 
       // Save apporteur externe to dossiers table
-      const apporteurUpdate: Record<string, any> = {
+      const apporteurUpdate: TablesUpdate<'dossiers'> = {
         has_apporteur_ext: editApporteurExt,
         apporteur_ext_nom: editApporteurExt ? (editApporteurId ? (() => { const found = apporteurs.find(a => a.id === editApporteurId); return found ? found.prenom + ' ' + found.nom : editApporteurExtNom || null; })() : editApporteurExtNom || null) : null,
         apporteur_id: editApporteurExt && editApporteurId ? editApporteurId : null,
@@ -759,7 +762,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     </div>
                   ) : (
                     <>
-                      {linkedPartners.filter(p => p.id !== coTitulaire?.id).length > 0 && (
+                      {linkedPartners.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
                           {linkedPartners.map(p => (
                             <button key={p.id} type="button"

@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { VDossiersComplets, PaiementType } from '@/types/database'
+import { VDossiersComplets, PaiementType, TablesUpdate } from '@/types/database'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -122,7 +122,7 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
   const selectedTotal = selectedDossiers.reduce((sum, d) => sum + (d.commission_brute || 0), 0)
 
   // Helper: upsert facture (update if exists, insert if not)
-  const upsertFacture = async (dossierId: string, fields: Record<string, any>) => {
+  const upsertFacture = async (dossierId: string, fields: TablesUpdate<'factures'>) => {
     const { data: updated, error: updateErr } = await supabase
       .from('factures')
       .update(fields)
