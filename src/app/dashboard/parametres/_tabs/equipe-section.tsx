@@ -316,13 +316,19 @@ function LabeledInput({
 
 /* -------- Objectifs -------- */
 
+type ObjForm = { scpi: number; pe: number; lux: number }
+
+function emptyObjForm(): ObjForm {
+  return { scpi: 0, pe: 0, lux: 0 }
+}
+
 function ObjectifsTab({ isManager, showToast }: Props) {
   const supabase = createClient()
   const [consultants, setConsultants] = React.useState<any[]>([])
   const [challenges, setChallenges] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
   const [editing, setEditing] = React.useState<string | null>(null)
-  const [form, setForm] = React.useState<Record<string, number>>({})
+  const [form, setForm] = React.useState<Record<string, ObjForm>>({})
   const [saving, setSaving] = React.useState(false)
   const annee = new Date().getFullYear()
 
@@ -341,23 +347,35 @@ function ObjectifsTab({ isManager, showToast }: Props) {
   }, [fetchData])
 
   const handleSave = async (consultantId: string) => {
-    const val = form[consultantId] || 0
+    const vals = form[consultantId] ?? emptyObjForm()
+    const total = (vals.scpi || 0) + (vals.pe || 0) + (vals.lux || 0)
     setSaving(true)
     const existing = challenges.find((c) => c.consultant_id === consultantId)
+    const payload = {
+      objectif_scpi: vals.scpi || 0,
+      objectif_pe: vals.pe || 0,
+      objectif_lux: vals.lux || 0,
+      objectif: total, // filet de sécurité si le trigger DB n'est pas encore posé
+    }
     let error
     if (existing) {
-      ;({ error } = await supabase.from('challenges').update({ objectif: val }).eq('id', existing.id))
+      ;({ error } = await (supabase.from('challenges') as any)
+        .update(payload)
+        .eq('id', existing.id))
     } else {
-      ;({ error } = await supabase
-        .from('challenges')
-        .insert({ consultant_id: consultantId, annee, objectif: val, collecte: 0 }))
+      ;({ error } = await (supabase.from('challenges') as any).insert({
+        consultant_id: consultantId,
+        annee,
+        collecte: 0,
+        ...payload,
+      }))
     }
     setSaving(false)
     if (error) {
       showToast('Erreur lors de la sauvegarde', 'error')
       return
     }
-    showToast('Objectif mis à jour', 'success')
+    showToast('Objectifs mis à jour', 'success')
     setEditing(null)
     await fetchData()
   }
@@ -368,29 +386,56 @@ function ObjectifsTab({ isManager, showToast }: Props) {
     .filter((c: any) => c.role !== 'back_office')
     .sort((a: any, b: any) => a.prenom.localeCompare(b.prenom))
 
-  const total = list.reduce((acc, c: any) => {
-    const ch = challenges.find((x) => x.consultant_id === c.id)
-    return acc + (ch?.objectif || 0)
-  }, 0)
-  const totalCollecte = list.reduce((acc, c: any) => {
-    const ch = challenges.find((x) => x.consultant_id === c.id)
-    return acc + (ch?.collecte || 0)
-  }, 0)
+  const rowVals = (ch: any | undefined): ObjForm & { total: number } => {
+    const scpi = Number(ch?.objectif_scpi ?? 0)
+    const pe = Number(ch?.objectif_pe ?? 0)
+    const lux = Number(ch?.objectif_lux ?? 0)
+    const sum = scpi + pe + lux
+    // Fallback : si les 3 catégories sont à 0 mais l'ancien objectif existe,
+    // on affiche l'historique sur la colonne SCPI (comportement déjà posé
+    // par la migration objectifs_par_categorie).
+    const legacy = Number(ch?.objectif ?? 0)
+    if (sum === 0 && legacy > 0) {
+      return { scpi: legacy, pe: 0, lux: 0, total: legacy }
+    }
+    return { scpi, pe, lux, total: sum }
+  }
+
+  const totals = list.reduce(
+    (acc, c: any) => {
+      const ch = challenges.find((x) => x.consultant_id === c.id)
+      const v = rowVals(ch)
+      return {
+        scpi: acc.scpi + v.scpi,
+        pe: acc.pe + v.pe,
+        lux: acc.lux + v.lux,
+        objectif: acc.objectif + v.total,
+        collecte: acc.collecte + (ch?.collecte || 0),
+      }
+    },
+    { scpi: 0, pe: 0, lux: 0, objectif: 0, collecte: 0 },
+  )
 
   return (
     <div className="space-y-4">
       <div className={SECTION_INTRO_CLS}>
-        <strong>Objectifs de collecte {annee}</strong> par consultant. La colonne « Collecte actuelle »
-        est calculée à partir des dossiers signés sur l'année (alimentation automatique).
+        <strong>Objectifs de collecte {annee}</strong> par consultant, ventilés par
+        famille de produits : <span className="font-medium">SCPI</span>,{' '}
+        <span className="font-medium">Private Equity</span> et{' '}
+        <span className="font-medium">CAPI Luxembourg</span>. Le <em>total</em> est
+        calculé automatiquement. La colonne « Collecte » est alimentée par les
+        dossiers signés sur l&apos;année.
       </div>
       <div className="overflow-x-auto border rounded-lg">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b text-xs font-semibold text-gray-600 uppercase tracking-wider">
             <tr>
               <th className="px-3 py-2 text-left">Consultant</th>
-              <th className="px-3 py-2 text-left">Rôle</th>
-              <th className="px-3 py-2 text-right">Objectif {annee}</th>
-              <th className="px-3 py-2 text-right">Collecte actuelle</th>
+              <th className="px-3 py-2 text-right">SCPI</th>
+              <th className="px-3 py-2 text-right">PE</th>
+              <th className="px-3 py-2 text-right">CAPI Lux</th>
+              <th className="px-3 py-2 text-right">Total {annee}</th>
+              <th className="px-3 py-2 text-right">Collecte</th>
               <th className="px-3 py-2 text-right">% atteint</th>
               {isManager && <th className="px-3 py-2 text-center">Actions</th>}
             </tr>
@@ -398,42 +443,66 @@ function ObjectifsTab({ isManager, showToast }: Props) {
           <tbody className="divide-y divide-gray-100">
             {list.map((c: any) => {
               const ch = challenges.find((x) => x.consultant_id === c.id)
-              const objectif = ch?.objectif || 0
+              const v = rowVals(ch)
               const collecte = ch?.collecte || 0
-              const pct = objectif > 0 ? (collecte / objectif) * 100 : 0
+              const pct = v.total > 0 ? (collecte / v.total) * 100 : 0
               const isEditing = editing === c.id
+              const f = form[c.id] ?? { scpi: v.scpi, pe: v.pe, lux: v.lux }
+              const editedTotal =
+                (f.scpi || 0) + (f.pe || 0) + (f.lux || 0)
               return (
-                <tr key={c.id} className="hover:bg-gray-50/50">
+                <tr key={c.id} className="hover:bg-gray-50/50 align-middle">
                   <td className="px-3 py-2 font-medium text-gray-900">
                     {c.prenom} {c.nom}
+                    <div className="text-[11px] text-gray-400 font-normal">
+                      {roleLabel[c.role] || c.role}
+                    </div>
                   </td>
-                  <td className="px-3 py-2 text-gray-600">{roleLabel[c.role] || c.role}</td>
-                  <td className="px-3 py-2 text-right">
+                  {(['scpi', 'pe', 'lux'] as const).map((k) => (
+                    <td key={k} className="px-2 py-2 text-right">
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          value={f[k] ?? ''}
+                          step="10000"
+                          onChange={(e) =>
+                            setForm((p) => ({
+                              ...p,
+                              [c.id]: {
+                                ...(p[c.id] ?? v),
+                                [k]: parseFloat(e.target.value) || 0,
+                              },
+                            }))
+                          }
+                          className="w-28 ml-auto text-right"
+                        />
+                      ) : (
+                        <span className={v[k] > 0 ? 'text-gray-900' : 'text-gray-300'}>
+                          {v[k] > 0 ? formatCurrency(v[k]) : '—'}
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 text-right font-semibold">
                     {isEditing ? (
-                      <Input
-                        type="number"
-                        value={form[c.id] ?? ''}
-                        step="10000"
-                        onChange={(e) => setForm((p) => ({ ...p, [c.id]: parseFloat(e.target.value) || 0 }))}
-                        className="w-36 ml-auto text-right"
-                      />
+                      <span className="text-indigo-700">{formatCurrency(editedTotal)}</span>
+                    ) : v.total > 0 ? (
+                      formatCurrency(v.total)
                     ) : (
-                      <span className={objectif > 0 ? 'font-semibold' : 'text-gray-400'}>
-                        {objectif > 0 ? formatCurrency(objectif) : 'Non défini'}
-                      </span>
+                      <span className="text-gray-400 font-normal">Non défini</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">{formatCurrency(collecte)}</td>
                   <td className="px-3 py-2 text-right">
-                    {objectif > 0 ? (
+                    {v.total > 0 ? (
                       <div className="flex items-center justify-end gap-2">
-                        <div className="w-20 bg-gray-200 rounded-full h-2">
+                        <div className="w-16 bg-gray-200 rounded-full h-2">
                           <div
                             className={`h-2 rounded-full ${pct >= 100 ? 'bg-green-500' : pct >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
                             style={{ width: `${Math.min(100, pct)}%` }}
                           />
                         </div>
-                        <span className="text-xs font-medium w-12 text-right">{pct.toFixed(0)}%</span>
+                        <span className="text-xs font-medium w-10 text-right">{pct.toFixed(0)}%</span>
                       </div>
                     ) : (
                       <span className="text-gray-400">—</span>
@@ -456,7 +525,10 @@ function ObjectifsTab({ isManager, showToast }: Props) {
                           variant="ghost"
                           onClick={() => {
                             setEditing(c.id)
-                            setForm((p) => ({ ...p, [c.id]: objectif }))
+                            setForm((p) => ({
+                              ...p,
+                              [c.id]: { scpi: v.scpi, pe: v.pe, lux: v.lux },
+                            }))
                           }}
                         >
                           <Edit2 size={14} />
@@ -470,11 +542,16 @@ function ObjectifsTab({ isManager, showToast }: Props) {
           </tbody>
           <tfoot className="bg-gray-50 font-semibold text-gray-700 border-t">
             <tr>
-              <td className="px-3 py-2" colSpan={2}>Total équipe</td>
-              <td className="px-3 py-2 text-right">{formatCurrency(total)}</td>
-              <td className="px-3 py-2 text-right">{formatCurrency(totalCollecte)}</td>
+              <td className="px-3 py-2">Total équipe</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(totals.scpi)}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(totals.pe)}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(totals.lux)}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(totals.objectif)}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(totals.collecte)}</td>
               <td className="px-3 py-2 text-right">
-                {total > 0 ? `${((totalCollecte / total) * 100).toFixed(0)}%` : '—'}
+                {totals.objectif > 0
+                  ? `${((totals.collecte / totals.objectif) * 100).toFixed(0)}%`
+                  : '—'}
               </td>
               {isManager && <td />}
             </tr>
