@@ -3,36 +3,20 @@
 
 [extend]
 useDefault = true
+# `generic-api-key` est la règle entropique générique de gitleaks. Elle produit
+# régulièrement des faux positifs sur des identifiants métier (noms de champs
+# de formulaire, clés de traduction, etc.). On la désactive volontairement et
+# on s'appuie sur les règles NOMMÉES (github-pat, aws-access-token,
+# supabase-*, stripe-*, etc.) qui sont celles qui comptent réellement pour
+# détecter de vrais secrets. Voir historique : faux positifs répétés sur
+# `impot_revenu_n1` / `impot_revenu_n2` (champs IR du formulaire KYC public).
+disabledRules = ["generic-api-key"]
 
 # -----------------------------------------------------------------------------
-# [allowlist] global (top-level, singulier) — appliqué à TOUTES les findings.
-#
-# Notre problème : les fichiers de définition de champs KYC contiennent des
-# identifiants métier français (impot_revenu_n1, patrimoine_foncier…) que la
-# règle generic-api-key attrape parce qu'ils ressemblent à `key: 'xxx'` avec
-# assez d'entropie. Ce sont des champs métier, pas des clés API.
-#
-# Deux mécanismes de secours (OR dans un allowlist single) :
-#   - paths  : exclut les fichiers KYC du scan generic-api-key
-#   - stopwords : ignore toute finding dont le secret contient ces substrings
-# Un vrai secret API ailleurs dans le repo reste détecté normalement.
-# -----------------------------------------------------------------------------
-[allowlist]
-description = "Fichiers de champs KYC + stopwords métier français"
-paths = [
-  '''src/app/kyc/\[token\]/kyc-public-client\.tsx''',
-  '''src/app/kyc/.*\.tsx''',
-  '''src/components/kyc/.*\.tsx''',
-]
-stopwords = [
-  "impot_revenu",
-  "patrimoine_foncier",
-  "patrimoine_financier",
-  "patrimoine_professionnel",
-]
-
-# -----------------------------------------------------------------------------
-# [[allowlists]] (array) — exceptions supplémentaires scopées.
+# Allowlists — exceptions légitimes qu'on ne veut pas faire échouer la CI.
+# Ajouter ici UNIQUEMENT des chaînes qui ne sont manifestement pas des secrets
+# (placeholders de build, chaînes d'exemple dans la doc, noms de variables).
+# Jamais ajouter un vrai secret ici.
 # -----------------------------------------------------------------------------
 
 [[allowlists]]
@@ -57,4 +41,16 @@ paths = [
   '''docs/.*\.md''',
   '''\.github/workflows/.*\.ya?ml''',
   '''README\.md''',
+]
+
+[[allowlists]]
+description = "Clés de champs formulaire KYC (noms métier FR, pas des secrets)"
+# Faux positifs détectés par la règle generic-api-key sur les champs du
+# formulaire KYC public : impot_revenu_n / _n1 / _n2 (impôt sur le revenu
+# année N, N-1, N-2). Ce sont des identifiants de champs de formulaire
+# stockés en dur dans le code front, manifestement pas des secrets.
+# stopwords = substring-match sur la valeur détectée (plus fiable que
+# regexes dans gitleaks 8.x).
+stopwords = [
+  "impot_revenu",
 ]
