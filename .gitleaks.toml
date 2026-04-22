@@ -1,0 +1,36 @@
+# Configuration gitleaks — extension des règles par défaut.
+# Doc : https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+useDefault = true
+
+# -----------------------------------------------------------------------------
+# Allowlists — exceptions légitimes qu'on ne veut pas faire échouer la CI.
+# Ajouter ici UNIQUEMENT des chaînes qui ne sont manifestement pas des secrets
+# (placeholders de build, chaînes d'exemple dans la doc, noms de variables).
+# Jamais ajouter un vrai secret ici.
+# -----------------------------------------------------------------------------
+
+[[allowlists]]
+description = "Placeholders de build utilisés en CI (ni tokens ni clés réelles)"
+regexes = [
+  '''build-placeholder-[a-z-]+''',
+  '''https://build-placeholder\.supabase\.co''',
+]
+paths = [
+  '''\.github/workflows/.*\.ya?ml''',
+]
+
+[[allowlists]]
+description = "URLs publiques de documentation et exemples"
+regexes = [
+  # DSN Sentry d'exemple (format documenté)
+  '''https://xxx@o[0-9]+\.ingest\.sentry\.io/[0-9]+''',
+  # Tokens GHA bidons dans la doc
+  '''ghp_xxx+''',
+]
+paths = [
+  '''docs/.*\.md''',
+  '''\.github/workflows/.*\.ya?ml''',
+  '''README\.md''',
+]
