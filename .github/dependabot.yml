@@ -1,0 +1,43 @@
+# Dependabot — veille automatique des dépendances.
+# - npm : PRs hebdo le lundi matin, groupe les updates mineures/patch
+# - github-actions : PRs hebdo, garde les workflows pinnés sur les derniers majors
+# Les alertes de sécurité (CVE) déclenchent une PR immédiate quel que soit l'intervalle.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    groups:
+      # Regroupe toutes les mises à jour non-majeures dans une seule PR
+      # pour limiter le bruit. Les majors restent séparées pour revue manuelle.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Paris"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"

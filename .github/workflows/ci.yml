@@ -30,6 +30,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies (critical CVEs)
+        run: npm audit --audit-level=critical --omit=dev
+        # Temporairement à 'critical' : nodemailer 6.x a des CVEs 'high'
+        # (SMTP command injection, unintended domain) qui seront traitées
+        # via une PR Dependabot dédiée (bump major 6 → 8 nécessite tests
+        # d'envoi réels). À resserrer à --audit-level=high une fois la
+        # PR nodemailer mergée. Les alertes 'high' restent visibles dans
+        # Dependabot alerts sans bloquer le build.
+        # --omit=dev exclut les devDependencies qui n'atteignent pas la prod.
+
       - name: Lint (ESLint)
         run: npm run lint
 
