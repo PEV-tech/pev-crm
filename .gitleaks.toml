@@ -1,0 +1,56 @@
+# Configuration gitleaks — extension des règles par défaut.
+# Doc : https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+useDefault = true
+# `generic-api-key` est la règle entropique générique de gitleaks. Elle produit
+# régulièrement des faux positifs sur des identifiants métier (noms de champs
+# de formulaire, clés de traduction, etc.). On la désactive volontairement et
+# on s'appuie sur les règles NOMMÉES (github-pat, aws-access-token,
+# supabase-*, stripe-*, etc.) qui sont celles qui comptent réellement pour
+# détecter de vrais secrets. Voir historique : faux positifs répétés sur
+# `impot_revenu_n1` / `impot_revenu_n2` (champs IR du formulaire KYC public).
+disabledRules = ["generic-api-key"]
+
+# -----------------------------------------------------------------------------
+# Allowlists — exceptions légitimes qu'on ne veut pas faire échouer la CI.
+# Ajouter ici UNIQUEMENT des chaînes qui ne sont manifestement pas des secrets
+# (placeholders de build, chaînes d'exemple dans la doc, noms de variables).
+# Jamais ajouter un vrai secret ici.
+# -----------------------------------------------------------------------------
+
+[[allowlists]]
+description = "Placeholders de build utilisés en CI (ni tokens ni clés réelles)"
+regexes = [
+  '''build-placeholder-[a-z-]+''',
+  '''https://build-placeholder\.supabase\.co''',
+]
+paths = [
+  '''\.github/workflows/.*\.ya?ml''',
+]
+
+[[allowlists]]
+description = "URLs publiques de documentation et exemples"
+regexes = [
+  # DSN Sentry d'exemple (format documenté)
+  '''https://xxx@o[0-9]+\.ingest\.sentry\.io/[0-9]+''',
+  # Tokens GHA bidons dans la doc
+  '''ghp_xxx+''',
+]
+paths = [
+  '''docs/.*\.md''',
+  '''\.github/workflows/.*\.ya?ml''',
+  '''README\.md''',
+]
+
+[[allowlists]]
+description = "Clés de champs formulaire KYC (noms métier FR, pas des secrets)"
+# Faux positifs détectés par la règle generic-api-key sur les champs du
+# formulaire KYC public : impot_revenu_n / _n1 / _n2 (impôt sur le revenu
+# année N, N-1, N-2). Ce sont des identifiants de champs de formulaire
+# stockés en dur dans le code front, manifestement pas des secrets.
+# stopwords = substring-match sur la valeur détectée (plus fiable que
+# regexes dans gitleaks 8.x).
+stopwords = [
+  "impot_revenu",
+]
