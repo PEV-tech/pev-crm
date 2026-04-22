@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { ErrorBoundary, GlobalErrorListeners } from "@/components/error-boundary";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -25,7 +26,8 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <body className={`${geistSans.variable} antialiased bg-white text-gray-900`}>
-        {children}
+        <GlobalErrorListeners />
+        <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>
   );
