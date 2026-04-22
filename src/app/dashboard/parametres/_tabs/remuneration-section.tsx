@@ -9,7 +9,8 @@
  *
  * Grilles par catégorie de produit :
  *   · LUX  → Assurance-vie FR + CAPI Luxembourg (droits d'entrée + encours)
- *   · PE   → Private Equity (grille sur droits d'entrée, dégressive)
+ *   · PE   → Private Equity (grille sur droits d'entrée, dégressive,
+ *            3% → 0,5% de 100K à 1M, seedée via migration SQL)
  *
  * Les grilles historiques (`produit_categorie IS NULL`) et les anciennes
  * valeurs 'CAV'/'CAPI_LUX' sont automatiquement rangées sous LUX — on ne
@@ -24,7 +25,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Check, X, Edit2, Trash2, Plus, TrendingUp, Wand2 } from 'lucide-react'
+import { Check, X, Edit2, Trash2, Plus, TrendingUp } from 'lucide-react'
 import { formatCurrency } from '@/lib/formatting'
 import { formatPercent2, parseRateInput, rateToInput, type ShowToast, SECTION_INTRO_CLS } from './helpers'
 
@@ -77,13 +78,6 @@ function normaliseCategorie(stored: StoredCategorie): Categorie {
   return 'LUX'
 }
 
-const PE_PRESET: Omit<Grille, 'id'>[] = [
-  { type_frais: 'entree', encours_min: 100000, encours_max: 200000, taux: 0.03,  actif: true, produit_categorie: 'PE', libelle: "PE — Droit d'entrée 100K-200K" },
-  { type_frais: 'entree', encours_min: 200000, encours_max: 300000, taux: 0.02,  actif: true, produit_categorie: 'PE', libelle: "PE — Droit d'entrée 200K-300K" },
-  { type_frais: 'entree', encours_min: 300000, encours_max: 500000, taux: 0.01,  actif: true, produit_categorie: 'PE', libelle: "PE — Droit d'entrée 300K-500K" },
-  { type_frais: 'entree', encours_min: 500000, encours_max: null,   taux: 0.005, actif: true, produit_categorie: 'PE', libelle: "PE — Droit d'entrée 500K et +" },
-]
-
 export function RemunerationSection({ isManager, showToast }: Props) {
   const supabase = createClient()
   const [grilles, setGrilles] = React.useState<Grille[]>([])
@@ -91,7 +85,6 @@ export function RemunerationSection({ isManager, showToast }: Props) {
   const [editing, setEditing] = React.useState<{ id: string; data: Grille } | null>(null)
   const [creating, setCreating] = React.useState<{ categorie: Categorie; data: Partial<Grille> } | null>(null)
   const [saving, setSaving] = React.useState(false)
-  const [seeding, setSeeding] = React.useState(false)
 
   const fetchData = React.useCallback(async () => {
     // NB : on ne tri PAS sur `produit_categorie` côté DB — la colonne peut
@@ -139,16 +132,6 @@ export function RemunerationSection({ isManager, showToast }: Props) {
     await fetchData()
   }
 
-  const seedPePreset = async () => {
-    if (!confirm("Installer le barème PE indicatif (3% → 0,5% dégressif) ?")) return
-    setSeeding(true)
-    const { error } = await (supabase.from('grilles_frais') as any).insert(PE_PRESET)
-    setSeeding(false)
-    if (error) return showToast('Impossible de seeder le preset PE', 'error')
-    showToast('Barème PE installé', 'success')
-    await fetchData()
-  }
-
   if (loading) return <p className="text-gray-500 p-4">Chargement…</p>
 
   const byCategorie = (cat: Categorie) =>
@@ -189,17 +172,6 @@ export function RemunerationSection({ isManager, showToast }: Props) {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <p className="text-sm text-gray-500">{rows.length} grille(s)</p>
                 <div className="flex items-center gap-2">
-                  {isManager && c.key === 'PE' && !hasAny && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={seedPePreset}
-                      disabled={seeding}
-                    >
-                      <Wand2 size={14} className="mr-1" />
-                      Installer le barème PE indicatif
-                    </Button>
-                  )}
                   {isManager && (
                     <Button
                       size="sm"
