@@ -4,7 +4,8 @@
 --          · LUX  (CAV FR + CAPI Luxembourg : droits d'entrée + encours,
 --                  regroupés car même logique de commissionnement cabinet)
 --          · PE   (private equity, grille sur les droits d'entrée,
---                  dégressif de 3% à 0,5% selon le montant souscrit)
+--                  dégressif de 3% à 0,5% selon le montant souscrit,
+--                  bornée 100K → 1M)
 --          Les taux sont INDICATIFS : le consultant peut les modifier
 --          dossier par dossier au moment de la saisie.
 --
@@ -67,7 +68,7 @@ WHERE NOT EXISTS (
 
 INSERT INTO public.grilles_frais
   (type_frais, encours_min, encours_max, taux, actif, produit_categorie, libelle)
-SELECT 'entree', 500000,  NULL,   0.0050, true, 'PE', 'PE — Droit d''entrée 500K et +'
+SELECT 'entree', 500000,  1000000, 0.0050, true, 'PE', 'PE — Droit d''entrée 500K-1M'
 WHERE NOT EXISTS (
   SELECT 1 FROM public.grilles_frais
    WHERE produit_categorie = 'PE' AND type_frais = 'entree'
