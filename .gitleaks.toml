@@ -34,3 +34,16 @@ paths = [
   '''\.github/workflows/.*\.ya?ml''',
   '''README\.md''',
 ]
+
+[[allowlists]]
+description = "Clés de champs formulaire KYC (noms métier FR, pas des secrets)"
+# Faux positifs détectés par la règle generic-api-key sur les champs du
+# formulaire KYC public : impot_revenu_n / _n1 / _n2 (impôt sur le revenu
+# année N, N-1, N-2). Ce sont des identifiants de champs de formulaire
+# stockés en dur dans le code front, manifestement pas des secrets.
+regexes = [
+  '''impot_revenu_n\d?''',
+]
+paths = [
+  '''src/app/kyc/.*\.tsx''',
+]
