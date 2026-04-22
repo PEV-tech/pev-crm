@@ -200,8 +200,8 @@ export function CatalogueSection({ isManager, showToast }: Props) {
       <div className={SECTION_INTRO_CLS}>
         <p className="mb-1">
           <strong>Catalogue Partenaires × Produits.</strong> Chaque partenaire (compagnie) expose une
-          sélection de produits. Pour chaque couple, vous définissez : frais d'entrée, frais d'encours,
-          prix de la part et commission rétrocédée au cabinet.
+          sélection de produits. Pour chaque couple, vous définissez : nom du produit, catégorie,
+          frais d'entrée, frais d'encours et prix de la part.
         </p>
         <p className="text-xs text-indigo-700">
           Les valeurs sont stockées en base (<code>taux_produit_compagnie</code>) — aucun chiffre
@@ -370,12 +370,11 @@ export function CatalogueSection({ isManager, showToast }: Props) {
                     <table className="w-full text-sm">
                       <thead className="text-xs font-semibold text-gray-500 uppercase">
                         <tr className="border-b">
-                          <th className="px-2 py-2 text-left">Produit</th>
+                          <th className="px-2 py-2 text-left">Nom du produit</th>
                           <th className="px-2 py-2 text-left">Catégorie</th>
                           <th className="px-2 py-2 text-right">Frais entrée</th>
                           <th className="px-2 py-2 text-right">Frais encours</th>
                           <th className="px-2 py-2 text-right">Prix part</th>
-                          <th className="px-2 py-2 text-right">Commission</th>
                           <th className="px-2 py-2 text-center">Actif</th>
                           {isManager && <th className="px-2 py-2 text-right">Actions</th>}
                         </tr>
@@ -384,10 +383,14 @@ export function CatalogueSection({ isManager, showToast }: Props) {
                         {rowsOfCompagnie.map((row) => {
                           const produit = produits.find((p) => p.id === row.produit_id)
                           const isEditing = editingTaux?.id === row.id
+                          const displayName =
+                            (row.description && row.description.trim()) ||
+                            produit?.nom ||
+                            '—'
                           if (isEditing) {
                             return (
                               <tr key={row.id} className="bg-blue-50/40">
-                                <td colSpan={isManager ? 8 : 7} className="p-2">
+                                <td colSpan={isManager ? 7 : 6} className="p-2">
                                   <TauxForm
                                     produits={produits}
                                     value={editingTaux!.data}
@@ -403,12 +406,11 @@ export function CatalogueSection({ isManager, showToast }: Props) {
                           }
                           return (
                             <tr key={row.id} className="hover:bg-gray-50/40">
-                              <td className="px-2 py-2 font-medium text-gray-900">{produit?.nom || '—'}</td>
-                              <td className="px-2 py-2 text-gray-600">{produit?.categorie || '—'}</td>
+                              <td className="px-2 py-2 font-medium text-gray-900">{displayName}</td>
+                              <td className="px-2 py-2 text-gray-600">{produit?.categorie || produit?.nom || '—'}</td>
                               <td className="px-2 py-2 text-right">{formatPercent2(row.frais_entree)}</td>
                               <td className="px-2 py-2 text-right">{formatPercent2(row.frais_encours)}</td>
                               <td className="px-2 py-2 text-right">{row.prix_part != null ? formatCurrency(row.prix_part) : '—'}</td>
-                              <td className="px-2 py-2 text-right text-green-700 font-medium">{formatPercent2(row.commission_retrocedee ?? row.taux)}</td>
                               <td className="px-2 py-2 text-center">
                                 <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${row.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                                   {row.actif ? 'Oui' : 'Non'}
@@ -429,7 +431,7 @@ export function CatalogueSection({ isManager, showToast }: Props) {
                         {/* Form nouvelle ligne */}
                         {addingToCompagnie === co.id && (
                           <tr className="bg-emerald-50/40">
-                            <td colSpan={isManager ? 8 : 7} className="p-2">
+                            <td colSpan={isManager ? 7 : 6} className="p-2">
                               <TauxForm
                                 produits={produits}
                                 value={{ ...(newRow as TauxRow), compagnie_id: co.id }}
@@ -487,8 +489,20 @@ function TauxForm({
   const update = (patch: Partial<TauxRow>) => onChange({ ...(value as TauxRow), ...patch })
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
-        <Labeled label="Produit">
+      {/* Ligne 1 : identité du produit — nom produit + catégorie.
+          Retour Maxine 2026-04-22 : le nom du produit doit être visible
+          (la "description" fait office de nom : ex. ACTIVIMMO, COMETE).
+          Commission et Taux ref. sont retirés (redondants avec Frais entrée
+          et Frais encours). */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Labeled label="Nom du produit">
+          <Input
+            value={value.description || ''}
+            onChange={(e) => update({ description: e.target.value })}
+            placeholder="Ex : ACTIVIMMO, COMETE, Multi Lux Opportunités…"
+          />
+        </Labeled>
+        <Labeled label="Catégorie">
           <select
             className="w-full border rounded-md px-2 py-1.5 text-sm bg-white disabled:bg-gray-100"
             value={value.produit_id || ''}
@@ -503,6 +517,10 @@ function TauxForm({
             ))}
           </select>
         </Labeled>
+      </div>
+
+      {/* Ligne 2 : conditions tarifaires — alignées avec les colonnes du tableau */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Labeled label="Frais entrée (%)">
           <Input type="number" step="0.01" value={rateToInput(value.frais_entree)} onChange={(e) => update({ frais_entree: parseRateInput(e.target.value) })} />
         </Labeled>
@@ -512,12 +530,6 @@ function TauxForm({
         <Labeled label="Prix part (€)">
           <Input type="number" step="0.01" value={value.prix_part ?? ''} onChange={(e) => update({ prix_part: e.target.value === '' ? null : parseFloat(e.target.value) })} />
         </Labeled>
-        <Labeled label="Commission (%)">
-          <Input type="number" step="0.01" value={rateToInput(value.commission_retrocedee)} onChange={(e) => update({ commission_retrocedee: parseRateInput(e.target.value) })} />
-        </Labeled>
-        <Labeled label="Taux ref. (%)">
-          <Input type="number" step="0.01" value={rateToInput(value.taux)} onChange={(e) => update({ taux: parseRateInput(e.target.value) ?? 0 })} />
-        </Labeled>
         <Labeled label="Actif">
           <label className="flex items-center gap-2 py-1.5">
             <input type="checkbox" checked={value.actif ?? true} onChange={(e) => update({ actif: e.target.checked })} />
@@ -525,9 +537,7 @@ function TauxForm({
           </label>
         </Labeled>
       </div>
-      <Labeled label="Description (optionnel)">
-        <Input value={value.description || ''} onChange={(e) => update({ description: e.target.value })} placeholder="Particularités, note interne…" />
-      </Labeled>
+
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="outline" onClick={onCancel} disabled={saving}>
           <X size={14} className="mr-1" /> Annuler

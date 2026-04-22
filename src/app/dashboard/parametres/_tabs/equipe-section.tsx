@@ -75,8 +75,7 @@ function ConsultantsTab({ isManager, showToast }: Props) {
       (c: any) =>
         c.prenom?.toLowerCase().includes(q) ||
         c.nom?.toLowerCase().includes(q) ||
-        c.zone?.toLowerCase().includes(q) ||
-        c.role?.toLowerCase().includes(q)
+        c.role?.toLowerCase().includes(q),
     )
   }, [consultants, search])
 
@@ -137,7 +136,7 @@ function ConsultantsTab({ isManager, showToast }: Props) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher par nom, zone, rôle…"
+            placeholder="Rechercher par nom, rôle…"
             className="pl-9"
           />
         </div>
@@ -170,7 +169,6 @@ function ConsultantsTab({ isManager, showToast }: Props) {
               <th className="px-3 py-2 text-left">Nom</th>
               <th className="px-3 py-2 text-left">Rôle</th>
               <th className="px-3 py-2 text-right">Taux rém.</th>
-              <th className="px-3 py-2 text-left">Zone</th>
               <th className="px-3 py-2 text-center">Statut</th>
               {isManager && <th className="px-3 py-2 text-right">Actions</th>}
             </tr>
@@ -178,7 +176,7 @@ function ConsultantsTab({ isManager, showToast }: Props) {
           <tbody className="divide-y divide-gray-100">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={isManager ? 7 : 6} className="py-6 text-center text-gray-400">
+                <td colSpan={isManager ? 6 : 5} className="py-6 text-center text-gray-400">
                   Aucun consultant
                 </td>
               </tr>
@@ -188,7 +186,7 @@ function ConsultantsTab({ isManager, showToast }: Props) {
               if (isEditing) {
                 return (
                   <tr key={c.id} className="bg-blue-50/40">
-                    <td colSpan={isManager ? 7 : 6} className="p-3">
+                    <td colSpan={isManager ? 6 : 5} className="p-3">
                       <ConsultantForm
                         data={editing!.data}
                         onChange={(d) => setEditing({ id: editing!.id, data: d! })}
@@ -206,7 +204,6 @@ function ConsultantsTab({ isManager, showToast }: Props) {
                   <td className="px-3 py-2 text-gray-700">{c.nom}</td>
                   <td className="px-3 py-2 text-gray-700">{roleLabel[c.role] || c.role}</td>
                   <td className="px-3 py-2 text-right text-gray-700">{formatPercent0(c.taux_remuneration)}</td>
-                  <td className="px-3 py-2 text-gray-600">{c.zone || '—'}</td>
                   <td className="px-3 py-2 text-center">
                     <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${c.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {c.actif ? 'Actif' : 'Inactif'}
@@ -250,7 +247,7 @@ function ConsultantForm({
   isNew?: boolean
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+    <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
       <LabeledInput label="Prénom" value={data.prenom || ''} onChange={(v) => onChange({ ...data, prenom: v })} />
       <LabeledInput label="Nom" value={data.nom || ''} onChange={(v) => onChange({ ...data, nom: v })} />
       <div>
@@ -272,7 +269,6 @@ function ConsultantForm({
         value={rateToInput(data.taux_remuneration)}
         onChange={(v) => onChange({ ...data, taux_remuneration: parseRateInput(v) })}
       />
-      <LabeledInput label="Zone" value={data.zone || ''} onChange={(v) => onChange({ ...data, zone: v })} />
       <label className="flex items-center gap-2 text-sm pt-5">
         <input
           type="checkbox"

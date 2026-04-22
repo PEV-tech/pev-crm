@@ -3,10 +3,17 @@
 /**
  * Section "Rémunération"
  *
- * Grilles de rémunération PAR CATÉGORIE DE PRODUIT :
- *   · CAV       → contrat assurance-vie français (grille sur encours)
- *   · CAPI_LUX  → capi / assurance-vie Luxembourg (grille sur encours)
- *   · PE        → private equity (grille sur droits d'entrée, dégressive)
+ * Retour Maxine 2026-04-22 : on regroupe CAV + CAPI Luxembourg sous un
+ * SEUL onglet "LUX" (assurance-vie FR + Lux mutualisent la même grille
+ * droit d'entrée + encours), et on garde PE à part (dégressif).
+ *
+ * Grilles par catégorie de produit :
+ *   · LUX  → Assurance-vie FR + CAPI Luxembourg (droits d'entrée + encours)
+ *   · PE   → Private Equity (grille sur droits d'entrée, dégressive)
+ *
+ * Les grilles historiques (`produit_categorie IS NULL`) et les anciennes
+ * valeurs 'CAV'/'CAPI_LUX' sont automatiquement rangées sous LUX — on ne
+ * jette rien, on préserve la grille précédente droit d'entrée / encours.
  *
  * Les taux sont INDICATIFS. Le consultant peut les surcharger au niveau
  * du dossier lors de la saisie.
@@ -26,7 +33,9 @@ interface Props {
   showToast: ShowToast
 }
 
-type Categorie = 'CAV' | 'CAPI_LUX' | 'PE'
+type Categorie = 'LUX' | 'PE'
+// Valeurs historiques qu'on remappe vers LUX à l'affichage (sans écrire en base).
+type StoredCategorie = Categorie | 'CAV' | 'CAPI_LUX' | null
 
 type Grille = {
   id: string
@@ -35,22 +44,16 @@ type Grille = {
   encours_max: number | null
   taux: number
   actif: boolean | null
-  produit_categorie: Categorie | null
+  produit_categorie: StoredCategorie
   libelle: string | null
 }
 
 const CATEGORIES: { key: Categorie; label: string; hint: string; defaultType: 'gestion' | 'entree' }[] = [
   {
-    key: 'CAV',
-    label: 'CAV',
-    hint: "Contrat Assurance-Vie français — grille appliquée à l'encours.",
-    defaultType: 'gestion',
-  },
-  {
-    key: 'CAPI_LUX',
-    label: 'CAPI Luxembourg',
-    hint: 'Capi / assurance-vie Luxembourg — grille sur encours.',
-    defaultType: 'gestion',
+    key: 'LUX',
+    label: 'Assurance-vie (FR + Lux)',
+    hint: "Contrat Assurance-Vie français & CAPI Luxembourg — droits d'entrée et grille sur encours.",
+    defaultType: 'entree',
   },
   {
     key: 'PE',
@@ -59,6 +62,20 @@ const CATEGORIES: { key: Categorie; label: string; hint: string; defaultType: 'g
     defaultType: 'entree',
   },
 ]
+
+/**
+ * Convertit la catégorie stockée en base vers l'onglet d'affichage.
+ *   · 'PE'                                        → 'PE'
+ *   · 'LUX' | 'CAV' | 'CAPI_LUX' | null | autre   → 'LUX'
+ *
+ * Les grilles historiques ('CAV', 'CAPI_LUX' ou NULL pré-migration) sont
+ * regroupées sous LUX afin de préserver la grille précédente (droits
+ * d'entrée + encours) comme demandé par Maxine.
+ */
+function normaliseCategorie(stored: StoredCategorie): Categorie {
+  if (stored === 'PE') return 'PE'
+  return 'LUX'
+}
 
 const PE_PRESET: Omit<Grille, 'id'>[] = [
   { type_frais: 'entree', encours_min: 100000, encours_max: 200000, taux: 0.03,  actif: true, produit_categorie: 'PE', libelle: "PE — Droit d'entrée 100K-200K" },
@@ -77,13 +94,22 @@ export function RemunerationSection({ isManager, showToast }: Props) {
   const [seeding, setSeeding] = React.useState(false)
 
   const fetchData = React.useCallback(async () => {
+    // NB : on ne tri PAS sur `produit_categorie` côté DB — la colonne peut
+    // ne pas encore exister (migration pas jouée). On trie côté client.
     const { data } = await supabase
       .from('grilles_frais')
       .select('*')
-      .order('produit_categorie' as never)
       .order('type_frais')
       .order('encours_min')
-    setGrilles((data as any) || [])
+    const rows = ((data as any) || []) as Grille[]
+    rows.sort((a, b) => {
+      const ka = normaliseCategorie(a.produit_categorie)
+      const kb = normaliseCategorie(b.produit_categorie)
+      if (ka !== kb) return ka.localeCompare(kb)
+      if (a.type_frais !== b.type_frais) return a.type_frais.localeCompare(b.type_frais)
+      return (a.encours_min ?? 0) - (b.encours_min ?? 0)
+    })
+    setGrilles(rows)
     setLoading(false)
   }, [supabase])
 
@@ -126,12 +152,7 @@ export function RemunerationSection({ isManager, showToast }: Props) {
   if (loading) return <p className="text-gray-500 p-4">Chargement…</p>
 
   const byCategorie = (cat: Categorie) =>
-    grilles.filter(
-      (g) =>
-        g.produit_categorie === cat ||
-        // Les grilles historiques (sans catégorie) sont rangées sous CAV
-        (cat === 'CAV' && !g.produit_categorie),
-    )
+    grilles.filter((g) => normaliseCategorie(g.produit_categorie) === cat)
 
   return (
     <div className="space-y-4">
@@ -144,8 +165,8 @@ export function RemunerationSection({ isManager, showToast }: Props) {
         </p>
       </div>
 
-      <Tabs defaultValue="CAV" className="space-y-3">
-        <TabsList className="grid grid-cols-3 w-full max-w-xl">
+      <Tabs defaultValue="LUX" className="space-y-3">
+        <TabsList className="grid grid-cols-2 w-full max-w-md">
           {CATEGORIES.map((c) => (
             <TabsTrigger key={c.key} value={c.key}>
               {c.label}
