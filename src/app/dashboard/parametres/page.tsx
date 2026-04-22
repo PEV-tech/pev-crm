@@ -14,13 +14,14 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Users, BookOpen, Percent, Mail, Shield } from 'lucide-react'
+import { Users, BookOpen, Percent, Mail, Shield, UserCog } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
 import { useToast } from '@/components/ui/toast'
 import { EquipeSection } from './_tabs/equipe-section'
 import { CatalogueSection } from './_tabs/catalogue-section'
 import { RemunerationSection } from './_tabs/remuneration-section'
 import { CommunicationSection } from './_tabs/communication-section'
+import { CompteSection } from './_tabs/compte-section'
 import { AdminSection } from './_tabs/admin-section'
 
 export default function ParametresPage() {
@@ -49,7 +50,7 @@ export default function ParametresPage() {
         <CardContent>
           <Tabs defaultValue="equipe" className="space-y-6">
             <TabsList
-              className={`grid w-full ${role === 'manager' ? 'grid-cols-5' : 'grid-cols-4'}`}
+              className={`grid w-full ${role === 'manager' ? 'grid-cols-6' : 'grid-cols-5'}`}
             >
               <TabsTrigger value="equipe" className="flex items-center gap-2">
                 <Users size={16} />
@@ -66,6 +67,10 @@ export default function ParametresPage() {
               <TabsTrigger value="communication" className="flex items-center gap-2">
                 <Mail size={16} />
                 <span className="hidden sm:inline">Communication</span>
+              </TabsTrigger>
+              <TabsTrigger value="compte" className="flex items-center gap-2">
+                <UserCog size={16} />
+                <span className="hidden sm:inline">Mon compte</span>
               </TabsTrigger>
               {role === 'manager' && (
                 <TabsTrigger value="admin" className="flex items-center gap-2">
@@ -92,6 +97,10 @@ export default function ParametresPage() {
                 currentConsultantId={consultant?.id ?? null}
                 isManager={isManager}
               />
+            </TabsContent>
+
+            <TabsContent value="compte">
+              <CompteSection showToast={showToast} />
             </TabsContent>
 
             {role === 'manager' && (
