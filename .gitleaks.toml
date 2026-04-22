@@ -36,23 +36,22 @@ paths = [
 ]
 
 [[allowlists]]
-description = "Faux positifs generic-api-key sur identifiants métier (français)"
+description = "Faux positifs generic-api-key sur identifiants métier KYC (français)"
 # Les field keys comme `impot_revenu_n1`, `impot_revenu_n2`, `patrimoine_foncier`
 # déclenchent la règle generic-api-key parce qu'ils ressemblent à
 # `key: 'xxx'` avec assez d'entropie. Ce sont des identifiants métier
 # KYC/finance, pas des clés API.
-# Approche : stopwords = si le "secret" détecté contient un de ces mots,
-# gitleaks ignore la finding. Liste volontairement restrictive aux termes
-# métier français pour éviter de masquer de vrais secrets.
-stopwords = [
-  "impot",
-  "revenu",
-  "patrimoine",
-  "detention",
-  "acquisition",
-  "emprunteur",
-  "conjoint",
-  "titulaire",
-  "beneficiaire",
-  "consultant",
+#
+# Approche : regex ciblée sur le pattern `key: '<identifiant_métier>'`,
+# scopé aux fichiers KYC uniquement. regexTarget = "match" fait porter
+# la regex sur le texte détecté par la règle (pas juste le secret
+# extrait), ce qui laisse un vrai secret API dans le même fichier
+# toujours détectable.
+regexTarget = "match"
+regexes = [
+  '''key:\s*['"](impot_revenu_n[0-9]*|patrimoine_[a-z0-9_]+|detention_[a-z0-9_]+|acquisition_[a-z0-9_]+|emprunteur_[a-z0-9_]+|conjoint_[a-z0-9_]+|titulaire_[a-z0-9_]+|beneficiaire_[a-z0-9_]+)['"]''',
+]
+paths = [
+  '''src/app/kyc/.*\.tsx?''',
+  '''src/components/kyc/.*\.tsx?''',
 ]
