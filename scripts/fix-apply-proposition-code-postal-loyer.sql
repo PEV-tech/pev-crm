@@ -203,5 +203,5 @@ $$;
 -- 2. version RPC appliquée contient bien les 2 branches CASE
 --    SELECT prosrc FROM pg_proc WHERE proname = 'kyc_apply_proposition'
 --      AND prosrc LIKE '%''code_postal''%'
---      AND prosrc LIKE '%''montant_loyer''%');
+--      AND prosrc LIKE '%''montant_loyer''%';
 --    Doit matcher.

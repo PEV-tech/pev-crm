@@ -98,7 +98,8 @@ const SECTIONS: Array<{
     fields: [
       { key: 'email', label: 'Email', type: 'email' },
       { key: 'telephone', label: 'Téléphone', type: 'tel' },
-      { key: 'adresse', label: 'Adresse' },
+      { key: 'adresse', label: 'Adresse (rue)' },
+      { key: 'code_postal', label: 'Code postal' },
       { key: 'ville', label: 'Ville' },
       { key: 'pays', label: 'Pays' },
     ],
@@ -116,6 +117,17 @@ const SECTIONS: Array<{
         label: 'Propriétaire ou locataire',
         type: 'select',
         options: LOGEMENT_OPTIONS,
+      },
+      {
+        key: 'montant_loyer',
+        label: 'Montant du loyer (€ / mois)',
+        type: 'number',
+        // Affiché uniquement si le statut contient "locataire"
+        // (match la même règle que kyc-section.tsx côté consultant).
+        cond: (d) =>
+          ((d.proprietaire_locataire as string | null | undefined) || '')
+            .toLowerCase()
+            .includes('locataire'),
       },
     ],
   },

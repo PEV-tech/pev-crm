@@ -522,6 +522,7 @@ function renderEtatCivilPP(ctx: PageCtx, c: KycPdfClient) {
   )
   drawLabelValue(ctx, 'NIF', (c.nif as string) ?? null)
   drawLabelValue(ctx, 'Adresse', (c.adresse as string) ?? null)
+  drawLabelValue(ctx, 'Code postal', (c.code_postal as string) ?? null)
   drawLabelValue(ctx, 'Ville', (c.ville as string) ?? null)
   drawLabelValue(ctx, 'Pays', (c.pays as string) ?? null)
   drawLabelValue(
@@ -529,6 +530,17 @@ function renderEtatCivilPP(ctx: PageCtx, c: KycPdfClient) {
     'Statut logement',
     (c.proprietaire_locataire as string) ?? null
   )
+  if (
+    ((c.proprietaire_locataire as string) || '')
+      .toLowerCase()
+      .includes('locataire')
+  ) {
+    drawLabelValue(
+      ctx,
+      'Montant du loyer (mensuel)',
+      formatEuro(c.montant_loyer as number | null)
+    )
+  }
   drawLabelValue(ctx, 'Téléphone', (c.telephone as string) ?? null)
   drawLabelValue(ctx, 'Email', (c.email as string) ?? null)
 }
@@ -699,6 +711,7 @@ function renderElementsGenerauxPM(ctx: PageCtx, c: KycPdfClient) {
   drawLabelValue(ctx, 'SIREN', (c.siren as string) ?? null)
   drawLabelValue(ctx, 'SIRET', (c.siret as string) ?? null)
   drawLabelValue(ctx, 'Adresse', (c.adresse as string) ?? null)
+  drawLabelValue(ctx, 'Code postal', (c.code_postal as string) ?? null)
   drawLabelValue(ctx, 'Ville', (c.ville as string) ?? null)
   drawLabelValue(ctx, 'Pays', (c.pays as string) ?? null)
   drawLabelValue(ctx, 'Téléphone', (c.telephone as string) ?? null)
