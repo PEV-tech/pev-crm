@@ -41,9 +41,8 @@ description = "Clés de champs formulaire KYC (noms métier FR, pas des secrets)
 # formulaire KYC public : impot_revenu_n / _n1 / _n2 (impôt sur le revenu
 # année N, N-1, N-2). Ce sont des identifiants de champs de formulaire
 # stockés en dur dans le code front, manifestement pas des secrets.
-regexes = [
-  '''impot_revenu_n\d?''',
-]
-paths = [
-  '''src/app/kyc/.*\.tsx''',
+# stopwords = substring-match sur la valeur détectée (plus fiable que
+# regexes dans gitleaks 8.x).
+stopwords = [
+  "impot_revenu",
 ]
