@@ -27,8 +27,35 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Secret scan (gitleaks)
+        run: |
+          # Download + scan. Pas d'action GitHub officielle parce que
+          # gitleaks-action exige une licence payante pour les repos d'org ;
+          # le binaire reste MIT-licensed gratuit.
+          GITLEAKS_VERSION=8.23.1
+          curl -sSLo /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks detect \
+            --no-git \
+            --source . \
+            --config .gitleaks.toml \
+            --redact \
+            --exit-code 1 \
+            --verbose
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies (critical CVEs)
+        run: npm audit --audit-level=critical --omit=dev
+        # Temporairement à 'critical' : nodemailer 6.x a des CVEs 'high'
+        # (SMTP command injection, unintended domain) qui seront traitées
+        # via une PR Dependabot dédiée (bump major 6 → 8 nécessite tests
+        # d'envoi réels). À resserrer à --audit-level=high une fois la
+        # PR nodemailer mergée. Les alertes 'high' restent visibles dans
+        # Dependabot alerts sans bloquer le build.
+        # --omit=dev exclut les devDependencies qui n'atteignent pas la prod.
 
       - name: Lint (ESLint)
         run: npm run lint
