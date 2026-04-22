@@ -1,12 +1,16 @@
 -- Migration: grilles de rémunération par catégorie produit
 -- Date: 2026-04-22
--- Context: retour Maxine — il faut 3 grilles distinctes :
---          · CAV      (contrat assurance-vie français)
---          · CAPI_LUX (contrat capitalisation / assurance-vie luxembourgeoise)
---          · PE       (private equity, grille sur les droits d'entrée,
---                      dégressif de 3% à 0,5% selon le montant souscrit)
+-- Context: retour Maxine — il faut 2 grilles distinctes :
+--          · LUX  (CAV FR + CAPI Luxembourg : droits d'entrée + encours,
+--                  regroupés car même logique de commissionnement cabinet)
+--          · PE   (private equity, grille sur les droits d'entrée,
+--                  dégressif de 3% à 0,5% selon le montant souscrit)
 --          Les taux sont INDICATIFS : le consultant peut les modifier
 --          dossier par dossier au moment de la saisie.
+--
+-- Note rétrocompat : la contrainte CHECK tolère également les anciennes
+-- valeurs 'CAV' et 'CAPI_LUX' si des lignes de test ont été insérées
+-- avant ce patch. L'UI remappe ces valeurs vers l'onglet LUX côté client.
 --
 -- Rollback: voir section ROLLBACK en bas.
 
@@ -18,17 +22,19 @@ ALTER TABLE public.grilles_frais
   ADD COLUMN IF NOT EXISTS libelle           text NULL;
 
 COMMENT ON COLUMN public.grilles_frais.produit_categorie IS
-  'Catégorie produit à laquelle s''applique la grille : CAV | CAPI_LUX | PE | NULL (=tous).';
+  'Catégorie produit à laquelle s''applique la grille : LUX | PE | NULL (=tous). Les anciennes valeurs CAV et CAPI_LUX sont tolérées pour rétrocompat.';
 COMMENT ON COLUMN public.grilles_frais.libelle IS
   'Libellé lisible pour le manager (ex: "PE — droits d''entrée dégressifs 2026").';
 
--- Contrainte de validité (text libre pour tolérer le NULL historique)
+-- Contrainte de validité (text libre pour tolérer le NULL historique).
+-- Les valeurs 'CAV' et 'CAPI_LUX' sont conservées dans la whitelist pour
+-- ne pas casser les insertions historiques potentielles pré-patch.
 ALTER TABLE public.grilles_frais
   DROP CONSTRAINT IF EXISTS grilles_frais_produit_categorie_chk;
 ALTER TABLE public.grilles_frais
   ADD CONSTRAINT grilles_frais_produit_categorie_chk
   CHECK (produit_categorie IS NULL
-      OR produit_categorie IN ('CAV', 'CAPI_LUX', 'PE'));
+      OR produit_categorie IN ('LUX', 'PE', 'CAV', 'CAPI_LUX'));
 
 -- 2) Seed du preset "PE — droits d'entrée dégressifs" (si absent)
 --    Barème indicatif retour Maxine : 3% de 100K à 200K, dégressif jusqu'à 0,5%.
