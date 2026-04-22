@@ -562,8 +562,6 @@ export function KycPropositionDiff({
       } catch {
         // body non JSON — on va surface rawText brut comme erreur.
       }
-      // Log console pour que Maxine puisse copier-coller si besoin.
-      console.log('[kyc-apply] response', res.status, data, rawText)
       if (!res.ok) {
         const msg =
           data.error ||

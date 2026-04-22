@@ -1,37 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PEV CRM
 
-## Getting Started
+Outil interne de **Private Equity Valley** — CRM spécialisé gestion de patrimoine. Suivi clients, dossiers, commissions, encaissements et KYC réglementaire (ACPR/DDA).
 
-First, run the development server:
+## Reprise développeur
+
+Point d'entrée unique : [`docs/HANDBOOK.md`](docs/HANDBOOK.md).
+
+Il couvre :
+- Setup local, variables d'environnement, déploiement.
+- Stack, architecture, conventions de code.
+- Flux métier critiques (KYC, dossiers, commissions, facturation, encaissements).
+- Guide de lecture, sécurité, roadmap, dette technique et pièges connus.
+
+## Statut courant
+
+[`STATUS.md`](STATUS.md) — avancement par chantier, mis à jour chaque sprint.
+
+## Autres docs utiles
+
+- [`COMPONENTS.md`](COMPONENTS.md) — bibliothèque de composants UI partagés.
+- [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) — audit sécurité (RLS, rate-limit, secrets).
+- [`docs/REGISTRE_TRAITEMENT.md`](docs/REGISTRE_TRAITEMENT.md) — registre RGPD art. 30.
+- [`docs/ROTATION.md`](docs/ROTATION.md) — procédure de rotation de secrets.
+- [`docs/kyc-e2e-test.md`](docs/kyc-e2e-test.md) — protocole de test E2E signature KYC.
+- [`docs/adr/`](docs/adr/) — décisions techniques archivées.
+- [`scripts/`](scripts/) — migrations SQL (ordre d'application dans le handbook §5.5).
+
+## Stack
+
+Next.js 14 App Router · TypeScript · Supabase (Postgres + Auth + Storage) · Vercel · Tailwind · pdf-lib · nodemailer (Google Workspace SMTP).
+
+## Commandes
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.local.example .env.local   # à compléter
+npm run dev        # http://localhost:3000
+npm run build      # build prod
+npm run lint       # ESLint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
+Pas de tests automatisés à ce jour (cf. handbook §12 — dette).
