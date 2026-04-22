@@ -381,7 +381,6 @@ export type Database = {
           date_entree_relation: string | null
           date_naissance: string | null
           der: boolean | null
-          drive_url: string | null
           email: string | null
           employeur: string | null
           emprunts: Json | null
@@ -446,7 +445,6 @@ export type Database = {
           date_entree_relation?: string | null
           date_naissance?: string | null
           der?: boolean | null
-          drive_url?: string | null
           email?: string | null
           employeur?: string | null
           emprunts?: Json | null
@@ -511,7 +509,6 @@ export type Database = {
           date_entree_relation?: string | null
           date_naissance?: string | null
           der?: boolean | null
-          drive_url?: string | null
           email?: string | null
           employeur?: string | null
           emprunts?: Json | null
