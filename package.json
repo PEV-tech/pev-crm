@@ -17,7 +17,7 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^1.7.0",
     "mammoth": "^1.12.0",
-    "next": "14.2.15",
+    "next": "15.5.15",
     "nodemailer": "^6.10.1",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.4",
