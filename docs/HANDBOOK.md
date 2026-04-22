@@ -318,7 +318,7 @@ npm run lint    # pas de nouvelles erreurs (il y a du legacy)
 
 Les variables d'environnement de prod sont gérées dans l'UI Vercel (Project → Settings → Environment Variables). Pour rotate un secret : voir `docs/ROTATION.md`.
 
-> ⚠️ `deploy-vercel.mjs` à la racine est un script one-shot historique qui utilise l'API Vercel directement. **Il contient des secrets en clair et n'est plus utilisé.** À supprimer (voir `docs/CLEANUP_CANDIDATES.md`).
+> ℹ️ Historique : un script `deploy-vercel.mjs` à la racine contournait l'API Vercel directement (avec un token en clair). Supprimé le 2026-04-22, tokens `pev-crm-deploy` + `pev-crm-deploy-2` révoqués côté Vercel. Déploiement aujourd'hui : `git push` → build auto.
 
 
 ---
@@ -427,7 +427,7 @@ encours_trim_consultant = montant × taux_gestion × consultant.taux_remuneratio
 
 **Édition des taux.** Chaque dossier permet de dérogation à la grille (bouton "Modifier les taux" sur le détail dossier). Les champs dépendants (`commission_brute`, `rem_apporteur`, `part_cabinet`, `pct_cabinet`) sont recalculés ensemble en un seul UPDATE. Voir `src/app/dashboard/dossiers/[id]/dossier-detail-wrapper.tsx`.
 
-**Historique.** Trois ADRs de l'époque documentent le refactor taux d'avril 2026 : `TECHNICAL_SUMMARY.md`, `IMPLEMENTATION_CHECKLIST.md`, `CHANGES_SUMMARY.md`. Les trois sont redondants — à consolider (voir cleanup).
+**Historique.** Le refactor taux d'avril 2026 est documenté dans `docs/adr/2026-04-commission-taux.md` (consolidation des 3 docs `TECHNICAL_SUMMARY` / `IMPLEMENTATION_CHECKLIST` / `CHANGES_SUMMARY` d'origine, supprimés le 2026-04-22).
 
 ### 6.3 Rémunérations consultant
 
@@ -514,7 +514,7 @@ Identifiant par défaut : IP (x-forwarded-for / x-real-ip). Peut être override 
 
 ### 7.6 Logs
 
-- `console.log` **interdit** en prod — un seul reste dans `src/components/clients/kyc-proposition-diff.tsx:566` (à nettoyer).
+- `console.log` **interdit** en prod. Un ancien log debug dans `kyc-proposition-diff.tsx` a été retiré le 2026-04-22 ; si tu en rajoutes, gate-le sur `process.env.NODE_ENV === 'development'`.
 - `console.warn` / `console.error` acceptés pour les erreurs inattendues.
 - Préfixer par `[<module>]` (ex: `[kyc/sign-public] upload failed: ...`).
 - Les logs sont visibles dans Vercel → Project → Logs.
@@ -566,7 +566,7 @@ Selon ce que tu veux comprendre, lit dans cet ordre :
 1. `scripts/add-taux-gestion.sql` — ajout `taux_gestion` + vue.
 2. `src/app/dashboard/dossiers/[id]/dossier-detail-wrapper.tsx` — écran + handler save.
 3. `src/lib/commissions/engine.ts` / `gestion.ts` / `rules.ts` — moteur de calcul.
-4. `TECHNICAL_SUMMARY.md` — ADR détaillée (historique, à consolider).
+4. `docs/adr/2026-04-commission-taux.md` — ADR consolidé (historique de la décision + logique de calcul).
 
 ### Je veux comprendre la structure d'authentification
 1. `src/lib/supabase/middleware.ts` — refresh session + redirect.
@@ -648,9 +648,7 @@ En dev local, si `GOOGLE_WORKSPACE_SMTP_PASS` est absent, l'envoi est skippé av
 | Pas de tests automatisés | Élevé — chaque refactor est risqué | Élevé — introduire Vitest + Playwright |
 | Pas de CI | Moyen | Faible — action GitHub + `npm run build` + `npm run lint` |
 | Pas de système de migration DB | Moyen — ordre des scripts tribal | Moyen — Supabase CLI migrations + baseline |
-| 3 docs sur le même refactor commission (TECHNICAL_SUMMARY / IMPLEMENTATION_CHECKLIST / CHANGES_SUMMARY) | Faible — confusion | Faible — consolider en 1 ADR historique |
 | `scripts/import-delta-2026.*` (one-shot migration Excel) reste dans le repo | Faible — bruit | Faible — archiver en `scripts/archive/` |
-| `deploy-vercel.mjs` (script de déploiement historique, contient des secrets en clair) | Sécurité — secrets lisibles même s'ils sont gitignored | Faible — supprimer |
 
 ### Pièges connus
 
