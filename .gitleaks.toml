@@ -3,6 +3,14 @@
 
 [extend]
 useDefault = true
+# `generic-api-key` est la règle entropique générique de gitleaks. Elle produit
+# régulièrement des faux positifs sur des identifiants métier (noms de champs
+# de formulaire, clés de traduction, etc.). On la désactive volontairement et
+# on s'appuie sur les règles NOMMÉES (github-pat, aws-access-token,
+# supabase-*, stripe-*, etc.) qui sont celles qui comptent réellement pour
+# détecter de vrais secrets. Voir historique : faux positifs répétés sur
+# `impot_revenu_n1` / `impot_revenu_n2` (champs IR du formulaire KYC public).
+disabledRules = ["generic-api-key"]
 
 # -----------------------------------------------------------------------------
 # Allowlists — exceptions légitimes qu'on ne veut pas faire échouer la CI.
