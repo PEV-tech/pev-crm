@@ -15,6 +15,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Edit, Save, X, Loader2, Trash2, ExternalLink, Heart, Search } from 'lucide-react'
 import { DocumentChecklist } from '@/components/shared/document-checklist'
 import { ClientRelances } from '@/components/shared/client-relances'
+import { DossierHistory } from '@/components/shared/dossier-history'
 import { CommissionPanel } from '@/components/dossiers/commission-panel'
 import { CompliancePanel } from '@/components/dossiers/compliance-panel'
 
@@ -866,20 +867,6 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.compagnie_nom || '-'}</p>
                   )}
                 </div>
-                {isEditing && autoTaux !== null && (
-                  <div className="col-span-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-indigo-700">
-                        Taux commission : <strong>{(autoTaux * 100).toFixed(2)}%</strong>
-                      </span>
-                      {editEstimatedCommission !== null && editEstimatedCommission > 0 && (
-                        <span className="text-sm font-semibold text-indigo-900">
-                          Commission estimée : {formatCurrency(editEstimatedCommission)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
                 {isEditing && editForm.produit_id && editForm.compagnie_id && autoTaux === null && (
                   <div className="col-span-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
                     <span className="text-xs text-amber-700">Aucun taux configuré pour cette combinaison produit/compagnie</span>
@@ -1087,6 +1074,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Historique des modifications (audit_logs) */}
+          <DossierHistory dossierId={id} />
         </div>
       </div>
     </div>
