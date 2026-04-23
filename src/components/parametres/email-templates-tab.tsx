@@ -34,7 +34,7 @@ import {
 
 type Consultant = { id: string; nom: string; prenom: string | null; role: string | null }
 
-// Valeurs d'exemple pour la preview.
+// Valeurs d'exemple pour la preview (couvrent les 4 templates).
 const PREVIEW_VARS: EmailTemplateVariables = {
   clientLabel: 'Dupont Jean',
   clientFirstName: 'Jean',
@@ -43,6 +43,12 @@ const PREVIEW_VARS: EmailTemplateVariables = {
   completionRate: 87,
   missingFields: 'Adresse, Profession',
   consultantPrenom: 'Maxine',
+  // Valeurs d'exemple pour kyc_envoi_lien / kyc_relance.
+  portailUrl: 'https://pev-crm.vercel.app/kyc/token-exemple',
+  kycSentAtFr: '16 avril 2026 à 09:15',
+  joursDepuisEnvoi: 7,
+  cabinetNom: 'Private Equity Valley',
+  consultantNom: 'Maxine Laisné',
 }
 
 const TEMPLATE_LABELS: Record<EmailTemplateKey, { title: string; help: string }> = {
@@ -54,6 +60,14 @@ const TEMPLATE_LABELS: Record<EmailTemplateKey, { title: string; help: string }>
     title: 'Confirmation client — KYC signé',
     help: "Email envoyé au client qui vient de signer, avec le PDF en pièce jointe. Ton accueil, pas d'infos internes.",
   },
+  kyc_envoi_lien: {
+    title: 'Envoi du lien KYC — initial',
+    help: "Email envoyé au client pour lui transmettre son lien de saisie KYC. Utilisez {{portailUrl}} pour insérer le lien sécurisé.",
+  },
+  kyc_relance: {
+    title: 'Relance KYC — lien non signé',
+    help: "Email envoyé automatiquement au client quand le KYC n'est pas signé après le délai que vous aurez choisi dans Paramètres → Relances. Utilisez {{joursDepuisEnvoi}} pour rappeler l'ancienneté du lien.",
+  },
 }
 
 const VARIABLES: Array<{ name: keyof EmailTemplateVariables; description: string }> = [
@@ -64,6 +78,11 @@ const VARIABLES: Array<{ name: keyof EmailTemplateVariables; description: string
   { name: 'completionRate', description: "Taux de complétude (0-100)" },
   { name: 'missingFields', description: "Champs manquants (liste séparée virgules)" },
   { name: 'consultantPrenom', description: "Prénom du consultant" },
+  { name: 'consultantNom', description: "Nom complet du consultant (prénom + nom)" },
+  { name: 'cabinetNom', description: "Nom du cabinet — Private Equity Valley" },
+  { name: 'portailUrl', description: "URL sécurisée vers le portail KYC (envoi + relance)" },
+  { name: 'kycSentAtFr', description: "Date FR d'envoi du lien (relance)" },
+  { name: 'joursDepuisEnvoi', description: "Nombre de jours depuis l'envoi (relance)" },
 ]
 
 type RowState = LoadedTemplate & { enabled: boolean; id: string | null; dirty: boolean }
@@ -83,6 +102,8 @@ export function EmailTemplatesTab({
   const [rows, setRows] = React.useState<Record<EmailTemplateKey, RowState>>({
     kyc_signed_consultant: blankRow('kyc_signed_consultant'),
     kyc_signed_client: blankRow('kyc_signed_client'),
+    kyc_envoi_lien: blankRow('kyc_envoi_lien'),
+    kyc_relance: blankRow('kyc_relance'),
   })
   const [loading, setLoading] = React.useState(true)
   const [savingKey, setSavingKey] = React.useState<EmailTemplateKey | null>(null)
@@ -146,6 +167,10 @@ export function EmailTemplatesTab({
         byKey.kyc_signed_consultant ?? blankRow('kyc_signed_consultant'),
       kyc_signed_client:
         byKey.kyc_signed_client ?? blankRow('kyc_signed_client'),
+      kyc_envoi_lien:
+        byKey.kyc_envoi_lien ?? blankRow('kyc_envoi_lien'),
+      kyc_relance:
+        byKey.kyc_relance ?? blankRow('kyc_relance'),
     })
     setLoading(false)
   }, [selectedConsultantId, supabase])

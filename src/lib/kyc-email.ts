@@ -181,6 +181,15 @@ export async function sendKycSignedNotification(
         ? ctx.missingFields.join(', ')
         : '—',
       consultantPrenom: consultant.prenom || '',
+      // Variables servant à kyc_envoi_lien / kyc_relance — neutres
+      // ici car la notif consultant post-signature ne les utilise pas.
+      portailUrl: '',
+      kycSentAtFr: '',
+      joursDepuisEnvoi: 0,
+      cabinetNom: 'Private Equity Valley',
+      consultantNom: [consultant.prenom, consultant.nom]
+        .filter(Boolean)
+        .join(' '),
     }
     subject = substituteVars(customTpl.subject, vars)
     text = substituteVars(customTpl.bodyText, vars)
@@ -412,6 +421,13 @@ export async function sendKycSignedNotificationToClient(
         ? ctx.missingFields.join(', ')
         : '—',
       consultantPrenom,
+      // Variables servant à kyc_envoi_lien / kyc_relance — neutres
+      // ici car la confirmation client post-signature ne les utilise pas.
+      portailUrl: '',
+      kycSentAtFr: '',
+      joursDepuisEnvoi: 0,
+      cabinetNom: 'Private Equity Valley',
+      consultantNom: consultantPrenom,
     }
     subjectStr = substituteVars(customTpl.subject, vars)
     text = substituteVars(customTpl.bodyText, vars)
