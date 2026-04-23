@@ -106,7 +106,11 @@ export async function fetchExternalJointAssets(
       arr.forEach((row, idx) => {
         if (!row || typeof row !== 'object') return
         const r = row as Record<string, unknown>
-        if (r.detenteur_type !== 'joint') return
+        // Accepte la forme canonique 'joint' ET la forme legacy 'commun'
+        // que le portail V1 (<2026-04-23) persistait. Sans cette tolérance,
+        // un actif saisi "en commun" par le client côté portail n'apparaîtrait
+        // jamais sur la fiche du co-titulaire même une fois la FK résolue.
+        if (r.detenteur_type !== 'joint' && r.detenteur_type !== 'commun') return
         if (r.co_titulaire_client_id !== currentClientId) return
 
         out.push({

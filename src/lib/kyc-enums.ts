@@ -119,3 +119,40 @@ export const DETENTEUR_TYPE_LABELS: Record<DetenteurType, string> = {
   co_titulaire: 'Co-titulaire',
   joint: 'Joint',
 }
+
+/**
+ * Libellés orientés "je" pour le portail public KYC (le client rempli
+ * lui-même la fiche, donc on parle à la 1re personne).
+ */
+export const DETENTEUR_TYPE_LABELS_PORTAIL: Record<DetenteurType, string> = {
+  client: 'Moi seul(e)',
+  co_titulaire: 'Mon co-titulaire seul(e)',
+  joint: 'En commun avec mon co-titulaire',
+}
+
+/**
+ * Normalise une valeur `detenteur_type` provenant des JSONB existants.
+ *
+ * Avant le commit `1cfe2de` (détenteur structuré) et l'alignement portail
+ * étape 2 (2026-04-23), le portail public persistait des valeurs libres
+ * (`conjoint`, `commun`, `autre`) qui ne sont pas dans l'enum canonique.
+ * Cette fonction réécrit ces valeurs à la lecture, pour que le select
+ * dashboard + le diff-viewer + le PDF affichent quelque chose de cohérent
+ * sans avoir à migrer les lignes JSONB en base.
+ *
+ * - `conjoint` / `co_titulaire`  → `co_titulaire`
+ * - `commun`   / `joint`         → `joint`
+ * - `autre`                      → `co_titulaire` (le nom est dans
+ *                                  `co_titulaire_nom`, le consultant
+ *                                  résoudra la FK)
+ * - `client`, `''`, `undefined`  → `client`
+ */
+export function normalizeDetenteurType(value: unknown): DetenteurType {
+  if (typeof value !== 'string' || value === '') return 'client'
+  const v = value.toLowerCase().trim()
+  if (v === 'co_titulaire' || v === 'conjoint') return 'co_titulaire'
+  if (v === 'joint' || v === 'commun') return 'joint'
+  if (v === 'autre') return 'co_titulaire'
+  if (v === 'client') return 'client'
+  return 'client'
+}
