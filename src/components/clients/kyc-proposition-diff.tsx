@@ -129,11 +129,19 @@ function valuesDiffer(a: unknown, b: unknown): boolean {
 // JSON.stringify brut historique (qui rendait le diff illisible).
 // ---------------------------------------------------------------------
 
+// Libellés alignés sur `DETENTEUR_TYPE_LABELS` (kyc-enums) pour le diff.
+// On accepte aussi les anciennes valeurs libres (`conjoint`, `commun`,
+// `autre`) écrites par le portail V1 avant le 2026-04-23, en les mappant
+// vers la forme canonique. Le co-titulaire en texte libre (`co_titulaire_nom`)
+// reste affiché entre parenthèses quand il est présent.
 const DETENTEUR_LABELS: Record<string, string> = {
-  client: 'client',
-  conjoint: 'conjoint',
-  commun: 'commun',
-  autre: 'autre',
+  client: 'Client',
+  co_titulaire: 'Co-titulaire',
+  joint: 'Joint',
+  // legacy
+  conjoint: 'Co-titulaire',
+  commun: 'Joint',
+  autre: 'Co-titulaire',
 }
 
 function fmtEuro(v: unknown): string | null {
@@ -167,8 +175,11 @@ function fmtDetenteur(row: Record<string, unknown>): string | null {
   const t = row.detenteur_type
   if (typeof t !== 'string' || t === '') return null
   const label = DETENTEUR_LABELS[t] || t
-  if (t === 'autre' && typeof row.co_titulaire_nom === 'string' && row.co_titulaire_nom) {
-    return `${label} (${row.co_titulaire_nom})`
+  // Montre le co-titulaire texte libre dès qu'il a été saisi — utile au
+  // consultant pour identifier la personne avant de résoudre la FK UUID.
+  const nom = typeof row.co_titulaire_nom === 'string' ? row.co_titulaire_nom : ''
+  if (nom && (t === 'co_titulaire' || t === 'joint' || t === 'autre' || t === 'conjoint' || t === 'commun')) {
+    return `${label} (${nom})`
   }
   return label
 }

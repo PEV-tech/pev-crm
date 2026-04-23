@@ -11,7 +11,11 @@ import {
   REGIME_MATRIMONIAL_OPTIONS,
   TYPE_BIEN_IMMOBILIER_OPTIONS,
   TYPE_PRODUIT_FINANCIER_OPTIONS,
+  DETENTEUR_TYPE_OPTIONS,
+  DETENTEUR_TYPE_LABELS_PORTAIL,
+  normalizeDetenteurType,
   needsRegimeMatrimonial,
+  type DetenteurType,
 } from '@/lib/kyc-enums'
 
 /**
@@ -246,8 +250,11 @@ const READONLY_JSONB_KEYS = ['enfants_details'] as const
 // Shapes simplifiées — miroir des interfaces consultant (kyc-section.tsx)
 // sans les FK UUID (co_titulaire_client_id). Côté client, le co-titulaire
 // est saisi en texte libre (`co_titulaire_nom`) ; le consultant résout
-// le lien au moment d'accepter la proposition.
-type DetenteurType = 'client' | 'conjoint' | 'commun' | 'autre' | ''
+// le lien (→ `co_titulaire_client_id`) au moment d'accepter la proposition.
+// `DetenteurType` est importé de `@/lib/kyc-enums` — enum canonique
+// `'client' | 'co_titulaire' | 'joint'`. Les anciennes valeurs
+// `'conjoint' | 'commun' | 'autre'` écrites par les versions <2026-04-23
+// sont normalisées à la lecture via `normalizeDetenteurType()`.
 
 type ImmobilierRow = {
   type_bien?: string
@@ -1086,12 +1093,17 @@ function sanitizeJsonbRows(rows: unknown[]): Record<string, unknown>[] {
   return out
 }
 
-const DETENTEUR_OPTIONS: Array<{ v: DetenteurType; label: string }> = [
+// Options alignées sur l'enum canonique `DETENTEUR_TYPE_OPTIONS` (commit
+// `1cfe2de`) — le portail V1 avait ses propres libellés (`conjoint`,
+// `commun`, `autre`) que le dashboard ne savait pas relire, cassant la
+// synchronisation bidirectionnelle des actifs joints. Libellés FR à la
+// 1re personne (c'est le client qui lit).
+const DETENTEUR_OPTIONS: Array<{ v: DetenteurType | ''; label: string }> = [
   { v: '', label: '—' },
-  { v: 'client', label: 'Moi seul(e)' },
-  { v: 'conjoint', label: 'Mon conjoint seul(e)' },
-  { v: 'commun', label: 'En commun' },
-  { v: 'autre', label: 'Autre (précisez le nom)' },
+  ...DETENTEUR_TYPE_OPTIONS.map((opt) => ({
+    v: opt,
+    label: DETENTEUR_TYPE_LABELS_PORTAIL[opt],
+  })),
 ]
 
 /* ------------------------------------------------------------------ */
@@ -1264,21 +1276,26 @@ function DetenteurFields<
   row: T
   onPatch: (patch: Partial<T>) => void
 }) {
-  const needsName =
-    row.detenteur_type === 'commun' || row.detenteur_type === 'autre'
+  // Le nom en texte libre n'est utile que si quelqu'un d'autre intervient
+  // sur l'actif — c'est-à-dire co_titulaire (solo) ou joint (commun).
+  const normalized = normalizeDetenteurType(row.detenteur_type)
+  const needsName = normalized === 'co_titulaire' || normalized === 'joint'
   return (
     <>
       <SelectCell
         label="Détenteur"
-        value={row.detenteur_type}
-        onChange={(v) =>
+        value={normalized}
+        onChange={(v) => {
+          const next = normalizeDetenteurType(v)
           onPatch({
-            detenteur_type: v as DetenteurType,
-            // on vide le nom si on repasse à un détenteur solo
+            detenteur_type: next,
+            // on vide le nom si on repasse à un détenteur solo (client)
             co_titulaire_nom:
-              v === 'commun' || v === 'autre' ? row.co_titulaire_nom : '',
+              next === 'co_titulaire' || next === 'joint'
+                ? row.co_titulaire_nom
+                : '',
           } as Partial<T>)
-        }
+        }}
         options={DETENTEUR_OPTIONS.map((o) => ({ v: o.v, label: o.label }))}
       />
       {needsName && (

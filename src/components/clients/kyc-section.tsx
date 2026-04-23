@@ -32,6 +32,7 @@ import {
   TYPE_DETENTION_OPTIONS,
   DETENTEUR_TYPE_OPTIONS,
   DETENTEUR_TYPE_LABELS,
+  normalizeDetenteurType,
   needsRegimeMatrimonial,
   type DetenteurType,
 } from '@/lib/kyc-enums'
@@ -1615,7 +1616,10 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       coTitulaireId: string | null | undefined
       onChange: (type: DetenteurType | undefined, coTitId: string | null) => void
     }) => {
-      const current: DetenteurType = (value ?? 'client') as DetenteurType
+      // Normalise les anciennes valeurs libres ('conjoint'/'commun'/'autre')
+      // persistées par le portail V1 — sinon le select reste vide et l'UI
+      // laisse croire que le détenteur n'est pas renseigné.
+      const current: DetenteurType = normalizeDetenteurType(value)
       const needsPicker = current === 'co_titulaire' || current === 'joint'
       return (
         <div className="flex flex-col gap-1">
