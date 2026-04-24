@@ -102,11 +102,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   React.useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [dossierRes, dossierRawRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
+        const [dossierRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
           supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle(),
-          // Fetch direct sur la table dossiers pour récupérer taux_produit_compagnie_id
-          // (pas encore exposé par v_dossiers_complets).
-          supabase.from('dossiers').select('taux_produit_compagnie_id').eq('id', id).limit(1).maybeSingle(),
           supabase.from('produits').select('id, nom, categorie').order('nom'),
           supabase.from('compagnies').select('id, nom').order('nom'),
           supabase.from('taux_produit_compagnie').select('id, produit_id, compagnie_id, taux, description').eq('actif', true),
@@ -129,14 +126,14 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           // Find IDs from view data by matching names to lists
           const produitId = produitsRes.data?.find((p) => p.nom === data.produit_nom)?.id || ''
           const compagnieId = compagniesRes.data?.find((c) => c.nom === data.compagnie_nom)?.id || ''
-          // taux_produit_compagnie_id : prendre celui stocké sur le dossier si présent,
-          // sinon fallback sur la première ligne taux matching (produit_id, compagnie_id).
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const storedTpcId = (dossierRawRes.data as any)?.taux_produit_compagnie_id as string | null | undefined
-          setDossierTpcId(storedTpcId || null)
+          // taux_produit_compagnie_id : prendre celui stocké sur le dossier (remonté
+          // par la vue depuis 2026-04-24), sinon fallback sur la première ligne taux
+          // matching (produit_id, compagnie_id).
+          const storedTpcId = data.taux_produit_compagnie_id || null
+          setDossierTpcId(storedTpcId)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const tpcId = storedTpcId || tauxRes.data?.find((t: any) => t.produit_id === produitId && t.compagnie_id === compagnieId)?.id || ''
-          setEditForm({
+  setEditForm({
             statut: data.statut || 'prospect',
             montant: data.montant || '',
             financement: data.financement || 'cash',
@@ -980,6 +977,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   ) : (
                     <p className="text-lg font-semibold text-gray-900 mt-1">
                       {(() => {
+                        // Priorité 1 : la description remontée par la vue (taux_produit_compagnie_description)
+                        const viewDesc = dossier.taux_produit_compagnie_description?.trim()
+                        if (viewDesc) return viewDesc
+                        // Fallback 1 : lookup sur tauxMap avec l'id stocké
                         const tpc = dossierTpcId
                           ? tauxMap.find((t) => t.id === dossierTpcId)
                           : tauxMap.find(
