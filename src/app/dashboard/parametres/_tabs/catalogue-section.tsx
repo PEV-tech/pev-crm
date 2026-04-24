@@ -29,6 +29,7 @@ import { formatCurrency } from '@/lib/formatting'
 import {
   formatPercent2, parseRateInput, rateToInput, type ShowToast, SECTION_INTRO_CLS,
 } from './helpers'
+import { SousProduitsEditor } from '@/components/parametres/sous-produits-editor'
 
 interface Props {
   isManager: boolean
@@ -405,26 +406,43 @@ export function CatalogueSection({ isManager, showToast }: Props) {
                             )
                           }
                           return (
-                            <tr key={row.id} className="hover:bg-gray-50/40">
-                              <td className="px-2 py-2 font-medium text-gray-900">{displayName}</td>
-                              <td className="px-2 py-2 text-gray-600">{produit?.categorie || produit?.nom || '—'}</td>
-                              <td className="px-2 py-2 text-right">{formatPercent2(row.frais_entree)}</td>
-                              <td className="px-2 py-2 text-right">{formatPercent2(row.frais_encours)}</td>
-                              <td className="px-2 py-2 text-right">{row.prix_part != null ? formatCurrency(row.prix_part) : '—'}</td>
-                              <td className="px-2 py-2 text-center">
-                                <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${row.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                  {row.actif ? 'Oui' : 'Non'}
-                                </span>
-                              </td>
-                              {isManager && (
-                                <td className="px-2 py-2 text-right">
-                                  <div className="flex justify-end gap-1">
-                                    <Button size="sm" variant="ghost" onClick={() => setEditingTaux({ id: row.id, data: row })}><Edit2 size={14} /></Button>
-                                    <Button size="sm" variant="ghost" onClick={() => deleteTaux(row.id)}><Trash2 size={14} className="text-red-500" /></Button>
-                                  </div>
+                            <React.Fragment key={row.id}>
+                              <tr className="hover:bg-gray-50/40">
+                                <td className="px-2 py-2 font-medium text-gray-900">{displayName}</td>
+                                <td className="px-2 py-2 text-gray-600">{produit?.categorie || produit?.nom || '—'}</td>
+                                <td className="px-2 py-2 text-right">{formatPercent2(row.frais_entree)}</td>
+                                <td className="px-2 py-2 text-right">{formatPercent2(row.frais_encours)}</td>
+                                <td className="px-2 py-2 text-right">{row.prix_part != null ? formatCurrency(row.prix_part) : '—'}</td>
+                                <td className="px-2 py-2 text-center">
+                                  <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${row.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                    {row.actif ? 'Oui' : 'Non'}
+                                  </span>
                                 </td>
+                                {isManager && (
+                                  <td className="px-2 py-2 text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <Button size="sm" variant="ghost" onClick={() => setEditingTaux({ id: row.id, data: row })}><Edit2 size={14} /></Button>
+                                      <Button size="sm" variant="ghost" onClick={() => deleteTaux(row.id)}><Trash2 size={14} className="text-red-500" /></Button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                              {row.produit_id && row.compagnie_id && (
+                                <tr className="bg-gray-50/30">
+                                  <td colSpan={isManager ? 7 : 6} className="px-6 py-2 border-b border-gray-100">
+                                    <div className="flex items-start gap-3">
+                                      <span className="text-xs font-medium text-gray-500 shrink-0 mt-0.5">Sous-produits :</span>
+                                      <SousProduitsEditor
+                                        produitId={row.produit_id}
+                                        compagnieId={row.compagnie_id}
+                                        produitNom={produit?.nom}
+                                        isManager={isManager}
+                                      />
+                                    </div>
+                                  </td>
+                                </tr>
                               )}
-                            </tr>
+                            </React.Fragment>
                           )
                         })}
 
