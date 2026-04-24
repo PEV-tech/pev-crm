@@ -48,6 +48,7 @@ import {
   substituteVars,
   wrapBodyInPevShell,
   titleForTemplateKey,
+  DEFAULT_TEMPLATES,
   type EmailTemplateVariables,
 } from '@/lib/kyc-email-templates'
 import {
@@ -579,4 +580,183 @@ Pour toute question, contactez votre conseiller habituel.
 — L'équipe Private Equity Valley`
 
   return { html, text }
+}
+
+// =====================================================================
+// Chantier 5 étape 3 audit KYC (2026-04-24)
+// Envoi du lien KYC au client (initial + relance) via Gmail API.
+// Utilise les templates `kyc_envoi_lien` et `kyc_relance` introduits au
+// chantier 1, personnalisables par consultant dans Paramètres → Emails.
+// =====================================================================
+
+export interface KycLinkEmailContext {
+  admin: SupabaseClient<Database>
+  clientId: string
+  /** URL complète vers /kyc/[token] — le caller gère la génération du token. */
+  portailUrl: string
+  /**
+   * Date d'envoi initial du lien KYC (utilisée uniquement pour
+   * `kyc_relance` : calcule joursDepuisEnvoi + kycSentAtFr).
+   * Ignoré pour `kyc_envoi_lien`.
+   */
+  kycSentAt?: Date | null
+}
+
+/**
+ * Logique partagée entre `sendKycEnvoiLien` et `sendKycRelance`. Charge le
+ * template personnalisé du consultant (fallback au DEFAULT_TEMPLATES si
+ * absent ou désactivé), substitue les variables Mustache, et envoie via
+ * le transport Gmail API / SMTP configuré.
+ *
+ * Renvoie un `KycEmailResult` harmonisé avec les notifs post-signature.
+ */
+async function sendKycLinkEmail(
+  ctx: KycLinkEmailContext,
+  templateKey: 'kyc_envoi_lien' | 'kyc_relance',
+): Promise<KycEmailResult> {
+  if (!hasCredentials()) {
+    console.warn(
+      `[kyc-email] credentials email manquants — ${templateKey} non envoyé`,
+    )
+    return { sent: false, skipped: 'no-api-key' }
+  }
+
+  // 1. Client + consultant
+  const { data: client, error: clientErr } = await ctx.admin
+    .from('clients')
+    .select('id, nom, prenom, raison_sociale, type_personne, consultant_id, email')
+    .eq('id', ctx.clientId)
+    .maybeSingle()
+
+  if (clientErr || !client) {
+    return { sent: false, skipped: 'no-client', error: clientErr?.message }
+  }
+
+  const clientEmail = (client.email || '').trim()
+  if (!clientEmail) {
+    return { sent: false, skipped: 'no-client-email' }
+  }
+
+  let consultantPrenom = ''
+  let consultantNom = ''
+  if (client.consultant_id) {
+    const { data: cons } = await ctx.admin
+      .from('consultants')
+      .select('prenom, nom')
+      .eq('id', client.consultant_id)
+      .maybeSingle()
+    consultantPrenom = (cons?.prenom as string) || ''
+    consultantNom = [cons?.prenom, cons?.nom].filter(Boolean).join(' ')
+  }
+
+  // 2. Variables Mustache
+  const clientLabel =
+    client.type_personne === 'morale'
+      ? client.raison_sociale || client.nom
+      : `${client.prenom || ''} ${client.nom}`.trim() || client.nom
+  const clientFirstName =
+    client.type_personne === 'morale' ? '' : client.prenom || ''
+
+  // Pour kyc_relance : calcule la date d'envoi FR + ancienneté en jours.
+  let kycSentAtFr = ''
+  let joursDepuisEnvoi = 0
+  if (templateKey === 'kyc_relance' && ctx.kycSentAt) {
+    kycSentAtFr = ctx.kycSentAt.toLocaleString('fr-FR', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+    })
+    joursDepuisEnvoi = Math.max(
+      0,
+      Math.floor(
+        (Date.now() - ctx.kycSentAt.getTime()) / (1000 * 60 * 60 * 24),
+      ),
+    )
+  }
+
+  const vars: EmailTemplateVariables = {
+    clientLabel,
+    clientFirstName,
+    signerName: '',
+    signedAtStr: '',
+    completionRate: 0,
+    missingFields: '—',
+    consultantPrenom,
+    portailUrl: ctx.portailUrl,
+    kycSentAtFr,
+    joursDepuisEnvoi,
+    cabinetNom: 'Private Equity Valley',
+    consultantNom,
+  }
+
+  // 3. Template custom (si présent) ou DEFAULT_TEMPLATES
+  let subject: string
+  let text: string
+  if (client.consultant_id) {
+    const custom = await loadConsultantEmailTemplate(
+      ctx.admin,
+      client.consultant_id,
+      templateKey,
+    )
+    if (custom) {
+      subject = substituteVars(custom.subject, vars)
+      text = substituteVars(custom.bodyText, vars)
+    } else {
+      const def = DEFAULT_TEMPLATES[templateKey]
+      subject = substituteVars(def.subject, vars)
+      text = substituteVars(def.bodyText, vars)
+    }
+  } else {
+    // Pas de consultant rattaché → fallback défaut (cas de bord).
+    const def = DEFAULT_TEMPLATES[templateKey]
+    subject = substituteVars(def.subject, vars)
+    text = substituteVars(def.bodyText, vars)
+  }
+
+  const html = wrapBodyInPevShell({
+    title: titleForTemplateKey(templateKey, false),
+    bodyText: text,
+  })
+
+  // 4. Envoi
+  const from = defaultFromAddress()
+  const result = await sendEmail({
+    from,
+    to: clientEmail,
+    subject,
+    html,
+    text,
+  })
+
+  if (result.error) {
+    return {
+      sent: false,
+      error: result.error.message,
+    }
+  }
+  return {
+    sent: true,
+    messageId: result.data?.id,
+  }
+}
+
+/**
+ * Envoie l'email initial d'invitation KYC au client, avec le lien vers
+ * le portail public. Utilisé par `/api/kyc/send-link` quand le consultant
+ * clique « Envoyer le lien (auto) ».
+ */
+export async function sendKycEnvoiLien(
+  ctx: KycLinkEmailContext,
+): Promise<KycEmailResult> {
+  return sendKycLinkEmail(ctx, 'kyc_envoi_lien')
+}
+
+/**
+ * Envoie un email de relance au client dont le KYC reste non signé.
+ * Utilisé par le cron `/api/cron/kyc-relances` quand
+ * `kyc_relance_settings.email_auto=true` pour le consultant référent.
+ */
+export async function sendKycRelance(
+  ctx: KycLinkEmailContext,
+): Promise<KycEmailResult> {
+  return sendKycLinkEmail(ctx, 'kyc_relance')
 }

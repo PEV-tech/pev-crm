@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Copy,
   Mail,
+  Send,
   Loader2,
   Clock,
   Eye,
@@ -189,7 +190,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
     >([])
     const [saving, setSaving] = React.useState(false)
     const [signatureOpen, setSignatureOpen] = React.useState(false)
-    const [linkBusy, setLinkBusy] = React.useState<null | 'copy' | 'email'>(null)
+    const [linkBusy, setLinkBusy] = React.useState<null | 'copy' | 'email' | 'send_auto'>(null)
     const [linkFeedback, setLinkFeedback] = React.useState<string | null>(null)
 
     const supabase = React.useMemo(() => createClient(), [])
@@ -3376,6 +3377,44 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
       }
     }
 
+    // Chantier 5 étape 3 audit KYC (2026-04-24) : envoi auto via Gmail API.
+    // Alternative au flux `handleEmailKyc` (ouvre Gmail web pour que le
+    // consultant envoie manuellement) — ici le CRM envoie lui-même en
+    // utilisant le template `kyc_envoi_lien` (personnalisable dans
+    // Paramètres → Communication). Côté code, /api/kyc/send-link fait
+    // le full pipeline : generate_token + charge template + sendEmail
+    // (Gmail API) + mark-sent.
+    const handleSendKycLinkAuto = async () => {
+      if (!client?.id) return
+      setLinkFeedback(null)
+      setLinkBusy('send_auto')
+      try {
+        const res = await fetch('/api/kyc/send-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: client.id }),
+        })
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.error || `Erreur ${res.status}`)
+        }
+        const email = json.email as { sent: boolean; error?: string } | undefined
+        if (email?.sent) {
+          setLinkFeedback(`Email envoyé → ${json.recipient_email}`)
+        } else {
+          setLinkFeedback(
+            `Lien généré, mais envoi email indisponible : ${email?.error || 'raison inconnue'}. Utilise "Ouvrir dans Gmail" pour envoyer manuellement.`,
+          )
+        }
+        onUpdate()
+      } catch (e: any) {
+        setLinkFeedback(`Erreur : ${e?.message || 'inconnue'}`)
+      } finally {
+        setLinkBusy(null)
+        setTimeout(() => setLinkFeedback(null), 6000)
+      }
+    }
+
     return (
       <Card className="mt-4">
         <CardHeader>
@@ -3474,17 +3513,30 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         Copier le lien
                       </button>
                       <button
+                        onClick={handleSendKycLinkAuto}
+                        disabled={linkBusy !== null}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-white bg-green-600 border border-green-600 rounded hover:bg-green-700 transition-colors disabled:opacity-50"
+                        title="Envoi automatique par le CRM (template kyc_envoi_lien, personnalisable dans Paramètres → Communication)"
+                      >
+                        {linkBusy === 'send_auto' ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Send size={14} />
+                        )}
+                        Envoyer le lien (auto)
+                      </button>
+                      <button
                         onClick={handleEmailKyc}
                         disabled={linkBusy !== null}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-white bg-navy-700 border border-navy-700 rounded hover:bg-navy-800 transition-colors disabled:opacity-50"
-                        title="Ouvrir Gmail avec un brouillon pré-rempli vers le client"
+                        title="Ouvrir Gmail avec un brouillon pré-rempli vers le client (mode manuel)"
                       >
                         {linkBusy === 'email' ? (
                           <Loader2 size={14} className="animate-spin" />
                         ) : (
                           <Mail size={14} />
                         )}
-                        Envoyer par email
+                        Ouvrir dans Gmail
                       </button>
                     </>
                   )}

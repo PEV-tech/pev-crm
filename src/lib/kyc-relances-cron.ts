@@ -23,12 +23,17 @@
  *          · UPDATE clients.kyc_relances_count++ et kyc_last_relance_at=NOW().
  *   3. Retourner un rapport agrégé (par consultant + global).
  *
- * Pas d'envoi email dans ce fichier — l'email_auto est câblé au chantier 5,
- * une fois le stack SMTP débloqué (chantier 4).
+ * Email auto — câblé au chantier 5 (2026-04-24) après déblocage du stack
+ * Gmail API (chantier 4). Si `kyc_relance_settings.email_auto=true` pour
+ * un consultant, chaque insert/réactivation dans `relances` déclenche
+ * aussi l'envoi d'un email au client via le template `kyc_relance`.
+ * Résilience : si l'email échoue, l'entrée Relances reste créée et le
+ * compteur bumped — le consultant peut toujours relancer manuellement.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import { sendKycRelance } from '@/lib/kyc-email'
 
 export interface RelancesCronReport {
   ran_at: string
@@ -38,6 +43,9 @@ export interface RelancesCronReport {
   relances_inserted: number
   relances_reactivated: number
   clients_capped: number
+  emails_sent: number
+  emails_failed: number
+  emails_skipped_disabled: number
   errors: Array<{ consultant_id: string; client_id?: string; message: string }>
 }
 
@@ -54,8 +62,16 @@ export async function runKycRelancesCron(
     relances_inserted: 0,
     relances_reactivated: 0,
     clients_capped: 0,
+    emails_sent: 0,
+    emails_failed: 0,
+    emails_skipped_disabled: 0,
     errors: [],
   }
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://pev-crm.vercel.app'
 
   // Étape 1 — charger tous les settings. On inclut les désactivés juste
   // pour le compte d'audit ; on les skippe ensuite.
@@ -198,6 +214,41 @@ export async function runKycRelancesCron(
           })
           .eq('id', c.id)
         if (bumpErr) throw bumpErr
+
+        // Envoi email auto si settings.email_auto=true — indépendant de
+        // l'entrée Relances : si l'envoi échoue, le consultant voit
+        // quand même la relance dans le CRM et peut renvoyer manuellement.
+        if (!s.email_auto) {
+          report.emails_skipped_disabled += 1
+          continue
+        }
+        if (!c.kyc_token) {
+          // Sécurité : pas de token = pas de portail URL possible.
+          report.emails_failed += 1
+          report.errors.push({
+            consultant_id: s.consultant_id,
+            client_id: c.id,
+            message: 'kyc_token manquant au moment de l\'envoi relance',
+          })
+          continue
+        }
+        const portailUrl = `${appUrl.replace(/\/$/, '')}/kyc/${c.kyc_token}`
+        const mailResult = await sendKycRelance({
+          admin,
+          clientId: c.id,
+          portailUrl,
+          kycSentAt: c.kyc_sent_at ? new Date(c.kyc_sent_at) : null,
+        })
+        if (mailResult.sent) {
+          report.emails_sent += 1
+        } else {
+          report.emails_failed += 1
+          report.errors.push({
+            consultant_id: s.consultant_id,
+            client_id: c.id,
+            message: `email relance: ${mailResult.error || mailResult.skipped || 'unknown'}`,
+          })
+        }
       } catch (err: unknown) {
         report.errors.push({
           consultant_id: s.consultant_id,
