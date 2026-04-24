@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/cron/kyc-relances",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}

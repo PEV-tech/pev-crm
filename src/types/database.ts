@@ -392,8 +392,10 @@ export type Database = {
           impot_revenu_n1: number | null
           impot_revenu_n2: number | null
           kyc_date_signature: string | null
+          kyc_last_relance_at: string | null
           kyc_pdf_generated_at: string | null
           kyc_pdf_storage_path: string | null
+          kyc_relances_count: number
           kyc_uploaded_at: string | null
           lieu_naissance: string | null
           lm: boolean | null
@@ -456,8 +458,10 @@ export type Database = {
           impot_revenu_n1?: number | null
           impot_revenu_n2?: number | null
           kyc_date_signature?: string | null
+          kyc_last_relance_at?: string | null
           kyc_pdf_generated_at?: string | null
           kyc_pdf_storage_path?: string | null
+          kyc_relances_count?: number
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null
@@ -520,8 +524,10 @@ export type Database = {
           impot_revenu_n1?: number | null
           impot_revenu_n2?: number | null
           kyc_date_signature?: string | null
+          kyc_last_relance_at?: string | null
           kyc_pdf_generated_at?: string | null
           kyc_pdf_storage_path?: string | null
+          kyc_relances_count?: number
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null
@@ -1406,6 +1412,50 @@ export type Database = {
         }
         Relationships: []
       }
+      kyc_relance_settings: {
+        Row: {
+          consultant_id: string
+          created_at: string
+          email_auto: boolean
+          enabled: boolean
+          id: string
+          intervalle_jours: number
+          max_relances: number
+          seuil_jours: number
+          updated_at: string
+        }
+        Insert: {
+          consultant_id: string
+          created_at?: string
+          email_auto?: boolean
+          enabled?: boolean
+          id?: string
+          intervalle_jours?: number
+          max_relances?: number
+          seuil_jours?: number
+          updated_at?: string
+        }
+        Update: {
+          consultant_id?: string
+          created_at?: string
+          email_auto?: boolean
+          enabled?: boolean
+          id?: string
+          intervalle_jours?: number
+          max_relances?: number
+          seuil_jours?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kyc_relance_settings_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: true
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       manager_cagnotte: {
         Row: {
           acquis_total: number | null
@@ -1467,6 +1517,7 @@ export type Database = {
           dossier_id: string | null
           id: string
           rappel_date: string | null
+          source: string | null
           statut: string
           type: string
           updated_at: string | null
@@ -1480,6 +1531,7 @@ export type Database = {
           dossier_id?: string | null
           id?: string
           rappel_date?: string | null
+          source?: string | null
           statut?: string
           type?: string
           updated_at?: string | null
@@ -1493,6 +1545,7 @@ export type Database = {
           dossier_id?: string | null
           id?: string
           rappel_date?: string | null
+          source?: string | null
           statut?: string
           type?: string
           updated_at?: string | null
