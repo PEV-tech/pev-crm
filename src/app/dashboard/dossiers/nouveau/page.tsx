@@ -432,21 +432,6 @@ function NewDossierContent() {
               </div>
             </div>
 
-            {/* Auto taux indicator */}
-            {autoTaux !== null && (
-              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-indigo-700">
-                    Taux commission : <strong>{(autoTaux * 100).toFixed(2)}%</strong>
-                  </span>
-                  {estimatedCommission !== null && estimatedCommission > 0 && (
-                    <span className="text-sm font-semibold text-indigo-900">
-                      Commission estimée : {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(estimatedCommission)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
             {formData.produitId && formData.compagnieId && autoTaux === null && (
               <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg">
                 <span className="text-xs text-amber-700">Aucun taux configuré pour cette combinaison produit/compagnie</span>
