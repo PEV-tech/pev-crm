@@ -14,13 +14,14 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Users, BookOpen, Percent, Mail, Shield, UserCog } from 'lucide-react'
+import { Users, BookOpen, Percent, Mail, Bell, Shield, UserCog } from 'lucide-react'
 import { useUser, useRole } from '@/hooks/use-user'
 import { useToast } from '@/components/ui/toast'
 import { EquipeSection } from './_tabs/equipe-section'
 import { CatalogueSection } from './_tabs/catalogue-section'
 import { RemunerationSection } from './_tabs/remuneration-section'
 import { CommunicationSection } from './_tabs/communication-section'
+import { RelancesSection } from './_tabs/relances-section'
 import { CompteSection } from './_tabs/compte-section'
 import { AdminSection } from './_tabs/admin-section'
 
@@ -50,7 +51,7 @@ export default function ParametresPage() {
         <CardContent>
           <Tabs defaultValue="equipe" className="space-y-6">
             <TabsList
-              className={`grid w-full ${role === 'manager' ? 'grid-cols-6' : 'grid-cols-5'}`}
+              className={`grid w-full ${role === 'manager' ? 'grid-cols-7' : 'grid-cols-6'}`}
             >
               <TabsTrigger value="equipe" className="flex items-center gap-2">
                 <Users size={16} />
@@ -67,6 +68,10 @@ export default function ParametresPage() {
               <TabsTrigger value="communication" className="flex items-center gap-2">
                 <Mail size={16} />
                 <span className="hidden sm:inline">Communication</span>
+              </TabsTrigger>
+              <TabsTrigger value="relances" className="flex items-center gap-2">
+                <Bell size={16} />
+                <span className="hidden sm:inline">Relances</span>
               </TabsTrigger>
               <TabsTrigger value="compte" className="flex items-center gap-2">
                 <UserCog size={16} />
@@ -94,6 +99,13 @@ export default function ParametresPage() {
 
             <TabsContent value="communication">
               <CommunicationSection
+                currentConsultantId={consultant?.id ?? null}
+                isManager={isManager}
+              />
+            </TabsContent>
+
+            <TabsContent value="relances">
+              <RelancesSection
                 currentConsultantId={consultant?.id ?? null}
                 isManager={isManager}
               />
