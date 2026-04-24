@@ -65,6 +65,26 @@ export function JournalSuivi({ clientId, currentUserId, currentUserNom, isManage
   const [editContenu, setEditContenu] = React.useState('')
   const [editType, setEditType] = React.useState<EtiquetteType>('note_interne')
 
+  // Point 2.2 (2026-04-24) — affichage condensé du contenu des posts.
+  // Les posts longs sont tronqués visuellement à ~3 lignes avec un bouton
+  // "Voir plus / Voir moins". Plutôt que de truncate le texte côté JS
+  // (perte de recherche navigateur, copier-coller partiel), on utilise
+  // `line-clamp-3` en CSS : le texte complet reste dans le DOM.
+  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
+  const toggleExpanded = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  // Heuristique de "est-ce que ça vaut le coup de tronquer ?" : on affiche
+  // le bouton Voir plus/moins seulement si le contenu est visiblement long.
+  // Seuil empirique : > 240 caractères OU > 3 sauts de ligne.
+  const needsTruncation = (contenu: string) =>
+    contenu.length > 240 || (contenu.match(/\n/g) || []).length >= 3
+
   const supabase = React.useMemo(() => createClient(), [])
 
   const fetchCommentaires = React.useCallback(async () => {
@@ -330,7 +350,32 @@ export function JournalSuivi({ clientId, currentUserId, currentUserNom, isManage
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{c.contenu}</p>
+                    (() => {
+                      const isExpanded = expandedIds.has(c.id)
+                      const shouldTruncate = needsTruncation(c.contenu)
+                      return (
+                        <>
+                          <p
+                            className={
+                              shouldTruncate && !isExpanded
+                                ? 'text-sm text-gray-700 whitespace-pre-wrap break-words line-clamp-3'
+                                : 'text-sm text-gray-700 whitespace-pre-wrap break-words'
+                            }
+                          >
+                            {c.contenu}
+                          </p>
+                          {shouldTruncate && (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(c.id)}
+                              className="mt-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
+                            >
+                              {isExpanded ? 'Voir moins' : 'Voir plus'}
+                            </button>
+                          )}
+                        </>
+                      )
+                    })()
                   )}
                 </div>
               )

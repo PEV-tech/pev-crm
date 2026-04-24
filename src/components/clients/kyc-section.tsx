@@ -33,8 +33,13 @@ import {
   TYPE_DETENTION_OPTIONS,
   DETENTEUR_TYPE_OPTIONS,
   DETENTEUR_TYPE_LABELS,
+  PATRIMOINE_PRO_CATEGORIE_OPTIONS,
+  PATRIMOINE_PRO_SOUS_CATEGORIE_OPTIONS,
+  labelCategoriePro,
+  labelSousCategoriePro,
   normalizeDetenteurType,
   needsRegimeMatrimonial,
+  getRegimesForSituation,
   type DetenteurType,
 } from '@/lib/kyc-enums'
 import {
@@ -56,6 +61,7 @@ type SectionKey =
   | 'situation_professionnelle'
   | 'revenus'
   | 'patrimoine_immobilier'
+  | 'patrimoine_professionnel'
   | 'produits_financiers'
   | 'emprunts'
   | 'fiscalite'
@@ -135,6 +141,36 @@ interface EmpruntRow {
 // "patrimoine_divers" est persistée mais sans UI dédiée en V1). Quand
 // elle le sera, elle devra suivre la même convention (detenteur_type +
 // co_titulaire_client_id) pour rester compatible avec la sync bidi.
+
+/**
+ * Ligne de patrimoine professionnel (point 1.6 corrections 2026-04-24).
+ * Stockée dans `clients.patrimoine_professionnel` (JSONB array).
+ *
+ * - `categorie` : immo_pro (locaux, véhicule…) vs financier_pro (BFR,
+ *    trésorerie…). Utilisé pour regrouper l'affichage sur 2 blocs.
+ * - `sous_categorie` : locaux / bfr / tresorerie / outils_machines /
+ *    vehicule / autre. Liste commune aux 2 blocs, libre côté UI.
+ * - `designation` : libellé libre (ex: « Entrepôt 12 rue X »).
+ * - `valeur` : valorisation en EUR (nombre).
+ * - `description` : commentaire libre optionnel.
+ * - `detenteur_type` / `co_titulaire_client_id` : idem autres rows pour
+ *    rester homogène avec la sync bidi (valeurs optionnelles MVP).
+ */
+interface PatrimoineProRow {
+  categorie?: 'immo_pro' | 'financier_pro'
+  sous_categorie?:
+    | 'locaux'
+    | 'bfr'
+    | 'tresorerie'
+    | 'outils_machines'
+    | 'vehicule'
+    | 'autre'
+  designation?: string
+  valeur?: number
+  description?: string
+  detenteur_type?: DetenteurType
+  co_titulaire_client_id?: string | null
+}
 
 const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
   ({ client, onUpdate }, ref) => {
@@ -246,6 +282,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         objectifs_client: client?.objectifs_client,
         patrimoine_immobilier: Array.isArray(client?.patrimoine_immobilier)
           ? client.patrimoine_immobilier
+          : [],
+        patrimoine_professionnel: Array.isArray(client?.patrimoine_professionnel)
+          ? client.patrimoine_professionnel
           : [],
         produits_financiers: Array.isArray(client?.produits_financiers)
           ? client.produits_financiers
@@ -458,6 +497,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           impot_revenu_n2: editData.impot_revenu_n2,
           objectifs_client: editData.objectifs_client,
           patrimoine_immobilier: editData.patrimoine_immobilier,
+          patrimoine_professionnel: editData.patrimoine_professionnel,
           produits_financiers: editData.produits_financiers,
           patrimoine_divers: editData.patrimoine_divers,
           emprunts: editData.emprunts,
@@ -515,6 +555,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         objectifs_client: client?.objectifs_client,
         patrimoine_immobilier: Array.isArray(client?.patrimoine_immobilier)
           ? client.patrimoine_immobilier
+          : [],
+        patrimoine_professionnel: Array.isArray(client?.patrimoine_professionnel)
+          ? client.patrimoine_professionnel
           : [],
         produits_financiers: Array.isArray(client?.produits_financiers)
           ? client.produits_financiers
@@ -1090,15 +1133,21 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
                       >
                         <option value="">— Sélectionner —</option>
+                        {/* Fallback "valeur existante" : garde l'affichage
+                            d'une valeur déjà persistée même si elle n'est
+                            pas dans la liste filtrée (ex: régime PACS sur
+                            un client marié par erreur historique). */}
                         {data.regime_matrimonial &&
-                          !REGIME_MATRIMONIAL_OPTIONS.includes(
+                          !getRegimesForSituation(data.situation_matrimoniale).includes(
                             data.regime_matrimonial as any
                           ) && (
                             <option value={data.regime_matrimonial}>
                               {data.regime_matrimonial} (valeur existante)
                             </option>
                           )}
-                        {REGIME_MATRIMONIAL_OPTIONS.map(opt => (
+                        {/* Filtrage par situation : mariage → régimes mariage,
+                            PACS → régimes PACS (point 1.7 corrections 2026-04-24). */}
+                        {getRegimesForSituation(data.situation_matrimoniale).map(opt => (
                           <option key={opt} value={opt}>
                             {opt}
                           </option>
@@ -2194,6 +2243,230 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       </table>
                     </div>
                   )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Patrimoine professionnel section — point 1.6 corrections 2026-04-24.
+    // Structure : 2 blocs (Immobilier pro / Financier pro) affichés côte à
+    // côte. Saisie via table éditable : bloc, sous-catégorie, désignation,
+    // valeur, description. Persisté dans `clients.patrimoine_professionnel`
+    // (JSONB, cf scripts/add-patrimoine-professionnel.sql).
+    const PatrimoineProfessionnelSection = () => {
+      const section: SectionKey = 'patrimoine_professionnel'
+      const isExpanded = expandedSections.has(section)
+      const pro: PatrimoineProRow[] = (data.patrimoine_professionnel || []) as PatrimoineProRow[]
+
+      const addProRow = (categorieDefault: 'immo_pro' | 'financier_pro') => {
+        setEditData({
+          ...editData,
+          patrimoine_professionnel: [
+            ...pro,
+            {
+              categorie: categorieDefault,
+              sous_categorie: categorieDefault === 'immo_pro' ? 'locaux' : 'bfr',
+              designation: '',
+              valeur: 0,
+              description: '',
+            },
+          ],
+        })
+      }
+
+      const removeProRow = (index: number) => {
+        setEditData({
+          ...editData,
+          patrimoine_professionnel: pro.filter((_, i) => i !== index),
+        })
+      }
+
+      const updateProRow = (index: number, field: string, value: any) => {
+        const updated = [...pro]
+        updated[index] = { ...updated[index], [field]: value }
+        setEditData({ ...editData, patrimoine_professionnel: updated })
+      }
+
+      // Totaux par bloc (utile côté lecture)
+      const totalImmoPro = pro
+        .filter(r => r.categorie === 'immo_pro')
+        .reduce((sum, r) => sum + (r.valeur || 0), 0)
+      const totalFinancierPro = pro
+        .filter(r => r.categorie === 'financier_pro')
+        .reduce((sum, r) => sum + (r.valeur || 0), 0)
+      const totalPro = totalImmoPro + totalFinancierPro
+
+      const renderEditTable = (categorie: 'immo_pro' | 'financier_pro') => {
+        const rowsWithIndex = pro
+          .map((row, index) => ({ row, index }))
+          .filter(({ row }) => row.categorie === categorie)
+        return (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                {labelCategoriePro(categorie)}
+              </h4>
+              <button
+                onClick={() => addProRow(categorie)}
+                className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              >
+                <Plus size={12} /> Ajouter une ligne
+              </button>
+            </div>
+            {rowsWithIndex.length === 0 ? (
+              <p className="text-xs text-gray-500 italic">Aucune ligne</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-300">
+                      <th className="text-left py-1 px-1 font-semibold">Sous-catégorie</th>
+                      <th className="text-left py-1 px-1 font-semibold">Désignation</th>
+                      <th className="text-right py-1 px-1 font-semibold">Valeur (€)</th>
+                      <th className="text-left py-1 px-1 font-semibold">Description</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rowsWithIndex.map(({ row, index }) => (
+                      <tr key={index} className="border-b border-gray-200">
+                        <td className="py-1 px-1">
+                          <select
+                            value={row.sous_categorie || ''}
+                            onChange={e => updateProRow(index, 'sous_categorie', e.target.value)}
+                            className="w-full px-1.5 py-1 border border-gray-300 rounded text-xs"
+                          >
+                            <option value="">—</option>
+                            {PATRIMOINE_PRO_SOUS_CATEGORIE_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="py-1 px-1">
+                          <input
+                            type="text"
+                            value={row.designation || ''}
+                            onChange={e => updateProRow(index, 'designation', e.target.value)}
+                            className="w-full px-1.5 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </td>
+                        <td className="py-1 px-1 text-right">
+                          <input
+                            type="number"
+                            value={row.valeur ?? 0}
+                            onChange={e => updateProRow(index, 'valeur', parseFloat(e.target.value) || 0)}
+                            className="w-full px-1.5 py-1 border border-gray-300 rounded text-xs text-right"
+                          />
+                        </td>
+                        <td className="py-1 px-1">
+                          <input
+                            type="text"
+                            value={row.description || ''}
+                            onChange={e => updateProRow(index, 'description', e.target.value)}
+                            placeholder="Optionnel"
+                            className="w-full px-1.5 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </td>
+                        <td className="py-1 px-1">
+                          <button
+                            onClick={() => removeProRow(index)}
+                            className="text-red-500 hover:text-red-700"
+                            title="Supprimer"
+                          >
+                            <X size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      const renderReadList = (categorie: 'immo_pro' | 'financier_pro') => {
+        const rows = pro.filter(r => r.categorie === categorie)
+        const total = rows.reduce((sum, r) => sum + (r.valeur || 0), 0)
+        return (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                {labelCategoriePro(categorie)}
+              </h4>
+              {rows.length > 0 && (
+                <span className="text-xs font-semibold text-indigo-600">
+                  {formatCurrency(total)}
+                </span>
+              )}
+            </div>
+            {rows.length === 0 ? (
+              <p className="text-xs text-gray-500 italic">Aucune ligne</p>
+            ) : (
+              <ul className="space-y-1">
+                {rows.map((row, i) => (
+                  <li key={i} className="flex items-start justify-between text-xs">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-800">
+                        {labelSousCategoriePro(row.sous_categorie)}
+                      </span>
+                      {row.designation && (
+                        <span className="text-gray-600"> — {row.designation}</span>
+                      )}
+                      {row.description && (
+                        <div className="text-[10px] text-gray-400 italic">{row.description}</div>
+                      )}
+                    </div>
+                    <span className="ml-2 text-gray-900 tabular-nums">
+                      {formatCurrency(row.valeur || 0)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      }
+
+      return (
+        <div className="border-b border-gray-200 last:border-b-0">
+          <button
+            onClick={() => toggleSection(section)}
+            className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              {isExpanded ? (
+                <ChevronDown size={16} className="text-gray-600" />
+              ) : (
+                <ChevronRight size={16} className="text-gray-600" />
+              )}
+              <h3 className="font-semibold text-sm text-gray-900">
+                Patrimoine professionnel
+              </h3>
+            </div>
+            {!isEditMode && totalPro > 0 && (
+              <span className="text-sm font-bold text-indigo-600">
+                {formatCurrency(totalPro)}
+              </span>
+            )}
+          </button>
+          {isExpanded && (
+            <div className="px-3 pb-3 bg-gray-50/50">
+              {isEditMode ? (
+                <>
+                  {renderEditTable('immo_pro')}
+                  {renderEditTable('financier_pro')}
+                </>
+              ) : (
+                <>
+                  {renderReadList('immo_pro')}
+                  {renderReadList('financier_pro')}
                 </>
               )}
             </div>
@@ -3465,6 +3738,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             {SituationProfessionnelleSection()}
             {RevenusSection()}
             {PatrimoineImmobilierSection()}
+            {PatrimoineProfessionnelSection()}
             {ProduitsFinianciers()}
             {EmpruntsSection()}
             {FiscaliteSection()}
@@ -3482,14 +3756,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                   <div className="flex items-center gap-2 mb-2">
                     <Shield size={14} className="text-indigo-600" />
                     <h3 className="font-semibold text-sm text-gray-900">
-                      Actifs joints détenus avec un autre client
+                      Actifs détenus avec un autre client
                     </h3>
                   </div>
                   <p className="text-[11px] text-gray-600 mb-2">
-                    Ces actifs sont enregistrés sur le dossier de
-                    l&apos;autre co-détenteur. Ils apparaissent ici en
-                    lecture seule — toute modification doit se faire sur
-                    le dossier source.
+                    Ces actifs sont enregistrés sur la fiche d&apos;un
+                    autre client. Ils apparaissent ici en lecture seule —
+                    toute modification doit se faire sur la fiche source.
                   </p>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
@@ -3497,6 +3770,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <tr className="border-b border-gray-300">
                           <th className="text-left py-1 px-1 font-semibold">
                             Section
+                          </th>
+                          <th className="text-left py-1 px-1 font-semibold">
+                            Type
                           </th>
                           <th className="text-left py-1 px-1 font-semibold">
                             Désignation
@@ -3524,11 +3800,22 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           const sectionLabel =
                             ext.section === 'patrimoine_immobilier'
                               ? 'Immobilier'
+                              : ext.section === 'patrimoine_professionnel'
+                              ? 'Pro'
                               : ext.section === 'produits_financiers'
                               ? 'Financier'
                               : ext.section === 'emprunts'
                               ? 'Emprunt'
                               : 'Divers'
+                          // Point 4.3 (2026-04-24) — badge kind :
+                          // joint = détenu en commun ; co_titulaire =
+                          // détenu exclusivement par le co-titulaire
+                          // (la fiche courante) mais saisi sur une autre.
+                          const kindLabel = ext.kind === 'joint' ? 'Joint' : 'Co-titulaire'
+                          const kindClass =
+                            ext.kind === 'joint'
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-amber-100 text-amber-700'
                           return (
                             <tr
                               key={`${ext.source_client_id}-${ext.section}-${ext.source_index}-${i}`}
@@ -3536,6 +3823,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                             >
                               <td className="py-1 px-1 text-gray-900">
                                 {sectionLabel}
+                              </td>
+                              <td className="py-1 px-1">
+                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${kindClass}`}>
+                                  {kindLabel}
+                                </span>
                               </td>
                               <td className="py-1 px-1 text-gray-900">
                                 {designation}

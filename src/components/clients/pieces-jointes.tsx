@@ -24,6 +24,13 @@ const PJ_TYPES = [
   { value: 'contrat', label: 'Contrat' },
   { value: 'bulletin_souscription', label: 'Bulletin de souscription' },
   { value: 'reglementaire', label: 'Réglementaire' },
+  // Catégories documentaires réglementaires PEV (ajoutées 2026-04-24, point 1.5)
+  { value: 'cr', label: 'CR — Compte rendu' },
+  { value: 'der', label: 'DER — Document d\'entrée en relation' },
+  { value: 'pi', label: 'PI — Profil investisseur' },
+  { value: 'preco', label: 'PRECO — Préconisation' },
+  { value: 'lm', label: 'LM — Lettre de mission' },
+  { value: 'rm', label: 'RM — Rapport de mission' },
   { value: 'autre', label: 'Autre' },
 ]
 
@@ -38,6 +45,12 @@ const PJ_TYPE_COLORS: Record<string, string> = {
   contrat: 'bg-pink-100 text-pink-700',
   bulletin_souscription: 'bg-cyan-100 text-cyan-700',
   reglementaire: 'bg-orange-100 text-orange-700',
+  cr: 'bg-slate-100 text-slate-700',
+  der: 'bg-rose-100 text-rose-700',
+  pi: 'bg-violet-100 text-violet-700',
+  preco: 'bg-lime-100 text-lime-700',
+  lm: 'bg-sky-100 text-sky-700',
+  rm: 'bg-fuchsia-100 text-fuchsia-700',
   autre: 'bg-gray-100 text-gray-600',
 }
 

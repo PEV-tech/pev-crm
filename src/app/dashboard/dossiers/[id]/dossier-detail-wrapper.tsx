@@ -20,6 +20,7 @@ import { CommissionPanel } from '@/components/dossiers/commission-panel'
 import { CompliancePanel } from '@/components/dossiers/compliance-panel'
 
 import { formatCurrency } from '@/lib/formatting'
+import { getDefaultGrilleForCategorie } from '@/lib/commissions/default-grilles'
 
 const formatPct = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -226,6 +227,33 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               }
             } catch {
               // taux not available, silently ignore
+            }
+          }
+
+          // Point 5.6 (2026-04-24) — Fallback grille par défaut par catégorie.
+          // Si après le lookup RPC (ci-dessus) le dossier n'a toujours pas
+          // de taux custom ET pas de taux RPC, on applique la grille par
+          // défaut basée sur la catégorie produit (SCPI 6%/0%, PE 3%/0.7%,
+          // CAV-CAPI 1%/1%). Évite qu'un dossier parte avec des frais à 0
+          // quand le partenaire n'a pas encore été paramétré dans le
+          // catalogue Paramètres > Catalogue.
+          const categorieForFallback = data.produit_categorie || data.produit_nom
+          const defaultGrille = getDefaultGrilleForCategorie(categorieForFallback)
+          if (defaultGrille) {
+            // Ne remplit que si (a) pas de taux custom ET (b) le champ
+            // edit n'a pas déjà été pré-rempli par la branche RPC ci-dessus.
+            if (
+              (data.taux_commission === null || data.taux_commission === undefined) &&
+              !editTauxEntree
+            ) {
+              setEditTauxEntree((defaultGrille.entree * 100).toFixed(2))
+            }
+            if (
+              (data.taux_gestion === null || data.taux_gestion === undefined) &&
+              !editTauxGestion &&
+              defaultGrille.encours > 0
+            ) {
+              setEditTauxGestion((defaultGrille.encours * 100).toFixed(2))
             }
           }
         }
