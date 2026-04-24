@@ -118,6 +118,7 @@ const OTHERS: Country[] = [
   { name: 'Guyana', code: 'GY' },
   { name: 'Haïti', code: 'HT' },
   { name: 'Honduras', code: 'HN' },
+  { name: 'Hong Kong', code: 'HK' },
   { name: 'Hongrie', code: 'HU' },
   { name: 'Îles Marshall', code: 'MH' },
   { name: 'Îles Salomon', code: 'SB' },

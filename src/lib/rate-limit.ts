@@ -62,11 +62,7 @@ export const RATE_LIMITS = {
     maxHits: 20,
     windowSeconds: 60,
   },
-  PARSE_KYC: {
-    bucket: 'parse-kyc',
-    maxHits: 10,
-    windowSeconds: 300,
-  },
+  // Preset PARSE_KYC retiré 2026-04-24 — fonction "Importer un KYC" supprimée (point 1.8).
 } as const satisfies Record<string, RateLimitPreset>
 
 export type RateLimitResult =

@@ -79,13 +79,18 @@ function NewDossierContent() {
         if (clientIdParam) {
           const { data: clientData, error: clientError } = await supabase
             .from('clients')
-            .select('id, nom, prenom, pays, ville, email, telephone')
+            .select('id, nom, prenom, pays, ville, email, telephone, date_entree_relation')
             .eq('id', clientIdParam)
             .single()
           if (clientData && !clientError) {
             setExistingClient(clientData as ClientInfo)
             setExistingClientId(clientData.id)
             // Pre-fill the form with client data
+            // Point 4.1 (2026-04-24) : si la fiche client a une date
+            // d'entrée en relation, on la reprend par défaut dans le
+            // dossier (l'utilisateur peut encore l'écraser). Sinon on
+            // garde la date du jour (fallback initialisé L57).
+            const clientDateEntree = (clientData as any).date_entree_relation as string | null
             setFormData(prev => ({
               ...prev,
               nom: clientData.nom,
@@ -94,6 +99,7 @@ function NewDossierContent() {
               ville: (clientData as any).ville || '',
               email: clientData.email || '',
               telephone: clientData.telephone || '',
+              dateEntreeRelation: clientDateEntree || prev.dateEntreeRelation,
             }))
           }
         }
@@ -206,6 +212,11 @@ function NewDossierContent() {
         montant: parseFloat(formData.montant),
         financement: (formData.financement as any) || null,
         date_operation: formData.dateOperation || new Date().toISOString().split('T')[0],
+        // Point 4.1 (2026-04-24) : persister la date d'entrée en relation
+        // sur le dossier. Ce champ était oublié du payload — conséquence :
+        // les dossiers sortaient avec date_entree_en_relation NULL même
+        // quand l'utilisateur la renseignait dans le formulaire.
+        date_entree_en_relation: formData.dateEntreeRelation || null,
         date_signature: formData.dateSignature || null,
         mode_detention: (formData.modeDetention || null) as any,
         statut: formData.statut as any,

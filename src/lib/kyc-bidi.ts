@@ -29,25 +29,45 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-/** Identifiant des 4 sections d'actifs stockées en JSONB sur `clients`. */
+/**
+ * Identifiant des 5 sections d'actifs stockées en JSONB sur `clients`.
+ * Point 4.3 (2026-04-24) : ajout de `patrimoine_professionnel` (section
+ * introduite en 1.6). Un bien pro détenu en joint par un couple
+ * d'entrepreneurs (SCI familiale par ex.) doit remonter sur la fiche
+ * du conjoint comme n'importe quel autre actif partagé.
+ */
 export type AssetSection =
   | 'patrimoine_immobilier'
+  | 'patrimoine_professionnel'
   | 'produits_financiers'
   | 'patrimoine_divers'
   | 'emprunts'
 
 export const ASSET_SECTIONS: readonly AssetSection[] = [
   'patrimoine_immobilier',
+  'patrimoine_professionnel',
   'produits_financiers',
   'patrimoine_divers',
   'emprunts',
 ] as const
 
 /**
- * Ligne d'actif « externe » : appartient à un autre client mais marquée
- * joint avec le client courant. On conserve les infos de provenance pour
- * l'affichage (badge + lien « éditer sur son dossier »).
+ * Ligne d'actif « externe » : appartient à un autre client mais référence
+ * le client courant via `co_titulaire_client_id`. On conserve les infos
+ * de provenance pour l'affichage (badge + lien « éditer sur son dossier »).
+ *
+ * Point 4.3 (2026-04-24) : on distingue maintenant deux types d'actifs
+ * externes :
+ *   - `joint` : détenu en commun. Apparaît des deux côtés, édition sur
+ *              la fiche source uniquement (source de vérité).
+ *   - `co_titulaire` : détenu exclusivement par le co-titulaire. Stocké
+ *              sur la fiche d'un autre client qui l'a saisi (le titulaire
+ *              par qui la ligne est entrée dans le CRM) mais conceptuellement
+ *              l'actif appartient au co-titulaire. On l'affiche côté
+ *              co-titulaire pour ne rien perdre visuellement.
  */
+export type ExternalAssetKind = 'joint' | 'co_titulaire'
+
 export interface ExternalJointAsset {
   /** Section d'origine. */
   section: AssetSection
@@ -57,6 +77,8 @@ export interface ExternalJointAsset {
   source_client_id: string
   /** Nom d'affichage "Prénom Nom" pour le badge. */
   source_client_display: string
+  /** Nature du rattachement (joint vs co-titulaire exclusif). */
+  kind: ExternalAssetKind
   /** La ligne elle-même, forme JSONB opaque (garde tous les attributs). */
   row: Record<string, unknown>
 }
@@ -83,7 +105,7 @@ export async function fetchExternalJointAssets(
   const { data, error } = await supabase
     .from('clients')
     .select(
-      'id,nom,prenom,patrimoine_immobilier,produits_financiers,patrimoine_divers,emprunts',
+      'id,nom,prenom,patrimoine_immobilier,patrimoine_professionnel,produits_financiers,patrimoine_divers,emprunts',
     )
     .neq('id', currentClientId)
 
@@ -106,18 +128,34 @@ export async function fetchExternalJointAssets(
       arr.forEach((row, idx) => {
         if (!row || typeof row !== 'object') return
         const r = row as Record<string, unknown>
-        // Accepte la forme canonique 'joint' ET la forme legacy 'commun'
-        // que le portail V1 (<2026-04-23) persistait. Sans cette tolérance,
-        // un actif saisi "en commun" par le client côté portail n'apparaîtrait
-        // jamais sur la fiche du co-titulaire même une fois la FK résolue.
-        if (r.detenteur_type !== 'joint' && r.detenteur_type !== 'commun') return
         if (r.co_titulaire_client_id !== currentClientId) return
+
+        // Point 4.3 (2026-04-24) — Deux cas remontent côté co-titulaire :
+        // - 'joint' / 'commun' (legacy portail V1) : détenu conjointement
+        //   par les deux fiches.
+        // - 'co_titulaire' / 'conjoint' (legacy) : détenu exclusivement
+        //   par le co-titulaire (la fiche courante). Le bien a été saisi
+        //   sur la fiche d'un autre client (souvent le premier titulaire
+        //   entré dans le CRM) mais conceptuellement il appartient au
+        //   co-titulaire — donc il doit apparaître ici.
+        // Cas 'client' (détention exclusive titulaire) : PAS de remontée
+        // côté co-titulaire — ce n'est pas son bien.
+        const dt = r.detenteur_type
+        let kind: ExternalAssetKind
+        if (dt === 'joint' || dt === 'commun') {
+          kind = 'joint'
+        } else if (dt === 'co_titulaire' || dt === 'conjoint') {
+          kind = 'co_titulaire'
+        } else {
+          return
+        }
 
         out.push({
           section,
           source_index: idx,
           source_client_id: client.id,
           source_client_display: display,
+          kind,
           row: r,
         })
       })

@@ -63,6 +63,7 @@ type PendingProposition = {
 // public. Toute clé absente d'ici tombera dans un fallback humanisé.
 const FIELD_LABELS: Record<string, string> = {
   nom: 'Nom',
+  nom_jeune_fille: 'Nom de jeune fille',
   prenom: 'Prénom',
   raison_sociale: 'Raison sociale',
   type_personne: 'Type de personne',

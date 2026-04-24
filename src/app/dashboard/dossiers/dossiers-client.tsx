@@ -4,6 +4,13 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { VDossiersComplets, StatutDossierType } from '@/types/database'
+// Point 2.3 (2026-04-24) — Le wrapper enrichit les rows avec is_orphan
+// (prospects dérivés de clients sans dossier) et client_statut (masquer
+// les non_abouti par défaut). Type local pour ne pas polluer database.ts.
+type DossierRow = VDossiersComplets & {
+  is_orphan?: boolean
+  client_statut?: 'actif' | 'non_abouti' | null
+}
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +24,7 @@ import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } 
 import { GrilleGestion, getGestionTaux, hasEncours, computeQuarterlyConsultant } from '@/lib/commissions/gestion'
 
 interface DossiersClientProps {
-  initialData: VDossiersComplets[]
+  initialData: DossierRow[]
   role?: string
   gestionGrilles?: GrilleGestion[]
   entreeGrilles?: GrilleGestion[]
@@ -59,10 +66,22 @@ export function DossiersClient({
   const [filterPays, setFilterPays] = React.useState('')
   const [filterConsultant, setFilterConsultant] = React.useState('')
   const [searchQuery, setSearchQuery] = React.useState(searchParams.get('q') || '')
+  // Point 2.3 (2026-04-24) — Toggle pour inclure les clients archivés
+  // en statut_client = 'non_abouti'. Masqués par défaut.
+  const [includeNonAbouti, setIncludeNonAbouti] = React.useState(false)
 
   // Filter data based on active tab, filters, and search
   const filteredData = React.useMemo(() => {
-    let result = data
+    // Point 2.3 — Filtre statut_client AVANT tout le reste.
+    // Clients non_abouti masqués par défaut ; visibles via toggle ou si
+    // l'utilisateur sélectionne explicitement l'onglet Non abouti (pour
+    // ne pas rendre l'onglet vide).
+    let result = data.filter((d) => {
+      if (d.client_statut !== 'non_abouti') return true
+      if (includeNonAbouti) return true
+      if (activeTab === 'non_abouti') return true
+      return false
+    })
 
     // Text search
     if (searchQuery.trim()) {
@@ -103,16 +122,16 @@ export function DossiersClient({
       result = result.filter((d) => d.client_pays === filterPays)
     }
 
-    // Filter by consultant
+    // Filter by consultant — Point 3.1 (2026-04-24) : on filtre par
+    // consultant_id (UUID stable) et plus par concat prenom+nom, car
+    // cette dernière matchait par erreur des dossiers de consultants
+    // homonymes ou avec espace/casse différente (bug Hugues/Stéphane).
     if (filterConsultant) {
-      result = result.filter((d) => {
-        const consultantName = `${d.consultant_prenom} ${d.consultant_nom}`
-        return consultantName === filterConsultant
-      })
+      result = result.filter((d) => (d as any).consultant_id === filterConsultant)
     }
 
     return result
-  }, [data, activeTab, filterCategorie, filterProduit, filterPays, filterConsultant, searchQuery])
+  }, [data, activeTab, filterCategorie, filterProduit, filterPays, filterConsultant, searchQuery, includeNonAbouti])
 
   const handleExportCSV = React.useCallback(() => {
     const exportData = filteredData.map((d) => ({
@@ -162,45 +181,96 @@ export function DossiersClient({
     () => Array.from(new Set(data.map((d) => d.client_pays).filter(Boolean) as string[])).sort(),
     [data]
   )
-  const consultants = React.useMemo(
-    () =>
-      Array.from(new Set(
-        data
-          .map((d) => `${d.consultant_prenom} ${d.consultant_nom}`)
-          .filter(Boolean)
-      )).sort(),
-    [data]
-  )
+  /**
+   * Point 3.1 (2026-04-24) — Liste des consultants dédupliquée PAR ID.
+   * Ancienne version dédupait par chaîne "prenom nom" — fragile aux
+   * homonymes et aux variations de casse/espace dans les données.
+   * Le label reste un prenom+nom pour l'affichage, la value est l'UUID.
+   */
+  const consultants = React.useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const d of data) {
+      const id = (d as any).consultant_id as string | null | undefined
+      if (!id) continue
+      if (byId.has(id)) continue
+      const label = `${d.consultant_prenom || ''} ${d.consultant_nom || ''}`.trim()
+      byId.set(id, label || '(consultant sans nom)')
+    }
+    return Array.from(byId.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [data])
 
   // Calculate stats
   const stats = React.useMemo(() => {
+    // Point 2.3 — Les stats de tabs ignorent les non_abouti (sauf l'onglet
+    // Non abouti lui-même) pour refléter la vue par défaut.
+    const visibleData = data.filter((d) => {
+      if (d.client_statut !== 'non_abouti') return true
+      return includeNonAbouti
+    })
     const counts = {
-      tous: data.length,
-      prospects: data.filter((d) => d.statut === 'prospect').length,
-      en_cours: data.filter((d) => d.statut === 'client_en_cours').length,
-      finalises: data.filter((d) => d.statut === 'client_finalise').length,
-      non_abouti: data.filter((d) => d.statut === 'non_abouti').length,
+      tous: visibleData.length,
+      prospects: visibleData.filter((d) => d.statut === 'prospect').length,
+      en_cours: visibleData.filter((d) => d.statut === 'client_en_cours').length,
+      finalises: visibleData.filter((d) => d.statut === 'client_finalise').length,
+      non_abouti: data.filter((d) => d.client_statut === 'non_abouti').length,
     }
 
-    const totalMontant = data.reduce((sum, d) => sum + (d.montant || 0), 0)
+    const totalMontant = visibleData.reduce((sum, d) => sum + (d.montant || 0), 0)
 
     return { counts, totalMontant }
-  }, [data])
+  }, [data, includeNonAbouti])
+
+  /**
+   * Point 2.3 (2026-04-24) — Navigation sur clic de ligne.
+   * Les lignes orphelines (prospects dérivés de clients sans dossier)
+   * ont un id synthétique `orphan-<clientId>` qui n'existe pas dans la
+   * table `dossiers`. On redirige vers la fiche client plutôt que vers
+   * une page dossier qui renverrait un 404.
+   */
+  const handleRowClick = React.useCallback(
+    (row: DossierRow) => {
+      if (row.is_orphan && row.client_id) {
+        router.push(`/dashboard/clients/${row.client_id}`)
+        return
+      }
+      if (row.id) {
+        router.push(`/dashboard/dossiers/${row.id}`)
+      }
+    },
+    [router],
+  )
 
   // Table columns
-  const columns: ColumnDefinition<VDossiersComplets>[] = [
+  const columns: ColumnDefinition<DossierRow>[] = [
     {
       key: 'client_nom',
       label: 'Client',
       sortable: true,
       render: (_, row) => (
-        <Link
-          href={`/dashboard/clients/${row.client_id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
-        >
-          {row.client_prenom} {row.client_nom}
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href={`/dashboard/clients/${row.client_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
+          >
+            {row.client_prenom} {row.client_nom}
+          </Link>
+          {/* Point 2.3 — badge prospect si ligne orpheline (client sans dossier). */}
+          {row.is_orphan && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold uppercase tracking-wide">
+              Prospect
+            </span>
+          )}
+          {/* Point 2.3 — badge non abouti si client archivé (visible
+              uniquement quand le toggle "Inclure" est ON ou onglet Non abouti). */}
+          {row.client_statut === 'non_abouti' && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-300 text-[10px] font-semibold uppercase tracking-wide">
+              Non abouti
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -430,23 +500,34 @@ export function DossiersClient({
                 className="max-w-sm"
               >
                 <option value="">Tous les consultants</option>
-                {consultants.map((consultant) => (
-                  <option key={consultant} value={consultant}>
-                    {consultant}
+                {consultants.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
                   </option>
                 ))}
               </Select>
+
+              {/* Point 2.3 (2026-04-24) — Toggle pour inclure les clients
+                  archivés (statut_client = non_abouti). Masqués par défaut. */}
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none ml-auto">
+                <input
+                  type="checkbox"
+                  checked={includeNonAbouti}
+                  onChange={(e) => setIncludeNonAbouti(e.target.checked)}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Inclure les non aboutis
+                {stats.counts.non_abouti > 0 && (
+                  <span className="text-xs text-gray-400">({stats.counts.non_abouti})</span>
+                )}
+              </label>
             </div>
 
             <TabsContent value="tous" className="mt-4">
               <DataTable
                 data={filteredData}
                 columns={columns}
-                onRowClick={(row) => {
-                  if (row.id) {
-                    router.push(`/dashboard/dossiers/${row.id}`)
-                  }
-                }}
+                onRowClick={handleRowClick}
                 pageSize={25}
               />
             </TabsContent>
@@ -455,11 +536,7 @@ export function DossiersClient({
               <DataTable
                 data={filteredData}
                 columns={columns}
-                onRowClick={(row) => {
-                  if (row.id) {
-                    router.push(`/dashboard/dossiers/${row.id}`)
-                  }
-                }}
+                onRowClick={handleRowClick}
                 pageSize={25}
               />
             </TabsContent>
@@ -468,11 +545,7 @@ export function DossiersClient({
               <DataTable
                 data={filteredData}
                 columns={columns}
-                onRowClick={(row) => {
-                  if (row.id) {
-                    router.push(`/dashboard/dossiers/${row.id}`)
-                  }
-                }}
+                onRowClick={handleRowClick}
                 pageSize={25}
               />
             </TabsContent>
@@ -481,11 +554,7 @@ export function DossiersClient({
               <DataTable
                 data={filteredData}
                 columns={columns}
-                onRowClick={(row) => {
-                  if (row.id) {
-                    router.push(`/dashboard/dossiers/${row.id}`)
-                  }
-                }}
+                onRowClick={handleRowClick}
                 pageSize={25}
               />
             </TabsContent>
@@ -494,11 +563,7 @@ export function DossiersClient({
               <DataTable
                 data={filteredData}
                 columns={columns}
-                onRowClick={(row) => {
-                  if (row.id) {
-                    router.push(`/dashboard/dossiers/${row.id}`)
-                  }
-                }}
+                onRowClick={handleRowClick}
                 pageSize={25}
               />
             </TabsContent>

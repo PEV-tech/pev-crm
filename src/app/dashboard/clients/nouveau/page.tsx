@@ -45,6 +45,7 @@ interface FormData {
   // PP (état civil enrichi — template KYC)
   titre: string
   nom: string
+  nomJeuneFille: string
   prenom: string
   dateNaissance: string
   nationalite: string
@@ -59,7 +60,7 @@ interface FormData {
   dateCreation: string
 }
 
-const TITRES = ['Monsieur', 'Madame'] as const
+const TITRES = ['Monsieur', 'Madame', 'Autre'] as const
 
 // Regex validation simples (non-exhaustives mais attrapent les typos courantes).
 // SIREN = 9 chiffres, SIRET = 14 chiffres (avec espaces tolérés, strip au submit).
@@ -135,6 +136,7 @@ function NewClientContent() {
     commentaire: '',
     titre: '',
     nom: '',
+    nomJeuneFille: '',
     prenom: '',
     dateNaissance: '',
     nationalite: '',
@@ -347,6 +349,10 @@ function NewClientContent() {
         payload.nationalite = formData.nationalite || null
         payload.prenom = formData.prenom.trim() || null
         payload.situation_matrimoniale = formData.situationMatrimoniale || null
+        // Point 4.4 (2026-04-24) : capturer le nom de jeune fille dès
+        // la création. Champ propre aux personnes physiques, laissé vide
+        // pour les hommes (ou les PP qui n'ont pas changé de nom).
+        payload.nom_jeune_fille = formData.nomJeuneFille.trim() || null
         // Les champs PM restent null
         payload.raison_sociale = null
         payload.forme_juridique = null
@@ -592,6 +598,21 @@ function NewClientContent() {
                       placeholder="Jean"
                     />
                   </div>
+                </div>
+                {/* Point 4.4 (2026-04-24) — Nom de jeune fille.
+                    Champ facultatif sur les PP. Réutilisé en KYC + PDF
+                    signé + templates Word. Colonne clients.nom_jeune_fille
+                    (cf. add-kyc-fields.sql). */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nom de jeune fille <span className="text-xs font-normal text-gray-400">(si différent du nom actuel)</span>
+                  </label>
+                  <Input
+                    name="nomJeuneFille"
+                    value={formData.nomJeuneFille}
+                    onChange={handleInputChange}
+                    placeholder="Dupuis"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>

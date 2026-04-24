@@ -21,7 +21,6 @@ import { ClientRelations } from '@/components/shared/client-relations'
 import CommunicationsTab from '@/components/google/CommunicationsTab'
 import { PiecesJointes } from '@/components/clients/pieces-jointes'
 import { KYCSection, KYCSectionHandle } from '@/components/clients/kyc-section'
-import { KYCUpload } from '@/components/clients/kyc-upload'
 import { KycPropositionDiff } from '@/components/clients/kyc-proposition-diff'
 
 import { formatCurrency } from '@/lib/formatting'
@@ -65,6 +64,15 @@ interface ClientInfo {
   created_at: string
   commentaires?: string | null
   google_drive_url?: string | null
+  /**
+   * Statut client — point 2.3 corrections 2026-04-24.
+   *   - 'actif' (défaut) : client suivi, apparaît dans les listes.
+   *   - 'non_abouti' : archivé via bouton "Non abouti" sur la fiche.
+   *     Masqué par défaut des listes Dossiers / Ma clientèle.
+   * Nullable pour tolérer la régénération des types avant que la
+   * migration ne soit jouée en prod (cf add-statut-client.sql).
+   */
+  statut_client?: 'actif' | 'non_abouti' | null
 }
 
 interface RendezVous {
@@ -232,6 +240,32 @@ export default function ClientDetailPage() {
     (client as any)?.kyc_signed_at,
   ])
 
+  /**
+   * Point 2.3 (2026-04-24) — Bascule statut_client entre 'actif' et
+   * 'non_abouti'. "Non abouti" archive le client (il sort des listes
+   * Dossiers/Ma clientèle par défaut). Réversible via "Réactiver".
+   * Les dossiers et l'historique sont conservés tels quels pour
+   * traçabilité — seul le client est masqué.
+   */
+  const [togglingStatut, setTogglingStatut] = React.useState(false)
+  const handleToggleNonAbouti = async () => {
+    if (!client?.id) return
+    const current = (client as any).statut_client === 'non_abouti' ? 'non_abouti' : 'actif'
+    const next = current === 'non_abouti' ? 'actif' : 'non_abouti'
+    setTogglingStatut(true)
+    const { error } = await supabase
+      .from('clients')
+      .update({ statut_client: next } as any)
+      .eq('id', clientId)
+    if (error) {
+      console.error('[clients/[id]] handleToggleNonAbouti failed:', error)
+      alert('Erreur changement de statut : ' + error.message)
+    } else {
+      setClient({ ...client, statut_client: next })
+    }
+    setTogglingStatut(false)
+  }
+
   const handleDeleteClient = async () => {
     if (!client?.id) return
     setDeletingClient(true)
@@ -350,12 +384,40 @@ export default function ClientDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Point 2.3 (2026-04-24) — Bannière client non abouti. Visible en
+          permanence tant que le statut n'est pas réactivé. */}
+      {(client as any).statut_client === 'non_abouti' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+            Non abouti
+          </span>
+          <p className="text-sm text-amber-900 flex-1">
+            Ce client est archivé dans la catégorie <strong>Non aboutis</strong>. Il n'apparaît pas dans les listes par défaut. Les dossiers et historiques restent intacts.
+          </p>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/ma-clientele">
-            <Button variant="ghost" className="gap-2"><ArrowLeft size={18} />Retour</Button>
-          </Link>
+          {/*
+            Point 2.1 (2026-04-24) — Retour contextuel au lieu du renvoi
+            systématique vers Ma clientèle. `router.back()` respecte
+            l'historique réel (dossiers, analyse, recherche...). Fallback
+            sur /dashboard si history est vide (onglet ouvert directement).
+          */}
+          <Button
+            variant="ghost"
+            className="gap-2"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back()
+              } else {
+                router.push('/dashboard')
+              }
+            }}
+          >
+            <ArrowLeft size={18} />Retour
+          </Button>
           <div className="flex-1">
           <div className="flex items-center gap-3">
             <div className="bg-indigo-100 p-3 rounded-xl">
@@ -402,64 +464,35 @@ export default function ClientDetailPage() {
               </>
             ) : (
               <>
-                <KYCUpload onDataParsed={(data) => {
-                  if (!kycRef.current) return
-                  // Determine which person (titulaire or conjoint) matches this client
-                  // by comparing last names (nom)
-                  const clientNom = (client.nom || '').toLowerCase().trim()
-                  const clientPrenom = (client.prenom || '').toLowerCase().trim()
-                  const tNom = (data.titulaire?.nom || '').toLowerCase().trim()
-                  const cNom = (data.conjoint?.nom || '').toLowerCase().trim()
-                  const tPrenom = (data.titulaire?.prenom || '').toLowerCase().trim()
-                  const cPrenom = (data.conjoint?.prenom || '').toLowerCase().trim()
-
-                  let personData = data.titulaire // default
-                  if (clientNom && cNom && clientNom === cNom) {
-                    // Last name matches conjoint
-                    if (!tNom || clientNom !== tNom || clientPrenom === cPrenom) {
-                      personData = data.conjoint
-                    }
-                  } else if (clientPrenom && cPrenom && clientPrenom === cPrenom && clientNom !== tNom) {
-                    personData = data.conjoint
-                  }
-
-                  // Merge shared fields from titulaire (matrimonial, enfants, objectifs, immobilier, emprunts, fiscalité)
-                  // These are household-level, not individual
-                  const shared = data.titulaire || {}
-
-                  // Filter produits financiers: keep only client's own + shared (CTE/commun/empty)
-                  const clientFirstName = (personData.prenom || client.prenom || '').toLowerCase().trim()
-                  const otherFirstName = personData === data.conjoint
-                    ? (data.titulaire?.prenom || '').toLowerCase().trim()
-                    : (data.conjoint?.prenom || '').toLowerCase().trim()
-                  const allProduits = shared.produits_financiers || personData.produits_financiers || []
-                  const filteredProduits = allProduits.filter((p: any) => {
-                    const det = (p.detenteur || '').toLowerCase().trim()
-                    if (!det) return true // no detenteur = include
-                    if (det === 'cte' || det === 'commun' || det === 'les deux') return true
-                    if (det === clientFirstName) return true
-                    if (det === otherFirstName) return false // other person's product
-                    return true // unknown detenteur = include
-                  })
-
-                  const merged = {
-                    ...personData,
-                    situation_matrimoniale: personData.situation_matrimoniale || shared.situation_matrimoniale,
-                    regime_matrimonial: personData.regime_matrimonial || shared.regime_matrimonial,
-                    nombre_enfants: personData.nombre_enfants ?? shared.nombre_enfants,
-                    enfants_details: personData.enfants_details || shared.enfants_details,
-                    patrimoine_immobilier: personData.patrimoine_immobilier || shared.patrimoine_immobilier,
-                    produits_financiers: filteredProduits,
-                    emprunts: personData.emprunts || shared.emprunts,
-                    impot_revenu_n: personData.impot_revenu_n ?? shared.impot_revenu_n,
-                    impot_revenu_n1: personData.impot_revenu_n1 ?? shared.impot_revenu_n1,
-                    impot_revenu_n2: personData.impot_revenu_n2 ?? shared.impot_revenu_n2,
-                    objectifs_client: personData.objectifs_client || shared.objectifs_client,
-                    total_revenus_annuel: personData.total_revenus_annuel ?? shared.total_revenus_annuel,
-                  }
-
-                  kycRef.current.populateFromKyc(merged)
-                }} />
+                {/* Fonction "Importer un KYC" supprimée 2026-04-24 (point 1.8) —
+                    plus de cas d'usage métier. Le composant KYCUpload et la route
+                    /api/parse-kyc ont été retirés. Historique : cf. Git log. */}
+                {/* Point 2.3 (2026-04-24) — Non abouti / Réactiver.
+                    Bouton grisé comme demandé par Max. Réversible. */}
+                {(client as any).statut_client === 'non_abouti' ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2 text-amber-700 border-amber-200 hover:bg-amber-50"
+                    onClick={handleToggleNonAbouti}
+                    disabled={togglingStatut}
+                  >
+                    {togglingStatut ? <Loader2 size={14} className="animate-spin" /> : null}
+                    Réactiver
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2 text-gray-600 border-gray-300 hover:bg-gray-50"
+                    onClick={handleToggleNonAbouti}
+                    disabled={togglingStatut}
+                    title="Archive le client dans la catégorie Non abouti. Réversible."
+                  >
+                    {togglingStatut ? <Loader2 size={14} className="animate-spin" /> : null}
+                    Non abouti
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setShowDeleteClientConfirm(true)}>
                   <Trash2 size={14} />Supprimer le client
                 </Button>
@@ -654,15 +687,45 @@ export default function ClientDetailPage() {
                       </a>
                     </div>
                   )}
-                  {client.conformite && (
-                    <div className="pt-2 border-t">
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                        client.conformite === 'conforme' ? 'bg-green-100 text-green-700' :
-                        client.conformite === 'non conforme' ? 'bg-red-100 text-red-700' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>O2S: {client.conformite}</span>
-                    </div>
-                  )}
+                  {client.conformite && (() => {
+                    // Point 4.2 (2026-04-24) — Aligner le badge O2S avec la
+                    // réalité réglementaire. `client.conformite` est un
+                    // champ texte libre saisi manuellement (source O2S
+                    // externe), alors que der/pi/lm/rm sont les flags
+                    // réglementaires PEV. Cas signalé (fiche Chevillard) :
+                    // O2S affiche "conforme" alors que DER/PI ne le sont
+                    // pas — ce qui trompait l'utilisateur. On détecte
+                    // l'incohérence et on l'affiche en clair au lieu de
+                    // laisser un badge vert mensonger.
+                    const reglementaireComplet = Boolean(
+                      client.der && client.pi && client.lm && client.rm,
+                    )
+                    const conformiteVal = client.conformite
+                    const afficheConforme = conformiteVal === 'conforme'
+                    const divergence = afficheConforme && !reglementaireComplet
+                    const badgeClass = divergence
+                      ? 'bg-red-50 text-red-700 border border-red-300'
+                      : afficheConforme
+                        ? 'bg-green-100 text-green-700'
+                        : conformiteVal === 'non conforme'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-600'
+                    return (
+                      <div className="pt-2 border-t">
+                        <span
+                          className={`text-xs font-medium px-2.5 py-1 rounded-full ${badgeClass}`}
+                          title={
+                            divergence
+                              ? 'O2S marqué conforme mais le réglementaire PEV (DER, PI, LM, RM) n\'est pas complet. Vérifier la conformité réelle avant d\'agir sur cette fiche.'
+                              : undefined
+                          }
+                        >
+                          O2S: {conformiteVal}
+                          {divergence && ' ⚠ réglementaire incomplet'}
+                        </span>
+                      </div>
+                    )
+                  })()}
                 </>
               ) : (
                 <div className="space-y-3">

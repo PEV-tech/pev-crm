@@ -181,6 +181,18 @@ export function determineRule(consultant: Consultant, dossier: Dossier): Commiss
 
   const consultantName = consultant.nom.trim()
 
+  // Point 3.2 (2026-04-24) — Si le consultant rattaché au dossier est
+  // le consultant fictif POOL (cf. add-consultant-pool.sql), on applique
+  // automatiquement la Rule 3 (répartition 70 % pool / 30 % cabinet).
+  // Prioritaire sur les autres branches : un dossier POOL ne suit pas
+  // les règles tier 50/65 même si un apporteur_label est renseigné.
+  const isPoolConsultant =
+    (consultant.prenom && consultant.prenom.trim().toUpperCase() === 'POOL') ||
+    (consultant.nom && consultant.nom.trim().toUpperCase() === 'POOL')
+  if (isPoolConsultant) {
+    return COMMISSION_RULES[2] // Rule 3 — Client apporté par le Pool
+  }
+
   // Check if the dossier is apporteur-based (sourced by specific consultant)
   if (dossier.apporteur_label) {
     const apporteurName = dossier.apporteur_label.trim()
