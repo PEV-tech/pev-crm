@@ -15,6 +15,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Edit, Save, X, Loader2, Trash2, ExternalLink, Heart, Search } from 'lucide-react'
 import { DocumentChecklist } from '@/components/shared/document-checklist'
 import { ClientRelances } from '@/components/shared/client-relances'
+import { DossierHistory } from '@/components/shared/dossier-history'
 import { CommissionPanel } from '@/components/dossiers/commission-panel'
 import { CompliancePanel } from '@/components/dossiers/compliance-panel'
 
@@ -57,9 +58,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [editForm, setEditForm] = React.useState<EditFormType>({})
   const [tauxGestion, setTauxGestion] = React.useState<number | null>(null)
   const [tauxEntree, setTauxEntree] = React.useState<number | null>(null)
-  const [produits, setProduits] = React.useState<{ id: string; nom: string }[]>([])
+  const [produits, setProduits] = React.useState<{ id: string; nom: string; categorie: string | null }[]>([])
   const [compagnies, setCompagnies] = React.useState<{ id: string; nom: string }[]>([])
-  const [tauxMap, setTauxMap] = React.useState<{ produit_id: string | null; compagnie_id: string | null; taux: number }[]>([])
+  const [tauxMap, setTauxMap] = React.useState<{ id: string; produit_id: string | null; compagnie_id: string | null; taux: number; description: string | null }[]>([])
+  const [dossierTpcId, setDossierTpcId] = React.useState<string | null>(null)
   const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
@@ -100,11 +102,14 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   React.useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [dossierRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
+        const [dossierRes, dossierRawRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
           supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle(),
-          supabase.from('produits').select('id, nom').order('nom'),
+          // Fetch direct sur la table dossiers pour récupérer taux_produit_compagnie_id
+          // (pas encore exposé par v_dossiers_complets).
+          supabase.from('dossiers').select('taux_produit_compagnie_id').eq('id', id).limit(1).maybeSingle(),
+          supabase.from('produits').select('id, nom, categorie').order('nom'),
           supabase.from('compagnies').select('id, nom').order('nom'),
-          supabase.from('taux_produit_compagnie').select('produit_id, compagnie_id, taux').eq('actif', true),
+          supabase.from('taux_produit_compagnie').select('id, produit_id, compagnie_id, taux, description').eq('actif', true),
           supabase.from('apporteurs').select('id, nom, prenom, taux_commission').order('nom'),
         ])
 
@@ -124,6 +129,13 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           // Find IDs from view data by matching names to lists
           const produitId = produitsRes.data?.find((p) => p.nom === data.produit_nom)?.id || ''
           const compagnieId = compagniesRes.data?.find((c) => c.nom === data.compagnie_nom)?.id || ''
+          // taux_produit_compagnie_id : prendre celui stocké sur le dossier si présent,
+          // sinon fallback sur la première ligne taux matching (produit_id, compagnie_id).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const storedTpcId = (dossierRawRes.data as any)?.taux_produit_compagnie_id as string | null | undefined
+          setDossierTpcId(storedTpcId || null)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tpcId = storedTpcId || tauxRes.data?.find((t: any) => t.produit_id === produitId && t.compagnie_id === compagnieId)?.id || ''
           setEditForm({
             statut: data.statut || 'prospect',
             montant: data.montant || '',
@@ -132,6 +144,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             commentaire: data.commentaire || '',
             produit_id: produitId,
             compagnie_id: compagnieId,
+            taux_produit_compagnie_id: tpcId,
             statut_kyc: data.statut_kyc || 'non',
             der: data.der ? 'oui' : 'non',
             pi: data.pi ? 'oui' : 'non',
@@ -266,6 +279,78 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     setEditForm((prev: any) => ({ ...prev, [name]: value }))
   }
 
+  // -------- Cascade Catégorie → Compagnie → Produit (étape 2 part 2) --------
+  // `produits` table est en fait le référentiel de produits au sens métier (ACTIVIMMO,
+  // COMETE, CAV LUX...). La catégorie est un attribut (SCPI, CAV, PE...) qu'on expose
+  // en premier dropdown pour filtrer les compagnies puis les produits disponibles.
+
+  const categorieSelectionnee = React.useMemo<string | ''>(() => {
+    if (!editForm.produit_id) return ''
+    const p = produits.find((pp) => pp.id === editForm.produit_id)
+    return p?.categorie || ''
+  }, [editForm.produit_id, produits])
+
+  const categoriesDisponibles = React.useMemo<string[]>(() => {
+    const s = new Set<string>()
+    for (const p of produits) if (p.categorie) s.add(p.categorie)
+    return Array.from(s).sort()
+  }, [produits])
+
+  // Afficher toutes les compagnies (pas de filtre par catégorie) — permet de choisir
+  // un partenaire même s'il n'a pas encore de couple déclaré dans cette catégorie.
+  const compagniesFiltrees = compagnies
+
+  // Produits spécifiques = lignes taux_produit_compagnie filtrées par (categorie + compagnie).
+  const couplesAvecLabel = React.useMemo(() => {
+    let rows = tauxMap
+    if (categorieSelectionnee) {
+      const produitIdsDeCategorie = new Set(
+        produits.filter((p) => p.categorie === categorieSelectionnee).map((p) => p.id)
+      )
+      rows = rows.filter((t) => t.produit_id && produitIdsDeCategorie.has(t.produit_id))
+    }
+    if (editForm.compagnie_id) {
+      rows = rows.filter((t) => t.compagnie_id === editForm.compagnie_id)
+    }
+    return rows.map((t) => {
+      const produitNom = produits.find((p) => p.id === t.produit_id)?.nom || ''
+      const label = (t.description && t.description.trim()) || produitNom || '—'
+      return { id: t.id, produit_id: t.produit_id, compagnie_id: t.compagnie_id, label }
+    })
+  }, [categorieSelectionnee, editForm.compagnie_id, produits, tauxMap])
+
+  const handleCategorieChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newCat = e.target.value
+    setEditForm((prev: any) => {
+      const currentProduit = produits.find((p) => p.id === prev.produit_id)
+      const shouldReset = !currentProduit || currentProduit.categorie !== newCat
+      return {
+        ...prev,
+        produit_id: shouldReset ? '' : prev.produit_id,
+        compagnie_id: shouldReset ? '' : prev.compagnie_id,
+        taux_produit_compagnie_id: shouldReset ? '' : prev.taux_produit_compagnie_id,
+      }
+    })
+    setCategorieOverride(newCat)
+  }
+
+  // Choisir un produit spécifique = choisir une ligne taux_produit_compagnie précise.
+  // On rétro-remplit produit_id + compagnie_id depuis la ligne choisie.
+  const handleProduitSpecifiqueChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const tpcId = e.target.value
+    const ligne = tauxMap.find((t) => t.id === tpcId)
+    setEditForm((prev: any) => ({
+      ...prev,
+      taux_produit_compagnie_id: tpcId,
+      produit_id: ligne?.produit_id || prev.produit_id || '',
+      compagnie_id: ligne?.compagnie_id || prev.compagnie_id || '',
+    }))
+  }
+
+  // Shadow state : permet d'avoir une catégorie sélectionnée même quand produit_id est vide
+  const [categorieOverride, setCategorieOverride] = React.useState<string>('')
+  const categorieAffichee = categorieSelectionnee || categorieOverride
+
   const handleSave = async () => {
     setSaving(true)
     setSaveError('')
@@ -283,6 +368,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         date_signature: editForm.date_signature || null,
         mode_detention: editForm.mode_detention || null,
       }
+      // FK vers la ligne taux_produit_compagnie spécifique (colonne ajoutée 2026-04-24).
+      // Types Supabase pas encore régénérés : cast via any le temps que database.ts soit à jour.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(dossierUpdate as any).taux_produit_compagnie_id = editForm.taux_produit_compagnie_id || null
       // Include co_titulaire_id if changed
       if (coTitulaireChanged) {
         dossierUpdate.co_titulaire_id = coTitulaire?.id || null
@@ -676,7 +765,15 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     ? dossier.payee === 'oui' ? ('payée' as const) : ('émise' as const)
     : ('à émettre' as const)
 
-  const hasCommissionData = !!(dossier.commission_brute || dossier.rem_apporteur || tauxEntree || effectiveTauxGestion)
+  const hasCommissionData = !!(
+    dossier.commission_brute ||
+    dossier.rem_apporteur ||
+    tauxEntree ||
+    effectiveTauxGestion ||
+    // Fallback : afficher le bloc Détail commission dès qu'un dossier a produit/compagnie/montant,
+    // même si les taux calculés de la vue v_dossiers_complets sont NULL (bug SCPI ALDERAN 2026-04-23)
+    (dossier.produit_nom && dossier.compagnie_nom && Number(dossier.montant) > 0)
+  )
 
   return (
     <div className="space-y-6">
@@ -841,24 +938,24 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Produit</p>
+                  <p className="text-sm font-medium text-gray-500">Catégorie</p>
                   {isEditing ? (
-                    <Select name="produit_id" value={editForm.produit_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">— Aucun —</option>
-                      {produits.map((p) => (
-                        <option key={p.id} value={p.id}>{p.nom}</option>
+                    <Select name="__categorie" value={categorieAffichee} onChange={handleCategorieChange} className="mt-1">
+                      <option value="">— Aucune —</option>
+                      {categoriesDisponibles.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </Select>
                   ) : (
-                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_nom || '-'}</p>
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_categorie || '-'}</p>
                   )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Compagnie</p>
                   {isEditing ? (
                     <Select name="compagnie_id" value={editForm.compagnie_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">— Aucun —</option>
-                      {compagnies.map((c) => (
+                      <option value="">— Aucune —</option>
+                      {compagniesFiltrees.map((c) => (
                         <option key={c.id} value={c.id}>{c.nom}</option>
                       ))}
                     </Select>
@@ -866,20 +963,35 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                     <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.compagnie_nom || '-'}</p>
                   )}
                 </div>
-                {isEditing && autoTaux !== null && (
-                  <div className="col-span-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-indigo-700">
-                        Taux commission : <strong>{(autoTaux * 100).toFixed(2)}%</strong>
-                      </span>
-                      {editEstimatedCommission !== null && editEstimatedCommission > 0 && (
-                        <span className="text-sm font-semibold text-indigo-900">
-                          Commission estimée : {formatCurrency(editEstimatedCommission)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Produit</p>
+                  {isEditing ? (
+                    <Select
+                      name="__taux_produit_compagnie_id"
+                      value={editForm.taux_produit_compagnie_id || ''}
+                      onChange={handleProduitSpecifiqueChange}
+                      className="mt-1"
+                    >
+                      <option value="">— Aucun —</option>
+                      {couplesAvecLabel.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">
+                      {(() => {
+                        const tpc = dossierTpcId
+                          ? tauxMap.find((t) => t.id === dossierTpcId)
+                          : tauxMap.find(
+                              (t) =>
+                                t.produit_id === produits.find((p) => p.nom === dossier.produit_nom)?.id &&
+                                t.compagnie_id === compagnies.find((c) => c.nom === dossier.compagnie_nom)?.id
+                            )
+                        return (tpc?.description && tpc.description.trim()) || dossier.produit_nom || '-'
+                      })()}
+                    </p>
+                  )}
+                </div>
                 {isEditing && editForm.produit_id && editForm.compagnie_id && autoTaux === null && (
                   <div className="col-span-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
                     <span className="text-xs text-amber-700">Aucun taux configuré pour cette combinaison produit/compagnie</span>
@@ -1087,6 +1199,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Historique des modifications (audit_logs) */}
+          <DossierHistory dossierId={id} />
         </div>
       </div>
     </div>

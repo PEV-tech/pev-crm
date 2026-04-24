@@ -13,9 +13,10 @@ import { createClient } from '@/lib/supabase/client'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Edit2, Trash2, Check, X, Plus, Search } from 'lucide-react'
+import { Edit2, Trash2, Check, X, Plus, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatCurrency } from '@/lib/formatting'
 import { formatPercent0, parseRateInput, rateToInput, type ShowToast, SECTION_INTRO_CLS } from './helpers'
+import { ConsultantPaliers } from '@/components/parametres/consultant-paliers'
 
 interface Props {
   isManager: boolean
@@ -57,6 +58,7 @@ function ConsultantsTab({ isManager, showToast }: Props) {
   const [editing, setEditing] = React.useState<{ id: string; data: Record<string, any> } | null>(null)
   const [creating, setCreating] = React.useState<Record<string, any> | null>(null)
   const [saving, setSaving] = React.useState(false)
+  const [expandedId, setExpandedId] = React.useState<string | null>(null)
 
   const fetchData = React.useCallback(async () => {
     const { data } = await supabase.from('consultants').select('*').order('prenom')
@@ -198,30 +200,50 @@ function ConsultantsTab({ isManager, showToast }: Props) {
                   </tr>
                 )
               }
+              const isExpanded = expandedId === c.id
               return (
-                <tr key={c.id} className="hover:bg-gray-50/50">
-                  <td className="px-3 py-2 font-medium text-gray-900">{c.prenom}</td>
-                  <td className="px-3 py-2 text-gray-700">{c.nom}</td>
-                  <td className="px-3 py-2 text-gray-700">{roleLabel[c.role] || c.role}</td>
-                  <td className="px-3 py-2 text-right text-gray-700">{formatPercent0(c.taux_remuneration)}</td>
-                  <td className="px-3 py-2 text-center">
-                    <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${c.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {c.actif ? 'Actif' : 'Inactif'}
-                    </span>
-                  </td>
-                  {isManager && (
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setEditing({ id: c.id, data: { ...c } })} aria-label="Modifier">
-                          <Edit2 size={14} />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id, `${c.prenom} ${c.nom}`)} aria-label="Supprimer">
-                          <Trash2 size={14} className="text-red-500" />
-                        </Button>
-                      </div>
+                <React.Fragment key={c.id}>
+                  <tr className="hover:bg-gray-50/50">
+                    <td className="px-3 py-2 font-medium text-gray-900">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                        className="inline-flex items-center gap-1 hover:text-indigo-700"
+                        aria-label={isExpanded ? 'Masquer paliers' : 'Voir paliers'}
+                      >
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        {c.prenom}
+                      </button>
                     </td>
+                    <td className="px-3 py-2 text-gray-700">{c.nom}</td>
+                    <td className="px-3 py-2 text-gray-700">{roleLabel[c.role] || c.role}</td>
+                    <td className="px-3 py-2 text-right text-gray-700">{formatPercent0(c.taux_remuneration)}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${c.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {c.actif ? 'Actif' : 'Inactif'}
+                      </span>
+                    </td>
+                    {isManager && (
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setEditing({ id: c.id, data: { ...c } })} aria-label="Modifier">
+                            <Edit2 size={14} />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id, `${c.prenom} ${c.nom}`)} aria-label="Supprimer">
+                            <Trash2 size={14} className="text-red-500" />
+                          </Button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                  {isExpanded && (
+                    <tr className="bg-gray-50/30">
+                      <td colSpan={isManager ? 6 : 5} className="px-6 py-4 border-b border-gray-100">
+                        <ConsultantPaliers consultantId={c.id} taux_remuneration={c.taux_remuneration} />
+                      </td>
+                    </tr>
                   )}
-                </tr>
+                </React.Fragment>
               )
             })}
           </tbody>
