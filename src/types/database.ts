@@ -15,7 +15,7 @@ export type Database = {
   public: {
     Tables: {
       apporteurs: {
-        Row: 
+        Row: {
           created_at: string | null
           created_by: string | null
           id: string
