@@ -54,6 +54,7 @@ export function DossiersClient({
   const searchParams = useSearchParams()
   const [data] = React.useState(initialData)
   const [activeTab, setActiveTab] = React.useState('tous')
+  const [filterCategorie, setFilterCategorie] = React.useState('')
   const [filterProduit, setFilterProduit] = React.useState('')
   const [filterPays, setFilterPays] = React.useState('')
   const [filterConsultant, setFilterConsultant] = React.useState('')
@@ -87,6 +88,11 @@ export function DossiersClient({
       })
     }
 
+    // Filter by catégorie
+    if (filterCategorie) {
+      result = result.filter((d) => d.produit_categorie === filterCategorie)
+    }
+
     // Filter by produit
     if (filterProduit) {
       result = result.filter((d) => d.produit_nom === filterProduit)
@@ -106,13 +112,14 @@ export function DossiersClient({
     }
 
     return result
-  }, [data, activeTab, filterProduit, filterPays, filterConsultant, searchQuery])
+  }, [data, activeTab, filterCategorie, filterProduit, filterPays, filterConsultant, searchQuery])
 
   const handleExportCSV = React.useCallback(() => {
     const exportData = filteredData.map((d) => ({
       client: `${d.client_prenom || ''} ${d.client_nom || ''}`.trim(),
-      produit: d.produit_nom || '',
+      categorie: d.produit_categorie || '',
       compagnie: d.compagnie_nom || '',
+      produit: d.produit_nom || '',
       montant: formatCurrencyForCSV(d.montant),
       financement: d.financement || '',
       date: formatDateForCSV(d.date_operation),
@@ -124,8 +131,9 @@ export function DossiersClient({
 
     const columns = [
       { key: 'client', label: 'Client' },
-      { key: 'produit', label: 'Produit' },
+      { key: 'categorie', label: 'Catégorie' },
       { key: 'compagnie', label: 'Compagnie' },
+      { key: 'produit', label: 'Produit' },
       { key: 'montant', label: 'Montant (EUR)' },
       { key: 'financement', label: 'Financement' },
       { key: 'date', label: 'Date' },
@@ -142,6 +150,10 @@ export function DossiersClient({
   }, [filteredData])
 
   // Get unique values for filters
+  const categories = React.useMemo(
+    () => Array.from(new Set(data.map((d) => d.produit_categorie).filter(Boolean) as string[])).sort(),
+    [data]
+  )
   const produits = React.useMemo(
     () => Array.from(new Set(data.map((d) => d.produit_nom).filter(Boolean) as string[])).sort(),
     [data]
@@ -192,13 +204,18 @@ export function DossiersClient({
       ),
     },
     {
-      key: 'produit_nom',
-      label: 'Produit',
+      key: 'produit_categorie',
+      label: 'Catégorie',
       sortable: true,
     },
     {
       key: 'compagnie_nom',
       label: 'Compagnie',
+      sortable: true,
+    },
+    {
+      key: 'produit_nom',
+      label: 'Produit',
       sortable: true,
     },
     {
@@ -369,6 +386,18 @@ export function DossiersClient({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="max-w-sm"
               />
+              <Select
+                value={filterCategorie}
+                onChange={(e) => setFilterCategorie(e.target.value)}
+                className="max-w-sm"
+              >
+                <option value="">Toutes les catégories</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </Select>
               <Select
                 value={filterProduit}
                 onChange={(e) => setFilterProduit(e.target.value)}
