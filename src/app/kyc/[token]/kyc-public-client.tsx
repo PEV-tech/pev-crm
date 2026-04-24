@@ -8,13 +8,13 @@ import { computeKycCompletion } from '@/lib/kyc-completion'
 import {
   LOGEMENT_OPTIONS,
   SITUATION_MATRIMONIALE_OPTIONS,
-  REGIME_MATRIMONIAL_OPTIONS,
   TYPE_BIEN_IMMOBILIER_OPTIONS,
   TYPE_PRODUIT_FINANCIER_OPTIONS,
   DETENTEUR_TYPE_OPTIONS,
   DETENTEUR_TYPE_LABELS_PORTAIL,
   normalizeDetenteurType,
   needsRegimeMatrimonial,
+  getRegimesForSituation,
   type DetenteurType,
 } from '@/lib/kyc-enums'
 
@@ -79,6 +79,11 @@ const SECTIONS: Array<{
     // sur les enums CRM. On stocke le LIBELLÉ tel quel (pas un code), pour
     // que le consultant relise la même chaîne qu'il verrait dans le CRM.
     options?: readonly string[]
+    // Point 1.7 (2026-04-24) — variante dynamique : si fourni, la liste
+    // d'options est recalculée à chaque rendu en fonction du formData
+    // courant. Utile pour le régime matrimonial qui dépend de la
+    // situation (mariage → régimes mariage, PACS → régimes PACS).
+    optionsFor?: (d: KycData) => readonly string[]
   }>
 }> = [
   {
@@ -91,6 +96,13 @@ const SECTIONS: Array<{
       },
       { key: 'titre', label: 'Civilité' },
       { key: 'nom', label: 'Nom' },
+      // Point 4.4 (2026-04-24) — Nom de jeune fille disponible côté
+      // portail public pour les PP. Masqué pour les PM (raison sociale).
+      {
+        key: 'nom_jeune_fille',
+        label: 'Nom de jeune fille',
+        cond: (d) => d.type_personne !== 'morale',
+      },
       { key: 'prenom', label: 'Prénom' },
       { key: 'date_naissance', label: 'Date de naissance', type: 'date' },
       { key: 'lieu_naissance', label: 'Lieu de naissance' },
@@ -148,7 +160,11 @@ const SECTIONS: Array<{
         key: 'regime_matrimonial',
         label: 'Régime matrimonial',
         type: 'select',
-        options: REGIME_MATRIMONIAL_OPTIONS,
+        // Point 1.7 (2026-04-24) : les régimes sont filtrés selon la
+        // situation matrimoniale choisie. Marié → régimes mariage,
+        // pacsé → régimes PACS. Évite qu'un client marié puisse cocher
+        // "PACS — Indivision" (et réciproquement).
+        optionsFor: (d) => getRegimesForSituation(d.situation_matrimoniale as string | null | undefined),
         // N'apparaît que si la situation l'implique (marié·e / pacsé·e) —
         // même règle que la section KYC consultant (kyc-section.tsx).
         cond: (d) => needsRegimeMatrimonial(d.situation_matrimoniale as string | null | undefined),
@@ -245,7 +261,11 @@ const EDITABLE_JSONB_KEYS = [
 // Clés JSONB transmises telles quelles à la RPC (non éditables ici).
 // `enfants_details` reste géré côté consultant en V1 (nombre_enfants
 // reste éditable par le client).
-const READONLY_JSONB_KEYS = ['enfants_details'] as const
+// Point 4.3 (2026-04-24) : `patrimoine_professionnel` transite en
+// read-only via le portail public tant qu'il n'y a pas d'éditeur dédié
+// côté client. Important : le laisser en READONLY (et non EDITABLE)
+// évite que la soumission ne wipe la section — saisie consultant only.
+const READONLY_JSONB_KEYS = ['enfants_details', 'patrimoine_professionnel'] as const
 
 // Shapes simplifiées — miroir des interfaces consultant (kyc-section.tsx)
 // sans les FK UUID (co_titulaire_client_id). Côté client, le co-titulaire
@@ -383,7 +403,21 @@ export function KycPublicClient({ token }: { token: string }) {
   }, [token])
 
   function setField(key: string, value: ScalarValue | JsonbValue) {
-    setFormData((prev) => ({ ...prev, [key]: value }))
+    setFormData((prev) => {
+      const next = { ...prev, [key]: value }
+      // Point 1.7 (2026-04-24) — quand la situation matrimoniale change,
+      // le régime précédemment saisi peut ne plus être applicable (ex:
+      // mariage → PACS). On reset pour éviter une valeur incohérente.
+      // Même logique que kyc-section.tsx côté CRM.
+      if (key === 'situation_matrimoniale') {
+        const allowed = getRegimesForSituation(value as string | null | undefined)
+        const current = next.regime_matrimonial as string | null | undefined
+        if (current && !allowed.includes(current)) {
+          next.regime_matrimonial = null
+        }
+      }
+      return next
+    })
   }
 
   if (loading) {
@@ -559,7 +593,10 @@ export function KycPublicClient({ token }: { token: string }) {
                       label={f.label}
                       type={f.type || 'text'}
                       placeholder={f.placeholder}
-                      options={f.options}
+                      // Point 1.7 — `optionsFor` recalcule la liste d'options
+                      // selon formData (régime matrimonial filtré par
+                      // situation). Fallback sur options statique.
+                      options={f.optionsFor ? f.optionsFor(formData as KycData) : f.options}
                       value={formData[f.key] as ScalarValue}
                       onChange={(v) => setField(f.key, v)}
                     />

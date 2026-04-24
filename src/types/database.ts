@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_errors: {
+        Row: {
+          extra: Json
+          id: string
+          message: string
+          occurred_at: string
+          resolved_at: string | null
+          resolved_by: string | null
+          route: string | null
+          source: string
+          stack: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          extra?: Json
+          id?: string
+          message: string
+          occurred_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          route?: string | null
+          source: string
+          stack?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          extra?: Json
+          id?: string
+          message?: string
+          occurred_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          route?: string | null
+          source?: string
+          stack?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       apporteurs: {
         Row: {
           created_at: string | null
@@ -372,6 +414,7 @@ export type Database = {
           adresse: string | null
           autres_revenus: number | null
           capital_social: number | null
+          code_postal: string | null
           commentaires: string | null
           conformite: string | null
           consultant_id: string | null
@@ -391,14 +434,27 @@ export type Database = {
           impot_revenu_n: number | null
           impot_revenu_n1: number | null
           impot_revenu_n2: number | null
+          kyc_completion_rate: number | null
+          kyc_consent_accuracy: boolean | null
+          kyc_consent_incomplete: boolean | null
           kyc_date_signature: string | null
+          kyc_incomplete_signed: boolean | null
           kyc_last_relance_at: string | null
+          kyc_missing_fields: Json | null
+          kyc_opened_at: string | null
           kyc_pdf_generated_at: string | null
           kyc_pdf_storage_path: string | null
           kyc_relances_count: number
+          kyc_sent_at: string | null
+          kyc_signed_at: string | null
+          kyc_signer_ip: string | null
+          kyc_signer_name: string | null
+          kyc_token: string | null
+          kyc_token_created_at: string | null
           kyc_uploaded_at: string | null
           lieu_naissance: string | null
           lm: boolean | null
+          montant_loyer: number | null
           nationalite: string | null
           nif: string | null
           nom: string
@@ -408,6 +464,7 @@ export type Database = {
           objectifs_client: string | null
           patrimoine_divers: Json | null
           patrimoine_immobilier: Json | null
+          patrimoine_professionnel: Json | null
           pays: string
           pi: boolean | null
           preco: boolean | null
@@ -425,6 +482,7 @@ export type Database = {
           siren: string | null
           siret: string | null
           situation_matrimoniale: string | null
+          statut_client: string | null
           statut_kyc: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel: string | null
           telephone: string | null
@@ -438,6 +496,7 @@ export type Database = {
           adresse?: string | null
           autres_revenus?: number | null
           capital_social?: number | null
+          code_postal?: string | null
           commentaires?: string | null
           conformite?: string | null
           consultant_id?: string | null
@@ -457,14 +516,27 @@ export type Database = {
           impot_revenu_n?: number | null
           impot_revenu_n1?: number | null
           impot_revenu_n2?: number | null
+          kyc_completion_rate?: number | null
+          kyc_consent_accuracy?: boolean | null
+          kyc_consent_incomplete?: boolean | null
           kyc_date_signature?: string | null
+          kyc_incomplete_signed?: boolean | null
           kyc_last_relance_at?: string | null
+          kyc_missing_fields?: Json | null
+          kyc_opened_at?: string | null
           kyc_pdf_generated_at?: string | null
           kyc_pdf_storage_path?: string | null
           kyc_relances_count?: number
+          kyc_sent_at?: string | null
+          kyc_signed_at?: string | null
+          kyc_signer_ip?: string | null
+          kyc_signer_name?: string | null
+          kyc_token?: string | null
+          kyc_token_created_at?: string | null
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null
+          montant_loyer?: number | null
           nationalite?: string | null
           nif?: string | null
           nom: string
@@ -474,6 +546,7 @@ export type Database = {
           objectifs_client?: string | null
           patrimoine_divers?: Json | null
           patrimoine_immobilier?: Json | null
+          patrimoine_professionnel?: Json | null
           pays: string
           pi?: boolean | null
           preco?: boolean | null
@@ -491,6 +564,7 @@ export type Database = {
           siren?: string | null
           siret?: string | null
           situation_matrimoniale?: string | null
+          statut_client?: string | null
           statut_kyc?: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel?: string | null
           telephone?: string | null
@@ -504,6 +578,7 @@ export type Database = {
           adresse?: string | null
           autres_revenus?: number | null
           capital_social?: number | null
+          code_postal?: string | null
           commentaires?: string | null
           conformite?: string | null
           consultant_id?: string | null
@@ -523,14 +598,27 @@ export type Database = {
           impot_revenu_n?: number | null
           impot_revenu_n1?: number | null
           impot_revenu_n2?: number | null
+          kyc_completion_rate?: number | null
+          kyc_consent_accuracy?: boolean | null
+          kyc_consent_incomplete?: boolean | null
           kyc_date_signature?: string | null
+          kyc_incomplete_signed?: boolean | null
           kyc_last_relance_at?: string | null
+          kyc_missing_fields?: Json | null
+          kyc_opened_at?: string | null
           kyc_pdf_generated_at?: string | null
           kyc_pdf_storage_path?: string | null
           kyc_relances_count?: number
+          kyc_sent_at?: string | null
+          kyc_signed_at?: string | null
+          kyc_signer_ip?: string | null
+          kyc_signer_name?: string | null
+          kyc_token?: string | null
+          kyc_token_created_at?: string | null
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null
+          montant_loyer?: number | null
           nationalite?: string | null
           nif?: string | null
           nom?: string
@@ -540,6 +628,7 @@ export type Database = {
           objectifs_client?: string | null
           patrimoine_divers?: Json | null
           patrimoine_immobilier?: Json | null
+          patrimoine_professionnel?: Json | null
           pays?: string
           pi?: boolean | null
           preco?: boolean | null
@@ -557,6 +646,7 @@ export type Database = {
           siren?: string | null
           siret?: string | null
           situation_matrimoniale?: string | null
+          statut_client?: string | null
           statut_kyc?: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel?: string | null
           telephone?: string | null
@@ -566,7 +656,50 @@ export type Database = {
           updated_at?: string | null
           ville?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_complets"
+            referencedColumns: ["consultant_id"]
+          },
+          {
+            foreignKeyName: "clients_representant_legal_id_fkey"
+            columns: ["representant_legal_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_representant_legal_id_fkey"
+            columns: ["representant_legal_id"]
+            isOneToOne: false
+            referencedRelation: "v_clients_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_representant_legal_id_fkey"
+            columns: ["representant_legal_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_complets"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "clients_representant_legal_id_fkey"
+            columns: ["representant_legal_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_remunerations"
+            referencedColumns: ["client_id"]
+          },
+        ]
       }
       commissions: {
         Row: {
@@ -638,20 +771,71 @@ export type Database = {
           id: string
           nom: string
           taux_defaut: number | null
+          taux_encours: number | null
         }
         Insert: {
           created_at?: string | null
           id?: string
           nom: string
           taux_defaut?: number | null
+          taux_encours?: number | null
         }
         Update: {
           created_at?: string | null
           id?: string
           nom?: string
           taux_defaut?: number | null
+          taux_encours?: number | null
         }
         Relationships: []
+      }
+      consultant_email_templates: {
+        Row: {
+          body: string
+          consultant_id: string
+          created_at: string
+          enabled: boolean
+          id: string
+          subject: string
+          template_key: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          consultant_id: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          subject: string
+          template_key: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          consultant_id?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          subject?: string
+          template_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultant_email_templates_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultant_email_templates_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_complets"
+            referencedColumns: ["consultant_id"]
+          },
+        ]
       }
       consultants: {
         Row: {
@@ -800,6 +984,7 @@ export type Database = {
           statut: Database["public"]["Enums"]["statut_dossier_type"]
           support_id: string | null
           taux_apporteur_ext: number | null
+          taux_produit_compagnie_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -827,6 +1012,7 @@ export type Database = {
           statut?: Database["public"]["Enums"]["statut_dossier_type"]
           support_id?: string | null
           taux_apporteur_ext?: number | null
+          taux_produit_compagnie_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -854,6 +1040,7 @@ export type Database = {
           statut?: Database["public"]["Enums"]["statut_dossier_type"]
           support_id?: string | null
           taux_apporteur_ext?: number | null
+          taux_produit_compagnie_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -961,6 +1148,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_dossiers_complets"
             referencedColumns: ["consultant_id"]
+          },
+          {
+            foreignKeyName: "dossiers_taux_produit_compagnie_id_fkey"
+            columns: ["taux_produit_compagnie_id"]
+            isOneToOne: false
+            referencedRelation: "taux_produit_compagnie"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1389,6 +1583,8 @@ export type Database = {
           encours_max: number | null
           encours_min: number
           id: string
+          libelle: string | null
+          produit_categorie: string | null
           taux: number
           type_frais: Database["public"]["Enums"]["type_frais"]
         }
@@ -1398,6 +1594,8 @@ export type Database = {
           encours_max?: number | null
           encours_min: number
           id?: string
+          libelle?: string | null
+          produit_categorie?: string | null
           taux: number
           type_frais: Database["public"]["Enums"]["type_frais"]
         }
@@ -1407,10 +1605,104 @@ export type Database = {
           encours_max?: number | null
           encours_min?: number
           id?: string
+          libelle?: string | null
+          produit_categorie?: string | null
           taux?: number
           type_frais?: Database["public"]["Enums"]["type_frais"]
         }
         Relationships: []
+      }
+      kyc_propositions: {
+        Row: {
+          client_id: string
+          completion_rate: number | null
+          consent_accuracy: boolean
+          consent_incomplete: boolean
+          field_decisions: Json
+          id: string
+          missing_fields: Json | null
+          original_snapshot: Json
+          proposed_data: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
+          signed_at: string | null
+          signer_ip: string | null
+          signer_name: string | null
+          status: string
+          submitted_at: string
+          token_used: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          completion_rate?: number | null
+          consent_accuracy?: boolean
+          consent_incomplete?: boolean
+          field_decisions?: Json
+          id?: string
+          missing_fields?: Json | null
+          original_snapshot: Json
+          proposed_data: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          status?: string
+          submitted_at?: string
+          token_used: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          completion_rate?: number | null
+          consent_accuracy?: boolean
+          consent_incomplete?: boolean
+          field_decisions?: Json
+          id?: string
+          missing_fields?: Json | null
+          original_snapshot?: Json
+          proposed_data?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          status?: string
+          submitted_at?: string
+          token_used?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kyc_propositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kyc_propositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_clients_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kyc_propositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_complets"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "kyc_propositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_remunerations"
+            referencedColumns: ["client_id"]
+          },
+        ]
       }
       kyc_relance_settings: {
         Row: {
@@ -1453,6 +1745,13 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "consultants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kyc_relance_settings_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: true
+            referencedRelation: "v_dossiers_complets"
+            referencedColumns: ["consultant_id"]
           },
         ]
       }
@@ -1504,6 +1803,27 @@ export type Database = {
           created_at?: string | null
           id?: string
           nom?: string
+        }
+        Relationships: []
+      }
+      rate_limit_hits: {
+        Row: {
+          bucket: string
+          hit_at: string
+          id: number
+          identifier: string
+        }
+        Insert: {
+          bucket: string
+          hit_at?: string
+          id?: number
+          identifier: string
+        }
+        Update: {
+          bucket?: string
+          hit_at?: string
+          id?: number
+          identifier?: string
         }
         Relationships: []
       }
@@ -1698,25 +2018,37 @@ export type Database = {
       taux_produit_compagnie: {
         Row: {
           actif: boolean | null
+          commission_retrocedee: number | null
           compagnie_id: string | null
           description: string | null
+          frais_encours: number | null
+          frais_entree: number | null
           id: string
+          prix_part: number | null
           produit_id: string | null
           taux: number
         }
         Insert: {
           actif?: boolean | null
+          commission_retrocedee?: number | null
           compagnie_id?: string | null
           description?: string | null
+          frais_encours?: number | null
+          frais_entree?: number | null
           id?: string
+          prix_part?: number | null
           produit_id?: string | null
           taux: number
         }
         Update: {
           actif?: boolean | null
+          commission_retrocedee?: number | null
           compagnie_id?: string | null
           description?: string | null
+          frais_encours?: number | null
+          frais_entree?: number | null
           id?: string
+          prix_part?: number | null
           produit_id?: string | null
           taux?: number
         }
@@ -1900,7 +2232,50 @@ export type Database = {
           taux_produit_compagnie_id: string | null
           taux_remuneration: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dossiers_apporteur_id_fkey"
+            columns: ["apporteur_id"]
+            isOneToOne: false
+            referencedRelation: "apporteurs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "v_clients_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_complets"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_remunerations"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "dossiers_taux_produit_compagnie_id_fkey"
+            columns: ["taux_produit_compagnie_id"]
+            isOneToOne: false
+            referencedRelation: "taux_produit_compagnie"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_dossiers_remunerations: {
         Row: {
@@ -1954,11 +2329,45 @@ export type Database = {
           taux_apporteur_ext: number | null
           taux_commission: number | null
           taux_gestion: number | null
-          taux_produit_compagnie_description: string | null
-          taux_produit_compagnie_id: string | null
           taux_remuneration: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dossiers_apporteur_id_fkey"
+            columns: ["apporteur_id"]
+            isOneToOne: false
+            referencedRelation: "apporteurs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "v_clients_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_complets"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "dossiers_co_titulaire_id_fkey"
+            columns: ["co_titulaire_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossiers_remunerations"
+            referencedColumns: ["client_id"]
+          },
+        ]
       }
       v_encaissements: {
         Row: {
@@ -2113,9 +2522,21 @@ export type Database = {
       }
     }
     Functions: {
+      _current_consultant_id: { Args: never; Returns: string }
+      _is_manager_or_bo: { Args: never; Returns: boolean }
+      _kyc_editable_fields: { Args: never; Returns: string[] }
       calculate_commission: {
         Args: { p_dossier_id: string }
         Returns: undefined
+      }
+      check_rate_limit: {
+        Args: {
+          p_bucket: string
+          p_identifier: string
+          p_max_hits: number
+          p_window_seconds: number
+        }
+        Returns: Json
       }
       get_classement: {
         Args: { p_annee?: number }
@@ -2140,9 +2561,79 @@ export type Database = {
       }
       is_back_office: { Args: never; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
+      kyc_apply_proposition: {
+        Args: { p_field_decisions: Json; p_proposition_id: string }
+        Returns: Json
+      }
+      kyc_client_by_token: { Args: { p_token: string }; Returns: Json }
+      kyc_generate_token: { Args: { p_client_id: string }; Returns: string }
+      kyc_list_pending_propositions: {
+        Args: { p_client_id?: string }
+        Returns: {
+          client_id: string
+          completion_rate: number | null
+          consent_accuracy: boolean
+          consent_incomplete: boolean
+          field_decisions: Json
+          id: string
+          missing_fields: Json | null
+          original_snapshot: Json
+          proposed_data: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
+          signed_at: string | null
+          signer_ip: string | null
+          signer_name: string | null
+          status: string
+          submitted_at: string
+          token_used: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "kyc_propositions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      kyc_mark_opened: { Args: { p_token: string }; Returns: undefined }
+      kyc_mark_sent: { Args: { p_client_id: string }; Returns: undefined }
+      kyc_pending_proposition_by_token: {
+        Args: { p_token: string }
+        Returns: Json
+      }
+      kyc_sign_by_token: {
+        Args: {
+          p_completion_rate: number
+          p_consent_accuracy: boolean
+          p_consent_incomplete: boolean
+          p_missing_fields: Json
+          p_signer_ip: string
+          p_signer_name: string
+          p_token: string
+        }
+        Returns: Json
+      }
+      kyc_submit_proposition_by_token: {
+        Args: {
+          p_completion_rate: number
+          p_consent_accuracy: boolean
+          p_consent_incomplete: boolean
+          p_missing_fields: Json
+          p_proposed_data: Json
+          p_signer_ip: string
+          p_signer_name: string
+          p_token: string
+        }
+        Returns: Json
+      }
       mask_account: { Args: { num: string }; Returns: string }
       mask_email: { Args: { email: string }; Returns: string }
       mask_phone: { Args: { phone: string }; Returns: string }
+      purge_rate_limit_hits: {
+        Args: { p_older_than_seconds?: number }
+        Returns: number
+      }
       unaccent: { Args: { "": string }; Returns: string }
       upsert_google_token: {
         Args: {
@@ -2311,12 +2802,11 @@ export const Constants = {
   },
 } as const
 
-// ---------------------------------------------------------------------------
-// Convenience type aliases (manually maintained — not part of Supabase gen)
-// If you re-run `supabase gen types typescript`, re-append this block.
-// ---------------------------------------------------------------------------
-
-// Enum Types
+// =====================================================================
+// Aliases custom PEV — à maintenir manuellement après chaque
+// `supabase gen types typescript` (ils ne sont pas dans la sortie std).
+// Raccourcissent les imports dans tout le code applicatif.
+// =====================================================================
 export type RoleType = Database["public"]["Enums"]["role_type"]
 export type StatutKycType = Database["public"]["Enums"]["statut_kyc_type"]
 export type FinancementType = Database["public"]["Enums"]["financement_type"]
@@ -2325,7 +2815,6 @@ export type ModeDetentionType = Database["public"]["Enums"]["mode_detention_type
 export type PaiementType = Database["public"]["Enums"]["paiement_type"]
 export type TypeFraisType = Database["public"]["Enums"]["type_frais"]
 
-// Table-specific types for convenience
 export type Consultant = Database["public"]["Tables"]["consultants"]["Row"]
 export type ConsultantInsert = Database["public"]["Tables"]["consultants"]["Insert"]
 export type ConsultantUpdate = Database["public"]["Tables"]["consultants"]["Update"]
@@ -2366,9 +2855,6 @@ export type Challenge = Database["public"]["Tables"]["challenges"]["Row"]
 export type ChallengeInsert = Database["public"]["Tables"]["challenges"]["Insert"]
 export type ChallengeUpdate = Database["public"]["Tables"]["challenges"]["Update"]
 
-// Note: legacy `audit_log` (singular) alias retiré — seule `audit_logs` existe
-// dans la DB régénérée. Voir AuditLogs plus bas.
-
 export type ClientCommentaire = Database["public"]["Tables"]["client_commentaires"]["Row"]
 export type ClientCommentaireInsert = Database["public"]["Tables"]["client_commentaires"]["Insert"]
 export type ClientPj = Database["public"]["Tables"]["client_pj"]["Row"]
@@ -2399,7 +2885,7 @@ export type VisibilitySettings = Database["public"]["Tables"]["visibility_settin
 export type FacturationConsultant = Database["public"]["Tables"]["facturation_consultant"]["Row"]
 export type ManagerCagnotte = Database["public"]["Tables"]["manager_cagnotte"]["Row"]
 
-// View types
+// Views
 export type VDossiersComplets = Database["public"]["Views"]["v_dossiers_complets"]["Row"]
 export type VCollecteParConsultant = Database["public"]["Views"]["v_collecte_par_consultant"]["Row"]
 export type VPipelineParConsultant = Database["public"]["Views"]["v_pipeline_par_consultant"]["Row"]

@@ -19,11 +19,15 @@ export function MaClienteleClientWrapper() {
       try {
         const supabase = createClient()
 
-        // Always filter by current user's prenom — Ma Clientèle = MES dossiers
+        // Ma Clientèle = MES dossiers. Point 3.1 (2026-04-24) : on
+        // filtre par consultant_id (UUID) au lieu de consultant_prenom
+        // pour éviter les collisions dues aux variations de casse/espace
+        // sur les prénoms (bug Hugues/Stéphane). consultant_id est
+        // exposé par v_dossiers_complets.
         const query = supabase
           .from('v_dossiers_complets')
-          .select('id, client_id, statut, montant, financement, date_operation, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_nom, consultant_prenom, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee')
-          .eq('consultant_prenom', consultant?.prenom || '')
+          .select('id, client_id, statut, montant, financement, date_operation, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_id, consultant_nom, consultant_prenom, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee')
+          .eq('consultant_id', consultant?.id || '')
 
         // Fetch both gestion and entree grilles
         const [dossiersRes, gestionRes, entreeRes] = await Promise.all([

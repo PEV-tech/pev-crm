@@ -28,16 +28,35 @@ export const SITUATION_MATRIMONIALE_OPTIONS = [
 ] as const
 export type SituationMatrimoniale = (typeof SITUATION_MATRIMONIALE_OPTIONS)[number]
 
-/** Régime matrimonial (affiché UNIQUEMENT si Marié(e) ou Pacsé(e)). */
-export const REGIME_MATRIMONIAL_OPTIONS = [
+/**
+ * Régimes matrimoniaux — séparés selon la situation (point 1.7 corrections
+ * 2026-04-24). Un couple marié n'a pas les mêmes régimes disponibles qu'un
+ * couple pacsé, donc on filtre dynamiquement via `getRegimesForSituation()`.
+ */
+export const REGIMES_MARIAGE_OPTIONS = [
   'Communauté réduite aux acquêts',
   'Séparation de biens',
   'Communauté universelle',
   'Participation aux acquêts',
   'Régime étranger',
-  // Pour les PACS
+] as const
+export type RegimeMariage = (typeof REGIMES_MARIAGE_OPTIONS)[number]
+
+export const REGIMES_PACS_OPTIONS = [
   'PACS — Séparation de biens',
   'PACS — Indivision',
+] as const
+export type RegimePacs = (typeof REGIMES_PACS_OPTIONS)[number]
+
+/**
+ * Union mariage + PACS — conservée pour les cas où on a besoin de valider
+ * qu'une valeur existante est reconnue (import, legacy, diff PDF…). Les
+ * composants de SAISIE doivent utiliser `getRegimesForSituation()` pour
+ * proposer UNIQUEMENT les régimes applicables à la situation courante.
+ */
+export const REGIME_MATRIMONIAL_OPTIONS = [
+  ...REGIMES_MARIAGE_OPTIONS,
+  ...REGIMES_PACS_OPTIONS,
 ] as const
 export type RegimeMatrimonial = (typeof REGIME_MATRIMONIAL_OPTIONS)[number]
 
@@ -50,6 +69,25 @@ export function needsRegimeMatrimonial(situation: string | null | undefined): bo
   if (!situation) return false
   const s = situation.toLowerCase()
   return s.startsWith('marié') || s.startsWith('marie') || s.startsWith('pacs')
+}
+
+/**
+ * Helper — retourne la liste des régimes matrimoniaux applicables pour
+ * une situation donnée. Permet de filtrer le select selon la situation
+ * (marié → régimes mariage, pacsé → régimes PACS).
+ *
+ * Retourne un tableau vide pour les situations qui n'impliquent pas de
+ * régime (célibataire, divorcé, veuf, concubinage) — l'appelant doit de
+ * toute façon masquer le champ via `needsRegimeMatrimonial()`.
+ */
+export function getRegimesForSituation(
+  situation: string | null | undefined,
+): readonly string[] {
+  if (!situation) return []
+  const s = situation.toLowerCase()
+  if (s.startsWith('marié') || s.startsWith('marie')) return REGIMES_MARIAGE_OPTIONS
+  if (s.startsWith('pacs')) return REGIMES_PACS_OPTIONS
+  return []
 }
 
 /** Type d'actif immobilier — aligne sur la typologie métier de PEV. */
@@ -77,8 +115,54 @@ export const TYPE_PRODUIT_FINANCIER_OPTIONS = [
   'Retraite (PER, Madelin, art. 83)',
   'Fonds euros',
   'Obligations',
+  'Private Equity',
 ] as const
 export type TypeProduitFinancier = (typeof TYPE_PRODUIT_FINANCIER_OPTIONS)[number]
+
+/**
+ * Patrimoine professionnel (point 1.6 corrections 2026-04-24).
+ *
+ * Deux grands blocs :
+ *   - Immobilier professionnel (locaux, véhicule, outils/machines…)
+ *   - Financier professionnel (BFR, trésorerie, …)
+ *
+ * La catégorie distingue les deux blocs au niveau de la ligne. La
+ * sous-catégorie est commune aux deux blocs — l'UI peut pré-filtrer
+ * celles qui font sens côté financier vs immo, mais le stockage est
+ * unifié pour garder la liberté éditoriale du consultant.
+ */
+export const PATRIMOINE_PRO_CATEGORIE_OPTIONS = [
+  { value: 'immo_pro', label: 'Immobilier professionnel' },
+  { value: 'financier_pro', label: 'Financier professionnel' },
+] as const
+export type PatrimoineProCategorie =
+  (typeof PATRIMOINE_PRO_CATEGORIE_OPTIONS)[number]['value']
+
+export const PATRIMOINE_PRO_SOUS_CATEGORIE_OPTIONS = [
+  { value: 'locaux', label: 'Locaux' },
+  { value: 'bfr', label: 'BFR' },
+  { value: 'tresorerie', label: 'Trésorerie' },
+  { value: 'outils_machines', label: 'Outils / Machines' },
+  { value: 'vehicule', label: 'Véhicule' },
+  { value: 'autre', label: 'Autre' },
+] as const
+export type PatrimoineProSousCategorie =
+  (typeof PATRIMOINE_PRO_SOUS_CATEGORIE_OPTIONS)[number]['value']
+
+/**
+ * Libellé UI d'une sous-catégorie (lookup helper).
+ */
+export function labelSousCategoriePro(value: string | null | undefined): string {
+  if (!value) return ''
+  const found = PATRIMOINE_PRO_SOUS_CATEGORIE_OPTIONS.find(o => o.value === value)
+  return found ? found.label : value
+}
+
+export function labelCategoriePro(value: string | null | undefined): string {
+  if (!value) return ''
+  const found = PATRIMOINE_PRO_CATEGORIE_OPTIONS.find(o => o.value === value)
+  return found ? found.label : value
+}
 
 /** Type de détention d'un actif — utile pour le patrimoine immobilier. */
 export const TYPE_DETENTION_OPTIONS = [
