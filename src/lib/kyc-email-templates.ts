@@ -22,6 +22,8 @@ import type { Database } from '@/types/database'
 export type EmailTemplateKey =
   | 'kyc_signed_consultant'
   | 'kyc_signed_client'
+  | 'kyc_envoi_lien'
+  | 'kyc_relance'
 
 export interface EmailTemplateVariables {
   clientLabel: string
@@ -32,6 +34,22 @@ export interface EmailTemplateVariables {
   /** Rendu "Adresse, Profession, …" ou "—" si vide. */
   missingFields: string
   consultantPrenom: string
+  /**
+   * Les variables ci-dessous sont utilisées par les templates
+   * `kyc_envoi_lien` (envoi initial du lien au client) et `kyc_relance`
+   * (relance envoyée tant que le KYC n'est pas signé). Elles peuvent
+   * rester vides pour les templates post-signature historiques.
+   */
+  /** URL publique complète vers `/kyc/[token]` (inclut le token courant). */
+  portailUrl: string
+  /** Date d'envoi du lien formatée FR (ex. "23/04/2026 à 09:15"). */
+  kycSentAtFr: string
+  /** Ancienneté du lien en jours depuis kyc_sent_at (0, 1, 2, …). */
+  joursDepuisEnvoi: number
+  /** Nom du cabinet, harmonisé — "Private Equity Valley". */
+  cabinetNom: string
+  /** Nom complet du consultant pour signature (prenom + nom). */
+  consultantNom: string
 }
 
 export interface LoadedTemplate {
@@ -99,6 +117,12 @@ export function substituteVars(
     completionRate: String(vars.completionRate),
     missingFields: vars.missingFields,
     consultantPrenom: vars.consultantPrenom,
+    // Variables ajoutées pour les templates kyc_envoi_lien / kyc_relance.
+    portailUrl: vars.portailUrl,
+    kycSentAtFr: vars.kycSentAtFr,
+    joursDepuisEnvoi: String(vars.joursDepuisEnvoi),
+    cabinetNom: vars.cabinetNom,
+    consultantNom: vars.consultantNom,
   }
   return tpl.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (_m, name) => {
     return Object.prototype.hasOwnProperty.call(dict, name)
@@ -188,6 +212,38 @@ Pour toute question, répondez simplement à cet email ou contactez votre consei
 
 — L'équipe Private Equity Valley`,
   },
+  kyc_envoi_lien: {
+    subject: 'Votre dossier KYC à compléter — {{cabinetNom}}',
+    bodyText: `Bonjour {{clientFirstName}},
+
+Pour préparer votre dossier, je vous invite à renseigner vos informations via le lien sécurisé ci-dessous. Comptez une dizaine de minutes.
+
+{{portailUrl}}
+
+Ce lien est personnel et unique. Il vous permet de compléter la fiche à votre rythme puis de la signer électroniquement une fois terminée.
+
+Si une information vous manque ou si vous avez la moindre question, répondez simplement à cet email.
+
+Cordialement,
+{{consultantNom}}
+{{cabinetNom}}`,
+  },
+  kyc_relance: {
+    subject: 'Rappel — votre dossier KYC à finaliser ({{joursDepuisEnvoi}} jours)',
+    bodyText: `Bonjour {{clientFirstName}},
+
+Je reviens vers vous au sujet de votre dossier KYC, que je vous ai transmis le {{kycSentAtFr}} ({{joursDepuisEnvoi}} jours) et que je n'ai pas encore reçu signé.
+
+Pour reprendre votre saisie là où vous l'aviez laissée, voici à nouveau votre lien personnel :
+
+{{portailUrl}}
+
+Cela ne prend que quelques minutes. Si vous rencontrez une difficulté ou avez besoin d'un accompagnement pour remplir la fiche, n'hésitez pas à me répondre directement.
+
+Cordialement,
+{{consultantNom}}
+{{cabinetNom}}`,
+  },
 }
 
 /**
@@ -200,6 +256,12 @@ export function titleForTemplateKey(
 ): string {
   if (key === 'kyc_signed_consultant') {
     return isIncomplete ? 'Signature KYC — INCOMPLÈTE' : 'Signature KYC reçue'
+  }
+  if (key === 'kyc_envoi_lien') {
+    return 'Votre dossier KYC à compléter'
+  }
+  if (key === 'kyc_relance') {
+    return 'Rappel — votre dossier KYC à finaliser'
   }
   return 'Votre dossier KYC a bien été signé'
 }
