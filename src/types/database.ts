@@ -15,7 +15,7 @@ export type Database = {
   public: {
     Tables: {
       apporteurs: {
-        Row: {
+        Row: 
           created_at: string | null
           created_by: string | null
           id: string
@@ -1843,6 +1843,8 @@ export type Database = {
           taux_apporteur_ext: number | null
           taux_commission: number | null
           taux_gestion: number | null
+          taux_produit_compagnie_description: string | null
+          taux_produit_compagnie_id: string | null
           taux_remuneration: number | null
         }
         Relationships: []
@@ -1899,6 +1901,8 @@ export type Database = {
           taux_apporteur_ext: number | null
           taux_commission: number | null
           taux_gestion: number | null
+          taux_produit_compagnie_description: string | null
+          taux_produit_compagnie_id: string | null
           taux_remuneration: number | null
         }
         Relationships: []
