@@ -209,8 +209,16 @@ export function DossiersClient({
       if (d.client_statut !== 'non_abouti') return true
       return includeNonAbouti
     })
+    // Point 5.2 (2026-04-24) — Le compteur "Tous" affichait la taille
+    // de la page courante (25 max via range supabase) et non le total
+    // réel de dossiers. On préfère désormais `totalCount` côté serveur
+    // quand il est disponible. Les sous-compteurs (prospects, en_cours,
+    // finalises, non_abouti) restent locaux car on ne peut pas les
+    // obtenir sans un count séparé par statut — c'est acceptable tant
+    // que la pagination est petite, mais à tracker si ça diverge trop.
+    const totalTous = totalCount > 0 ? totalCount : visibleData.length
     const counts = {
-      tous: visibleData.length,
+      tous: totalTous,
       prospects: visibleData.filter((d) => d.statut === 'prospect').length,
       en_cours: visibleData.filter((d) => d.statut === 'client_en_cours').length,
       finalises: visibleData.filter((d) => d.statut === 'client_finalise').length,
@@ -220,7 +228,7 @@ export function DossiersClient({
     const totalMontant = visibleData.reduce((sum, d) => sum + (d.montant || 0), 0)
 
     return { counts, totalMontant }
-  }, [data, includeNonAbouti])
+  }, [data, includeNonAbouti, totalCount])
 
   /**
    * Point 2.3 (2026-04-24) — Navigation sur clic de ligne.

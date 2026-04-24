@@ -358,6 +358,17 @@ export default function ClientDetailPage() {
   const totalPipeline = dossiers
     .filter(d => d.statut === 'client_en_cours')
     .reduce((s, d) => s + (d.montant || 0), 0)
+  // Point 5.3 (2026-04-24) — Pipeline prospects : cas signalé par Maxine
+  // (fiche Marion Freret affiche "Pipeline 0 €" alors qu'elle a des
+  // dossiers prospects). La convention PEV réserve "pipeline" aux
+  // dossiers statut='client_en_cours' — cohérent avec ma-clientele et
+  // dossiers-client. Pour ne pas changer la sémantique métier globale,
+  // on expose un compteur complémentaire "prospects" dans la même card
+  // afin que la lecture de la fiche ne soit plus trompeuse.
+  const totalProspects = dossiers
+    .filter(d => d.statut === 'prospect')
+    .reduce((s, d) => s + (d.montant || 0), 0)
+  const prospectCount = dossiers.filter(d => d.statut === 'prospect').length
   const totalCommission = dossiers.reduce((s, d) => s + (isConsultant ? (d.rem_apporteur || 0) : (d.commission_brute || 0)), 0)
   const finalisedCount = dossiers.filter(d => d.statut === 'client_finalise').length
   const enCoursCount = dossiers.filter(d => d.statut === 'client_en_cours').length
@@ -516,6 +527,16 @@ export default function ClientDetailPage() {
         <Card className="p-4">
           <p className="text-xs font-medium text-gray-500">Pipeline en cours</p>
           <p className="text-2xl font-bold text-amber-700 mt-1">{formatCurrency(totalPipeline)}</p>
+          {/* Point 5.3 (2026-04-24) — Contexte prospect : si le pipeline
+              "en cours" est vide mais qu'il reste des dossiers prospect
+              attachés au client, on l'annonce ici pour éviter le "0 €"
+              trompeur (cas signalé sur la fiche Marion Freret). */}
+          {totalPipeline === 0 && prospectCount > 0 && (
+            <p className="text-[11px] text-gray-500 mt-1">
+              + <span className="font-semibold text-gray-700">{formatCurrency(totalProspects)}</span> en prospect
+              {' '}({prospectCount})
+            </p>
+          )}
         </Card>
         <Card className="p-4">
           <p className="text-xs font-medium text-gray-500">{isConsultant ? 'Mes commissions' : 'Commissions totales'}</p>
