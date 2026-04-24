@@ -36,7 +36,12 @@ const navigationItems = [
     icon: LayoutDashboard,
   },
   {
-    label: 'Dossiers',
+    // Renommé "Dossiers" → "Clients" 2026-04-24 : la page agrège
+    // désormais les dossiers + les fiches clients sans dossier
+    // (= prospects), donc "Clients" est plus cohérent métier.
+    // La route /dashboard/dossiers reste inchangée pour ne pas
+    // casser les bookmarks et les liens existants.
+    label: 'Clients',
     href: '/dashboard/dossiers',
     icon: FolderOpen,
   },
@@ -112,7 +117,7 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
     }
   }
 
-  const managerOnlyLabels = ['Dossiers', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse']
+  const managerOnlyLabels = ['Clients', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse']
   const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
   // Back office: no "Ma Clientèle" (pas de clientèle propre), no "Rémunérations" (suivi seulement)
   const backOfficeHiddenLabels = ['Ma Clientèle', 'Rémunérations']

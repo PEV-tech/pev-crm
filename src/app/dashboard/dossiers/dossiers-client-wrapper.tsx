@@ -24,11 +24,27 @@ export type DossierOrOrphan = VDossiersComplets & {
   client_statut?: 'actif' | 'non_abouti' | null
 }
 
+/**
+ * Bug 6 (2026-04-24) — Liste exhaustive des consultants pour le dropdown
+ * de filtre. Auparavant dérivée de `data` (page courante paginée), donc
+ * incomplète : seuls les consultants ayant des dossiers dans les 25 lignes
+ * affichées apparaissaient. Désormais fetchée séparément depuis la table
+ * `consultants` et passée au client — label stable (prenom + nom DB) et
+ * liste complète indépendante de la pagination. Fix aussi Bug 5 par effet
+ * de bord : les labels viennent maintenant de la table consultants, plus
+ * de divergence possible avec v_dossiers_complets.
+ */
+export type ConsultantOption = {
+  id: string
+  label: string
+}
+
 export function DossiersClientWrapper() {
   const { consultant } = useUser()
   const [data, setData] = React.useState<DossierOrOrphan[]>([])
   const [gestionGrilles, setGestionGrilles] = React.useState<GrilleGestion[]>([])
   const [entreeGrilles, setEntreeGrilles] = React.useState<GrilleGestion[]>([])
+  const [consultantsList, setConsultantsList] = React.useState<ConsultantOption[]>([])
   const [loading, setLoading] = React.useState(true)
   const [totalCount, setTotalCount] = React.useState(0)
   const [currentPage, setCurrentPage] = React.useState(0)
@@ -37,20 +53,17 @@ export function DossiersClientWrapper() {
     try {
       setLoading(true)
       const supabase = createClient()
-      const from = page * DOSSIERS_PER_PAGE
-      const to = from + DOSSIERS_PER_PAGE - 1
 
       // P0 fix: consultants must only see their own dossiers
       const isManager = consultant?.role === 'manager'
       const isBackOffice = consultant?.role === 'back_office'
-      // Point 3.1 (2026-04-24) — Filtrage backend par `consultant_id`
-      // (UUID) et plus par `consultant_prenom` (texte). L'ancien filtre
-      // était fragile aux espaces, à la casse et aux éventuels homonymes
-      // de prénom, d'où le bug rapporté (sélection de Hugues qui
-      // remontait parfois des clients de Stéphane quand les prénoms
-      // étaient mal normalisés). consultant_id est exposé par
-      // v_dossiers_complets depuis recreate-v-dossiers-complets-full.sql.
-      let dossiersQuery = supabase.from('v_dossiers_complets').select('id, client_id, statut, montant, financement, date_operation, apporteur_label, referent, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_id, consultant_nom, consultant_prenom, consultant_zone, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee, part_cabinet, rem_apporteur, date_facture', { count: 'exact' }).order('date_operation', { ascending: false }).range(from, to)
+      // Bug 1 (2026-04-24) — Pagination retirée. Le volume de dossiers
+      // reste < 500 côté PEV ; la complexité de pagination + count gonflé
+      // par DISTINCT ON dans v_dossiers_complets ne vaut pas le coup.
+      // On charge tout, les stats redeviennent fiables côté front.
+      // Point 3.1 — Filtrage backend par `consultant_id` (UUID), pas par
+      // prenom. Voir aussi le fetch séparé sur `dossiers` pour le count.
+      let dossiersQuery = supabase.from('v_dossiers_complets').select('id, client_id, statut, montant, financement, date_operation, apporteur_label, referent, client_nom, client_prenom, client_pays, statut_kyc, der, pi, preco, lm, rm, consultant_id, consultant_nom, consultant_prenom, consultant_zone, produit_nom, produit_categorie, compagnie_nom, commission_brute, rem_apporteur, facturee, payee, part_cabinet, rem_apporteur, date_facture').order('date_operation', { ascending: false })
       if (!isManager && !isBackOffice && consultant?.id) {
         dossiersQuery = dossiersQuery.eq('consultant_id', consultant.id)
       }
@@ -75,7 +88,14 @@ export function DossiersClientWrapper() {
         clientsQuery = clientsQuery.eq('consultant_id', consultant.id)
       }
 
-      const [dossiersRes, gestionRes, entreeRes, clientsRes] = await Promise.all([
+      // Bug 6 — Fetch séparé de la liste complète des consultants pour
+      // alimenter le dropdown de filtre. Non paginé (≤20 consultants).
+      const consultantsListQuery = supabase
+        .from('consultants')
+        .select('id, prenom, nom, actif')
+        .order('prenom', { ascending: true })
+
+      const [dossiersRes, gestionRes, entreeRes, clientsRes, consultantsListRes] = await Promise.all([
         dossiersQuery,
         supabase
           .from('grilles_frais')
@@ -90,6 +110,7 @@ export function DossiersClientWrapper() {
           .eq('actif', true)
           .order('encours_min', { ascending: true }),
         clientsQuery,
+        consultantsListQuery,
       ])
 
       if (!dossiersRes.error) {
@@ -157,11 +178,11 @@ export function DossiersClientWrapper() {
             : []
 
         setData([...enrichedDossiers, ...orphans])
-        // totalCount reste celui des dossiers pour la pagination "vraie".
-        // Les orphelins sont ajoutés hors pagination — acceptable tant que
-        // le volume reste faible (< quelques centaines de prospects).
-        setTotalCount(dossiersRes.count || 0)
-        setCurrentPage(page)
+        // Bug 1 (2026-04-24) — totalCount = taille réelle des données
+        // après déduplication DISTINCT ON + fusion orphans. Plus de
+        // pagination ni de count serveur gonflé.
+        setTotalCount(enrichedDossiers.length + orphans.length)
+        setCurrentPage(0)
       } else {
         setData([])
         setTotalCount(0)
@@ -169,6 +190,19 @@ export function DossiersClientWrapper() {
 
       if (!gestionRes.error && gestionRes.data) setGestionGrilles(gestionRes.data)
       if (!entreeRes.error && entreeRes.data) setEntreeGrilles(entreeRes.data)
+
+      // Bug 6 — Liste complète des consultants pour le dropdown.
+      // On inclut les inactifs au cas où des dossiers historiques y sont
+      // rattachés (sinon le filtre afficherait "consultant_id inconnu"
+      // pour ces dossiers). Label = prénom + nom. Les inactifs sont
+      // triés à la fin via une petite logique de sort.
+      if (!consultantsListRes.error && consultantsListRes.data) {
+        const opts: ConsultantOption[] = (consultantsListRes.data as any[]).map((c) => ({
+          id: c.id as string,
+          label: `${c.prenom || ''} ${c.nom || ''}`.trim() || '(consultant sans nom)',
+        }))
+        setConsultantsList(opts)
+      }
     } catch (error) {
       setData([])
       setTotalCount(0)
@@ -195,6 +229,7 @@ export function DossiersClientWrapper() {
       currentPage={currentPage}
       itemsPerPage={DOSSIERS_PER_PAGE}
       onPageChange={fetchData}
+      consultantsList={consultantsList}
     />
   )
 }
