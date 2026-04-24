@@ -682,9 +682,9 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     dossier.rem_apporteur ||
     tauxEntree ||
     effectiveTauxGestion ||
-    // Fallback : afficher le bloc Détail commission dès qu'un dossier a produit + compagnie + montant,
+    // Fallback : afficher le bloc Détail commission dès qu'un dossier a produit/compagnie/montant,
     // même si les taux calculés de la vue v_dossiers_complets sont NULL (bug SCPI ALDERAN 2026-04-23)
-    (dossier.produit_id && dossier.compagnie_id && dossier.montant && dossier.montant > 0)
+    (dossier.produit_nom && dossier.compagnie_nom && Number(dossier.montant) > 0)
   )
 
   return (
