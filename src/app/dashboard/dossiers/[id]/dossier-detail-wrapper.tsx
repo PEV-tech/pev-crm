@@ -58,7 +58,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [editForm, setEditForm] = React.useState<EditFormType>({})
   const [tauxGestion, setTauxGestion] = React.useState<number | null>(null)
   const [tauxEntree, setTauxEntree] = React.useState<number | null>(null)
-  const [produits, setProduits] = React.useState<{ id: string; nom: string }[]>([])
+  const [produits, setProduits] = React.useState<{ id: string; nom: string; categorie: string | null }[]>([])
   const [compagnies, setCompagnies] = React.useState<{ id: string; nom: string }[]>([])
   const [tauxMap, setTauxMap] = React.useState<{ produit_id: string | null; compagnie_id: string | null; taux: number }[]>([])
   const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
@@ -103,7 +103,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       try {
         const [dossierRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
           supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle(),
-          supabase.from('produits').select('id, nom').order('nom'),
+          supabase.from('produits').select('id, nom, categorie').order('nom'),
           supabase.from('compagnies').select('id, nom').order('nom'),
           supabase.from('taux_produit_compagnie').select('produit_id, compagnie_id, taux').eq('actif', true),
           supabase.from('apporteurs').select('id, nom, prenom, taux_commission').order('nom'),
@@ -266,6 +266,70 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     const { name, value } = e.target
     setEditForm((prev: any) => ({ ...prev, [name]: value }))
   }
+
+  // -------- Cascade Catégorie → Compagnie → Produit (étape 2 part 2) --------
+  // `produits` table est en fait le référentiel de produits au sens métier (ACTIVIMMO,
+  // COMETE, CAV LUX...). La catégorie est un attribut (SCPI, CAV, PE...) qu'on expose
+  // en premier dropdown pour filtrer les compagnies puis les produits disponibles.
+
+  const categorieSelectionnee = React.useMemo<string | ''>(() => {
+    if (!editForm.produit_id) return ''
+    const p = produits.find((pp) => pp.id === editForm.produit_id)
+    return p?.categorie || ''
+  }, [editForm.produit_id, produits])
+
+  const categoriesDisponibles = React.useMemo<string[]>(() => {
+    const s = new Set<string>()
+    for (const p of produits) if (p.categorie) s.add(p.categorie)
+    return Array.from(s).sort()
+  }, [produits])
+
+  const compagniesFiltrees = React.useMemo(() => {
+    if (!categorieSelectionnee) return compagnies
+    // Compagnies qui ont au moins un couple actif avec un produit de cette catégorie
+    const produitIdsDeCategorie = new Set(
+      produits.filter((p) => p.categorie === categorieSelectionnee).map((p) => p.id)
+    )
+    const compagnieIdsPossibles = new Set(
+      tauxMap
+        .filter((t) => t.produit_id && produitIdsDeCategorie.has(t.produit_id))
+        .map((t) => t.compagnie_id)
+        .filter((id): id is string => !!id)
+    )
+    return compagnies.filter((c) => compagnieIdsPossibles.has(c.id))
+  }, [categorieSelectionnee, compagnies, produits, tauxMap])
+
+  const produitsFiltres = React.useMemo(() => {
+    let list = produits
+    if (categorieSelectionnee) list = list.filter((p) => p.categorie === categorieSelectionnee)
+    if (editForm.compagnie_id) {
+      const produitIdsDuCouple = new Set(
+        tauxMap
+          .filter((t) => t.compagnie_id === editForm.compagnie_id && t.produit_id)
+          .map((t) => t.produit_id as string)
+      )
+      list = list.filter((p) => produitIdsDuCouple.has(p.id))
+    }
+    return list
+  }, [categorieSelectionnee, editForm.compagnie_id, produits, tauxMap])
+
+  const handleCategorieChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newCat = e.target.value
+    setEditForm((prev: any) => {
+      const currentProduit = produits.find((p) => p.id === prev.produit_id)
+      const shouldReset = !currentProduit || currentProduit.categorie !== newCat
+      return {
+        ...prev,
+        produit_id: shouldReset ? '' : prev.produit_id,
+        compagnie_id: shouldReset ? '' : prev.compagnie_id,
+      }
+    })
+    setCategorieOverride(newCat)
+  }
+
+  // Shadow state : permet d'avoir une catégorie sélectionnée même quand produit_id est vide
+  const [categorieOverride, setCategorieOverride] = React.useState<string>('')
+  const categorieAffichee = categorieSelectionnee || categorieOverride
 
   const handleSave = async () => {
     setSaving(true)
@@ -850,29 +914,42 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Produit</p>
+                  <p className="text-sm font-medium text-gray-500">Catégorie</p>
                   {isEditing ? (
-                    <Select name="produit_id" value={editForm.produit_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">— Aucun —</option>
-                      {produits.map((p) => (
-                        <option key={p.id} value={p.id}>{p.nom}</option>
+                    <Select name="__categorie" value={categorieAffichee} onChange={handleCategorieChange} className="mt-1">
+                      <option value="">— Aucune —</option>
+                      {categoriesDisponibles.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </Select>
                   ) : (
-                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_nom || '-'}</p>
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_categorie || '-'}</p>
                   )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Compagnie</p>
                   {isEditing ? (
                     <Select name="compagnie_id" value={editForm.compagnie_id} onChange={handleEditChange} className="mt-1">
-                      <option value="">— Aucun —</option>
-                      {compagnies.map((c) => (
+                      <option value="">— Aucune —</option>
+                      {compagniesFiltrees.map((c) => (
                         <option key={c.id} value={c.id}>{c.nom}</option>
                       ))}
                     </Select>
                   ) : (
                     <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.compagnie_nom || '-'}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Produit</p>
+                  {isEditing ? (
+                    <Select name="produit_id" value={editForm.produit_id} onChange={handleEditChange} className="mt-1">
+                      <option value="">— Aucun —</option>
+                      {produitsFiltres.map((p) => (
+                        <option key={p.id} value={p.id}>{p.nom}</option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_nom || '-'}</p>
                   )}
                 </div>
                 {isEditing && editForm.produit_id && editForm.compagnie_id && autoTaux === null && (
