@@ -3262,6 +3262,84 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             </div>
           </div>
 
+          {/* Timeline 3-points : Envoyé → Ouvert → Signé. Donne une lecture
+              chronologique à la volée sans ouvrir le tooltip du badge.
+              Les 3 dates sont déjà calculées plus haut (kycSentAt,
+              kycOpenedAt, kycSignedAt). On n'affiche la timeline que si au
+              moins l'envoi a eu lieu — avant ça, le badge "Brouillon" suffit
+              (pas d'événement à tracer). */}
+          {!isEditMode && kycSentAt && (() => {
+            const fmtShort = (iso: string | null): string => {
+              if (!iso) return '—'
+              const d = new Date(iso)
+              if (Number.isNaN(d.getTime())) return '—'
+              return d.toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+              })
+            }
+            const steps: Array<{
+              label: string
+              date: string | null
+              tone: 'blue' | 'amber' | 'green'
+            }> = [
+              { label: 'Envoyé', date: kycSentAt, tone: 'blue' },
+              { label: 'Ouvert', date: kycOpenedAt, tone: 'amber' },
+              { label: 'Signé', date: kycSignedAt, tone: 'green' },
+            ]
+            const toneClasses: Record<'blue' | 'amber' | 'green', { dot: string; label: string }> = {
+              blue: { dot: 'bg-blue-500 border-blue-500', label: 'text-blue-700' },
+              amber: { dot: 'bg-amber-500 border-amber-500', label: 'text-amber-700' },
+              green: { dot: 'bg-green-500 border-green-500', label: 'text-green-700' },
+            }
+            return (
+              <div className="mt-3 flex items-start gap-2 text-xs">
+                {steps.map((step, i) => {
+                  const done = !!step.date
+                  const nextDone = !!steps[i + 1]?.date
+                  const t = toneClasses[step.tone]
+                  return (
+                    <React.Fragment key={step.label}>
+                      <div className="flex flex-col items-center min-w-[80px]">
+                        <div
+                          className={`w-3 h-3 rounded-full border-2 ${
+                            done ? t.dot : 'bg-white border-gray-300'
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <div
+                          className={`mt-1 font-medium ${
+                            done ? t.label : 'text-gray-400'
+                          }`}
+                        >
+                          {step.label}
+                        </div>
+                        <div
+                          className={`${
+                            done ? 'text-gray-600' : 'text-gray-400'
+                          }`}
+                        >
+                          {fmtShort(step.date)}
+                        </div>
+                      </div>
+                      {i < steps.length - 1 && (
+                        <div
+                          className={`flex-1 h-0.5 mt-1.5 ${
+                            done && nextDone
+                              ? 'bg-gray-400'
+                              : 'bg-gray-200'
+                          }`}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </div>
+            )
+          })()}
+
           {/* Feedback inline après "Copier le lien" ou "Envoyer par email". */}
           {linkFeedback && (
             <div className="mt-3 p-2 rounded-md bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center gap-2">
