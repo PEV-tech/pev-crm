@@ -60,7 +60,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   const [tauxEntree, setTauxEntree] = React.useState<number | null>(null)
   const [produits, setProduits] = React.useState<{ id: string; nom: string; categorie: string | null }[]>([])
   const [compagnies, setCompagnies] = React.useState<{ id: string; nom: string }[]>([])
-  const [tauxMap, setTauxMap] = React.useState<{ produit_id: string | null; compagnie_id: string | null; taux: number }[]>([])
+  const [tauxMap, setTauxMap] = React.useState<{ id: string; produit_id: string | null; compagnie_id: string | null; taux: number; description: string | null }[]>([])
+  const [dossierTpcId, setDossierTpcId] = React.useState<string | null>(null)
   const [autoTaux, setAutoTaux] = React.useState<number | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
@@ -101,11 +102,14 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
   React.useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [dossierRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
+        const [dossierRes, dossierRawRes, produitsRes, compagniesRes, tauxRes, apporteursRes] = await Promise.all([
           supabase.from('v_dossiers_complets').select('*').eq('id', id).limit(1).maybeSingle(),
+          // Fetch direct sur la table dossiers pour récupérer taux_produit_compagnie_id
+          // (pas encore exposé par v_dossiers_complets).
+          supabase.from('dossiers').select('taux_produit_compagnie_id').eq('id', id).limit(1).maybeSingle(),
           supabase.from('produits').select('id, nom, categorie').order('nom'),
           supabase.from('compagnies').select('id, nom').order('nom'),
-          supabase.from('taux_produit_compagnie').select('produit_id, compagnie_id, taux').eq('actif', true),
+          supabase.from('taux_produit_compagnie').select('id, produit_id, compagnie_id, taux, description').eq('actif', true),
           supabase.from('apporteurs').select('id, nom, prenom, taux_commission').order('nom'),
         ])
 
@@ -125,6 +129,13 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           // Find IDs from view data by matching names to lists
           const produitId = produitsRes.data?.find((p) => p.nom === data.produit_nom)?.id || ''
           const compagnieId = compagniesRes.data?.find((c) => c.nom === data.compagnie_nom)?.id || ''
+          // taux_produit_compagnie_id : prendre celui stocké sur le dossier si présent,
+          // sinon fallback sur la première ligne taux matching (produit_id, compagnie_id).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const storedTpcId = (dossierRawRes.data as any)?.taux_produit_compagnie_id as string | null | undefined
+          setDossierTpcId(storedTpcId || null)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tpcId = storedTpcId || tauxRes.data?.find((t: any) => t.produit_id === produitId && t.compagnie_id === compagnieId)?.id || ''
           setEditForm({
             statut: data.statut || 'prospect',
             montant: data.montant || '',
@@ -133,6 +144,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             commentaire: data.commentaire || '',
             produit_id: produitId,
             compagnie_id: compagnieId,
+            taux_produit_compagnie_id: tpcId,
             statut_kyc: data.statut_kyc || 'non',
             der: data.der ? 'oui' : 'non',
             pi: data.pi ? 'oui' : 'non',
@@ -284,33 +296,27 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     return Array.from(s).sort()
   }, [produits])
 
-  const compagniesFiltrees = React.useMemo(() => {
-    if (!categorieSelectionnee) return compagnies
-    // Compagnies qui ont au moins un couple actif avec un produit de cette catégorie
-    const produitIdsDeCategorie = new Set(
-      produits.filter((p) => p.categorie === categorieSelectionnee).map((p) => p.id)
-    )
-    const compagnieIdsPossibles = new Set(
-      tauxMap
-        .filter((t) => t.produit_id && produitIdsDeCategorie.has(t.produit_id))
-        .map((t) => t.compagnie_id)
-        .filter((id): id is string => !!id)
-    )
-    return compagnies.filter((c) => compagnieIdsPossibles.has(c.id))
-  }, [categorieSelectionnee, compagnies, produits, tauxMap])
+  // Afficher toutes les compagnies (pas de filtre par catégorie) — permet de choisir
+  // un partenaire même s'il n'a pas encore de couple déclaré dans cette catégorie.
+  const compagniesFiltrees = compagnies
 
-  const produitsFiltres = React.useMemo(() => {
-    let list = produits
-    if (categorieSelectionnee) list = list.filter((p) => p.categorie === categorieSelectionnee)
-    if (editForm.compagnie_id) {
-      const produitIdsDuCouple = new Set(
-        tauxMap
-          .filter((t) => t.compagnie_id === editForm.compagnie_id && t.produit_id)
-          .map((t) => t.produit_id as string)
+  // Produits spécifiques = lignes taux_produit_compagnie filtrées par (categorie + compagnie).
+  const couplesAvecLabel = React.useMemo(() => {
+    let rows = tauxMap
+    if (categorieSelectionnee) {
+      const produitIdsDeCategorie = new Set(
+        produits.filter((p) => p.categorie === categorieSelectionnee).map((p) => p.id)
       )
-      list = list.filter((p) => produitIdsDuCouple.has(p.id))
+      rows = rows.filter((t) => t.produit_id && produitIdsDeCategorie.has(t.produit_id))
     }
-    return list
+    if (editForm.compagnie_id) {
+      rows = rows.filter((t) => t.compagnie_id === editForm.compagnie_id)
+    }
+    return rows.map((t) => {
+      const produitNom = produits.find((p) => p.id === t.produit_id)?.nom || ''
+      const label = (t.description && t.description.trim()) || produitNom || '—'
+      return { id: t.id, produit_id: t.produit_id, compagnie_id: t.compagnie_id, label }
+    })
   }, [categorieSelectionnee, editForm.compagnie_id, produits, tauxMap])
 
   const handleCategorieChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -322,9 +328,23 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         ...prev,
         produit_id: shouldReset ? '' : prev.produit_id,
         compagnie_id: shouldReset ? '' : prev.compagnie_id,
+        taux_produit_compagnie_id: shouldReset ? '' : prev.taux_produit_compagnie_id,
       }
     })
     setCategorieOverride(newCat)
+  }
+
+  // Choisir un produit spécifique = choisir une ligne taux_produit_compagnie précise.
+  // On rétro-remplit produit_id + compagnie_id depuis la ligne choisie.
+  const handleProduitSpecifiqueChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const tpcId = e.target.value
+    const ligne = tauxMap.find((t) => t.id === tpcId)
+    setEditForm((prev: any) => ({
+      ...prev,
+      taux_produit_compagnie_id: tpcId,
+      produit_id: ligne?.produit_id || prev.produit_id || '',
+      compagnie_id: ligne?.compagnie_id || prev.compagnie_id || '',
+    }))
   }
 
   // Shadow state : permet d'avoir une catégorie sélectionnée même quand produit_id est vide
@@ -348,6 +368,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
         date_signature: editForm.date_signature || null,
         mode_detention: editForm.mode_detention || null,
       }
+      // FK vers la ligne taux_produit_compagnie spécifique (colonne ajoutée 2026-04-24).
+      // Types Supabase pas encore régénérés : cast via any le temps que database.ts soit à jour.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(dossierUpdate as any).taux_produit_compagnie_id = editForm.taux_produit_compagnie_id || null
       // Include co_titulaire_id if changed
       if (coTitulaireChanged) {
         dossierUpdate.co_titulaire_id = coTitulaire?.id || null
@@ -942,14 +966,30 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
                 <div>
                   <p className="text-sm font-medium text-gray-500">Produit</p>
                   {isEditing ? (
-                    <Select name="produit_id" value={editForm.produit_id} onChange={handleEditChange} className="mt-1">
+                    <Select
+                      name="__taux_produit_compagnie_id"
+                      value={editForm.taux_produit_compagnie_id || ''}
+                      onChange={handleProduitSpecifiqueChange}
+                      className="mt-1"
+                    >
                       <option value="">— Aucun —</option>
-                      {produitsFiltres.map((p) => (
-                        <option key={p.id} value={p.id}>{p.nom}</option>
+                      {couplesAvecLabel.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
                       ))}
                     </Select>
                   ) : (
-                    <p className="text-lg font-semibold text-gray-900 mt-1">{dossier.produit_nom || '-'}</p>
+                    <p className="text-lg font-semibold text-gray-900 mt-1">
+                      {(() => {
+                        const tpc = dossierTpcId
+                          ? tauxMap.find((t) => t.id === dossierTpcId)
+                          : tauxMap.find(
+                              (t) =>
+                                t.produit_id === produits.find((p) => p.nom === dossier.produit_nom)?.id &&
+                                t.compagnie_id === compagnies.find((c) => c.nom === dossier.compagnie_nom)?.id
+                            )
+                        return (tpc?.description && tpc.description.trim()) || dossier.produit_nom || '-'
+                      })()}
+                    </p>
                   )}
                 </div>
                 {isEditing && editForm.produit_id && editForm.compagnie_id && autoTaux === null && (
