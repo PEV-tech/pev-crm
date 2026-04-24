@@ -63,15 +63,18 @@ CREATE INDEX IF NOT EXISTS idx_clients_statut_non_abouti
 -- =========================================================================
 -- BLOC C — Étape 3.2 : consultant fictif POOL
 -- =========================================================================
--- Note : on n'utilise pas un UUID fixe "0…pl" (Postgres le tolère mais pas
--- toutes les libs clients). On insère via ON CONFLICT (email) DO NOTHING
--- pour être ré-entrant, et on retrouve l'id par prenom='POOL'.
-INSERT INTO consultants (prenom, nom, email, role, taux_remuneration, zone, actif)
-VALUES (
-  'POOL', 'POOL', 'pool@private-equity-valley.com',
-  'consultant', 0, NULL, true
-)
-ON CONFLICT (email) DO NOTHING;
+-- Note : la table `consultants` n'a pas de colonne `email` (vérifié
+-- contre src/types/database.ts et corrigé après ERROR 42703 remonté en
+-- prod le 2026-04-24). L'email est porté par `auth.users` via
+-- `auth_user_id`, pas directement sur `consultants`. On insère donc
+-- uniquement les colonnes réellement présentes, et on gère
+-- l'idempotence via WHERE NOT EXISTS sur (prenom, nom) — le couple
+-- "POOL/POOL" est par définition unique côté métier.
+INSERT INTO consultants (prenom, nom, role, taux_remuneration, zone, actif)
+SELECT 'POOL', 'POOL', 'consultant', 0, NULL, true
+WHERE NOT EXISTS (
+  SELECT 1 FROM consultants WHERE prenom = 'POOL' AND nom = 'POOL'
+);
 
 -- Rattacher clients orphelins au POOL
 UPDATE clients
