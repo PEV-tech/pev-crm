@@ -1896,6 +1896,8 @@ export type Database = {
           taux_apporteur_ext: number | null
           taux_commission: number | null
           taux_gestion: number | null
+          taux_produit_compagnie_description: string | null
+          taux_produit_compagnie_id: string | null
           taux_remuneration: number | null
         }
         Relationships: []
@@ -1952,6 +1954,8 @@ export type Database = {
           taux_apporteur_ext: number | null
           taux_commission: number | null
           taux_gestion: number | null
+          taux_produit_compagnie_description: string | null
+          taux_produit_compagnie_id: string | null
           taux_remuneration: number | null
         }
         Relationships: []
