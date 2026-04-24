@@ -264,6 +264,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         pays: client?.pays,
         proprietaire_locataire: client?.proprietaire_locataire,
         montant_loyer: client?.montant_loyer,
+        charges_residence_principale: client?.charges_residence_principale,
         situation_matrimoniale: client?.situation_matrimoniale,
         regime_matrimonial: client?.regime_matrimonial,
         nombre_enfants: client?.nombre_enfants,
@@ -334,6 +335,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
             pays: data.pays,
             proprietaire_locataire: proprio,
             montant_loyer: data.montant_loyer,
+            charges_residence_principale: data.charges_residence_principale,
             situation_matrimoniale: sitMatri,
             regime_matrimonial: data.regime_matrimonial,
             nombre_enfants: data.nombre_enfants,
@@ -480,6 +482,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           pays: editData.pays,
           proprietaire_locataire: editData.proprietaire_locataire,
           montant_loyer: editData.montant_loyer,
+          charges_residence_principale: editData.charges_residence_principale,
           situation_matrimoniale: editData.situation_matrimoniale,
           regime_matrimonial: editData.regime_matrimonial,
           nombre_enfants: editData.nombre_enfants,
@@ -537,6 +540,7 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
         pays: client?.pays,
         proprietaire_locataire: client?.proprietaire_locataire,
         montant_loyer: client?.montant_loyer,
+        charges_residence_principale: client?.charges_residence_principale,
         situation_matrimoniale: client?.situation_matrimoniale,
         regime_matrimonial: client?.regime_matrimonial,
         nombre_enfants: client?.nombre_enfants,
@@ -921,6 +925,39 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         />
                       </div>
                     )}
+                    {/* Charges résidence principale conditionnelles : affichées
+                        si propriétaire ou usufruitier (crédit + copro + taxe
+                        foncière mensualisée). Champ miroir de montant_loyer. */}
+                    {(() => {
+                      const v = (data.proprietaire_locataire || '').toLowerCase()
+                      return v.includes('propri') || v.includes('usufruitier')
+                    })() && (
+                      <div>
+                        <label className="text-xs font-semibold text-gray-600">
+                          Charges résidence principale (€/mois)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={
+                            data.charges_residence_principale === null || data.charges_residence_principale === undefined
+                              ? ''
+                              : String(data.charges_residence_principale)
+                          }
+                          onChange={e => {
+                            const raw = e.target.value.trim()
+                            const parsed = raw === '' ? null : Number(raw)
+                            setEditData({
+                              ...editData,
+                              charges_residence_principale: Number.isFinite(parsed as number) ? parsed : null,
+                            })
+                          }}
+                          placeholder="850"
+                          className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                        />
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
@@ -1034,6 +1071,22 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                         <p className="text-sm font-medium text-gray-900">
                           {data.montant_loyer != null
                             ? `${Number(data.montant_loyer).toLocaleString('fr-FR', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              })} € / mois`
+                            : '-'}
+                        </p>
+                      </div>
+                    )}
+                    {(() => {
+                      const v = (data.proprietaire_locataire || '').toLowerCase()
+                      return v.includes('propri') || v.includes('usufruitier')
+                    })() && (
+                      <div>
+                        <p className="text-xs text-gray-500">Charges résidence principale</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {data.charges_residence_principale != null
+                            ? `${Number(data.charges_residence_principale).toLocaleString('fr-FR', {
                                 minimumFractionDigits: 0,
                                 maximumFractionDigits: 2,
                               })} € / mois`

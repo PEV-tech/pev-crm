@@ -71,6 +71,8 @@ export type KycPdfClient = Record<string, unknown> & {
   ville?: string | null
   pays?: string | null
   proprietaire_locataire?: string | null
+  montant_loyer?: number | null
+  charges_residence_principale?: number | null
   telephone?: string | null
   email?: string | null
   situation_matrimoniale?: string | null
@@ -540,6 +542,16 @@ function renderEtatCivilPP(ctx: PageCtx, c: KycPdfClient) {
       'Montant du loyer (mensuel)',
       formatEuro(c.montant_loyer as number | null)
     )
+  }
+  {
+    const v = ((c.proprietaire_locataire as string) || '').toLowerCase()
+    if (v.includes('propri') || v.includes('usufruitier')) {
+      drawLabelValue(
+        ctx,
+        'Charges résidence principale (mensuel)',
+        formatEuro(c.charges_residence_principale as number | null)
+      )
+    }
   }
   drawLabelValue(ctx, 'Téléphone', (c.telephone as string) ?? null)
   drawLabelValue(ctx, 'Email', (c.email as string) ?? null)
