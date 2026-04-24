@@ -414,6 +414,7 @@ export type Database = {
           adresse: string | null
           autres_revenus: number | null
           capital_social: number | null
+          charges_residence_principale: number | null
           code_postal: string | null
           commentaires: string | null
           conformite: string | null
@@ -496,6 +497,7 @@ export type Database = {
           adresse?: string | null
           autres_revenus?: number | null
           capital_social?: number | null
+          charges_residence_principale?: number | null
           code_postal?: string | null
           commentaires?: string | null
           conformite?: string | null
@@ -578,6 +580,7 @@ export type Database = {
           adresse?: string | null
           autres_revenus?: number | null
           capital_social?: number | null
+          charges_residence_principale?: number | null
           code_postal?: string | null
           commentaires?: string | null
           conformite?: string | null

@@ -79,6 +79,8 @@ const FIELD_LABELS: Record<string, string> = {
   residence_fiscale: 'Résidence fiscale',
   nif: 'NIF',
   proprietaire_locataire: 'Propriétaire / locataire',
+  montant_loyer: 'Montant du loyer',
+  charges_residence_principale: 'Charges résidence principale',
   situation_matrimoniale: 'Situation matrimoniale',
   regime_matrimonial: 'Régime matrimonial',
   nombre_enfants: "Nombre d'enfants",

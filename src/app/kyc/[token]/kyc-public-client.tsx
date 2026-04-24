@@ -145,6 +145,20 @@ const SECTIONS: Array<{
             .toLowerCase()
             .includes('locataire'),
       },
+      {
+        // Champ miroir de montant_loyer côté propriétaire / usufruitier :
+        // charges mensuelles de résidence principale (remboursement crédit +
+        // charges copropriété + taxe foncière mensualisée). Pas affiché pour
+        // "Hébergé à titre gratuit" ni "Logement de fonction" — dans ces cas
+        // le client ne porte ni loyer ni charges structurelles.
+        key: 'charges_residence_principale',
+        label: 'Charges résidence principale (€ / mois)',
+        type: 'number',
+        cond: (d) => {
+          const v = ((d.proprietaire_locataire as string | null | undefined) || '').toLowerCase()
+          return v.includes('propri') || v.includes('usufruitier')
+        },
+      },
     ],
   },
   {
