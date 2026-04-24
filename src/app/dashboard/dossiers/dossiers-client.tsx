@@ -18,10 +18,19 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DataTable, ColumnDefinition } from '@/components/shared/data-table'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download } from 'lucide-react'
 import { exportCSV, getExportFilename, formatCurrencyForCSV, formatDateForCSV } from '@/lib/export-csv'
 
 import { GrilleGestion, getGestionTaux, hasEncours, computeQuarterlyConsultant } from '@/lib/commissions/gestion'
+
+/** Bug 6 (2026-04-24) — Liste complète des consultants fournie par le
+ *  wrapper (fetchée depuis la table `consultants`, pas dérivée de data).
+ *  Garantit que le dropdown liste tous les consultants même si leur
+ *  dossier n'est pas sur la page courante paginée. */
+export interface ConsultantOption {
+  id: string
+  label: string
+}
 
 interface DossiersClientProps {
   initialData: DossierRow[]
@@ -32,6 +41,7 @@ interface DossiersClientProps {
   currentPage?: number
   itemsPerPage?: number
   onPageChange?: (page: number) => void
+  consultantsList?: ConsultantOption[]
 }
 
 import { formatCurrency } from '@/lib/formatting'
@@ -55,6 +65,7 @@ export function DossiersClient({
   currentPage = 0,
   itemsPerPage = 25,
   onPageChange,
+  consultantsList = [],
 }: DossiersClientProps) {
   const isConsultant = role === 'consultant'
   const router = useRouter()
@@ -66,22 +77,24 @@ export function DossiersClient({
   const [filterPays, setFilterPays] = React.useState('')
   const [filterConsultant, setFilterConsultant] = React.useState('')
   const [searchQuery, setSearchQuery] = React.useState(searchParams.get('q') || '')
-  // Point 2.3 (2026-04-24) — Toggle pour inclure les clients archivés
-  // en statut_client = 'non_abouti'. Masqués par défaut.
-  const [includeNonAbouti, setIncludeNonAbouti] = React.useState(false)
 
   // Filter data based on active tab, filters, and search
   const filteredData = React.useMemo(() => {
-    // Point 2.3 — Filtre statut_client AVANT tout le reste.
-    // Clients non_abouti masqués par défaut ; visibles via toggle ou si
-    // l'utilisateur sélectionne explicitement l'onglet Non abouti (pour
-    // ne pas rendre l'onglet vide).
-    let result = data.filter((d) => {
-      if (d.client_statut !== 'non_abouti') return true
-      if (includeNonAbouti) return true
-      if (activeTab === 'non_abouti') return true
-      return false
-    })
+    // Bug 2 + 3 (2026-04-24) — Logique d'affichage selon l'onglet.
+    // Les non_abouti sont masqués par défaut. L'onglet "Non abouti" lève
+    // le masquage ET filtre explicitement dessus (basé sur client_statut,
+    // pas d.statut — car un client non_abouti orphan a d.statut='prospect'
+    // mais client_statut='non_abouti'). Le toggle "Inclure les non aboutis"
+    // a été retiré : l'onglet dédié suffit et évite de polluer les stats.
+    let result = data
+    if (activeTab === 'non_abouti') {
+      // Onglet dédié : seuls les non_abouti.
+      result = data.filter((d) => d.client_statut === 'non_abouti')
+    } else {
+      // Autres onglets : on exclut les non_abouti (même s'ils ont un
+      // dossier avec statut 'en_cours' / 'finalise' / 'prospect').
+      result = data.filter((d) => d.client_statut !== 'non_abouti')
+    }
 
     // Text search
     if (searchQuery.trim()) {
@@ -96,13 +109,14 @@ export function DossiersClient({
       })
     }
 
-    // Filter by statut
-    if (activeTab !== 'tous') {
+    // Filter by statut (onglets autres que non_abouti)
+    // L'onglet non_abouti filtre déjà via client_statut ci-dessus, donc
+    // pas besoin de filtrer ici.
+    if (activeTab !== 'tous' && activeTab !== 'non_abouti') {
       result = result.filter((d) => {
         if (activeTab === 'prospects') return d.statut === 'prospect'
         if (activeTab === 'en_cours') return d.statut === 'client_en_cours'
         if (activeTab === 'finalises') return d.statut === 'client_finalise'
-        if (activeTab === 'non_abouti') return d.statut === 'non_abouti'
         return true
       })
     }
@@ -131,7 +145,7 @@ export function DossiersClient({
     }
 
     return result
-  }, [data, activeTab, filterCategorie, filterProduit, filterPays, filterConsultant, searchQuery, includeNonAbouti])
+  }, [data, activeTab, filterCategorie, filterProduit, filterPays, filterConsultant, searchQuery])
 
   const handleExportCSV = React.useCallback(() => {
     const exportData = filteredData.map((d) => ({
@@ -182,12 +196,17 @@ export function DossiersClient({
     [data]
   )
   /**
-   * Point 3.1 (2026-04-24) — Liste des consultants dédupliquée PAR ID.
-   * Ancienne version dédupait par chaîne "prenom nom" — fragile aux
-   * homonymes et aux variations de casse/espace dans les données.
-   * Le label reste un prenom+nom pour l'affichage, la value est l'UUID.
+   * Bug 6 (2026-04-24) — Liste complète des consultants fournie par le
+   * wrapper (fetch séparé sur la table `consultants`), pas dérivée de
+   * data. Garantit que TOUS les consultants apparaissent dans le dropdown
+   * même ceux qui n'ont pas de dossier sur la page courante paginée.
+   * Fallback sur la dérivation depuis data si la prop n'est pas fournie
+   * (rétrocompat).
    */
   const consultants = React.useMemo(() => {
+    if (consultantsList && consultantsList.length > 0) {
+      return [...consultantsList].sort((a, b) => a.label.localeCompare(b.label))
+    }
     const byId = new Map<string, string>()
     for (const d of data) {
       const id = (d as any).consultant_id as string | null | undefined
@@ -203,22 +222,15 @@ export function DossiersClient({
 
   // Calculate stats
   const stats = React.useMemo(() => {
-    // Point 2.3 — Les stats de tabs ignorent les non_abouti (sauf l'onglet
-    // Non abouti lui-même) pour refléter la vue par défaut.
-    const visibleData = data.filter((d) => {
-      if (d.client_statut !== 'non_abouti') return true
-      return includeNonAbouti
-    })
-    // Point 5.2 (2026-04-24) — Le compteur "Tous" affichait la taille
-    // de la page courante (25 max via range supabase) et non le total
-    // réel de dossiers. On préfère désormais `totalCount` côté serveur
-    // quand il est disponible. Les sous-compteurs (prospects, en_cours,
-    // finalises, non_abouti) restent locaux car on ne peut pas les
-    // obtenir sans un count séparé par statut — c'est acceptable tant
-    // que la pagination est petite, mais à tracker si ça diverge trop.
-    const totalTous = totalCount > 0 ? totalCount : visibleData.length
+    // Bug 2 + 3 (2026-04-24) — Les stats ignorent les non_abouti (onglet
+    // dédié les affiche séparément). Plus de toggle — l'onglet suffit.
+    const visibleData = data.filter((d) => d.client_statut !== 'non_abouti')
+    // Bug 1 (2026-04-24) — totalCount côté serveur renvoyait un nombre
+    // gonflé par le DISTINCT ON de v_dossiers_complets (duplicates via
+    // LEFT JOIN commissions/factures). On privilégie maintenant
+    // visibleData.length après déduplication côté front.
     const counts = {
-      tous: totalTous,
+      tous: visibleData.length,
       prospects: visibleData.filter((d) => d.statut === 'prospect').length,
       en_cours: visibleData.filter((d) => d.statut === 'client_en_cours').length,
       finalises: visibleData.filter((d) => d.statut === 'client_finalise').length,
@@ -228,7 +240,7 @@ export function DossiersClient({
     const totalMontant = visibleData.reduce((sum, d) => sum + (d.montant || 0), 0)
 
     return { counts, totalMontant }
-  }, [data, includeNonAbouti, totalCount])
+  }, [data])
 
   /**
    * Point 2.3 (2026-04-24) — Navigation sur clic de ligne.
@@ -385,8 +397,8 @@ export function DossiersClient({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dossiers</h1>
-          <p className="text-gray-600 mt-1">Gérez votre pipeline de dossiers</p>
+          <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
+          <p className="text-gray-600 mt-1">Vue consolidée : dossiers + prospects (clients sans dossier)</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -403,7 +415,7 @@ export function DossiersClient({
       {/* Stats Bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
-          <p className="text-sm text-gray-600">Total dossiers</p>
+          <p className="text-sm text-gray-600">Total clients</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">
             {stats.counts.tous}
           </p>
@@ -431,7 +443,7 @@ export function DossiersClient({
       {/* Tabs and Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Dossiers</CardTitle>
+          <CardTitle>Liste clients</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs
@@ -515,20 +527,9 @@ export function DossiersClient({
                 ))}
               </Select>
 
-              {/* Point 2.3 (2026-04-24) — Toggle pour inclure les clients
-                  archivés (statut_client = non_abouti). Masqués par défaut. */}
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none ml-auto">
-                <input
-                  type="checkbox"
-                  checked={includeNonAbouti}
-                  onChange={(e) => setIncludeNonAbouti(e.target.checked)}
-                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                Inclure les non aboutis
-                {stats.counts.non_abouti > 0 && (
-                  <span className="text-xs text-gray-400">({stats.counts.non_abouti})</span>
-                )}
-              </label>
+              {/* Bug 3 (2026-04-24) — Checkbox "Inclure les non aboutis"
+                  retirée. L'onglet dédié "Non abouti" suffit et évite la
+                  double UX. */}
             </div>
 
             <TabsContent value="tous" className="mt-4">
@@ -576,39 +577,10 @@ export function DossiersClient({
               />
             </TabsContent>
 
-            {/* Server-side Pagination Controls */}
-            {totalCount > itemsPerPage && onPageChange && (
-              <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                <span className="text-sm text-gray-600">
-                  {totalCount === 0 ? '0' : (currentPage * itemsPerPage) + 1} - {Math.min((currentPage + 1) * itemsPerPage, totalCount)} sur {totalCount}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onPageChange(currentPage - 1)}
-                    disabled={currentPage === 0}
-                    className="gap-1"
-                  >
-                    <ChevronLeft size={16} />
-                    Précédent
-                  </Button>
-                  <span className="text-sm text-gray-600 flex items-center px-2">
-                    Page {currentPage + 1} sur {Math.ceil(totalCount / itemsPerPage)}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onPageChange(currentPage + 1)}
-                    disabled={(currentPage + 1) * itemsPerPage >= totalCount}
-                    className="gap-1"
-                  >
-                    Suivant
-                    <ChevronRight size={16} />
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/* Bug 1 (2026-04-24) — Pagination serveur retirée. Avec
+                ~300-500 clients max, on charge tout d'un coup. Le
+                composant DataTable gère sa propre pagination locale sur
+                les lignes déjà chargées (pageSize=25 par défaut). */}
           </Tabs>
         </CardContent>
       </Card>
