@@ -1,96 +1,138 @@
--- RLS sur `encaissements` — finding de l'audit SECURITY_AUDIT.md.
+-- =============================================================================
+-- fix-rls-encaissements.sql — RLS sur `encaissements` (P0 sécurité V1)
+-- =============================================================================
 --
--- Contexte (audit-rls-coverage.sql, Rapport 1, 2026-04-21) :
---   `encaissements` était la seule table `public.*` avec RLS désactivée.
---   C'est une table financière (montants d'encaissement client → consultant)
---   accessible à n'importe quel utilisateur authentifié via l'anon key.
+-- Date    : 2026-04-21 (créé) / 2026-04-25 (réécrit)
+-- Origine : audit-rls-coverage.sql Rapport 1 — `encaissements` était la seule
+--           table public.* avec RLS désactivée. Table financière (montants
+--           d'encaissement client → consultant) lisible par n'importe quel
+--           utilisateur authentifié via l'anon key. Bloquant V1.
 --
--- Modèle de données attendu (à vérifier avant apply) :
---   encaissements.client_id    → public.clients(id)
---   encaissements.consultant_id (optionnel, redondant avec clients.consultant_id)
+-- ⚠️  Réécrit 2026-04-25 :
+--   La V1 du script joignait sur `encaissements.client_id`, colonne
+--   INEXISTANTE. La relation passe en réalité par `dossier_id` (UNIQUE,
+--   one-to-one) et la table expose elle-même un `consultant_id` non null
+--   pour les lignes en provenance du flux historique. On utilise donc :
+--     1. encaissements.consultant_id quand renseigné (chemin rapide)
+--     2. fallback via dossier → clients.consultant_id pour les lignes
+--        legacy où consultant_id est null.
+--   Documenté dans STATUS.md §Backlog priorisé item 9.
 --
--- Règles d'accès (calquées sur dossiers) :
---   - SELECT : consultant propriétaire du client, managers, back-office.
---   - INSERT / UPDATE : idem.
---   - DELETE : managers uniquement (traçabilité financière).
+-- Modèle d'accès (calqué sur dossiers / clients) :
+--   - SELECT : consultant propriétaire (direct ou via le dossier), managers,
+--              back-office.
+--   - INSERT / UPDATE : idem (empêche un consultant d'encaisser sur un
+--                       dossier qui n'est pas le sien).
+--   - DELETE : managers uniquement (un encaissement supprimé = écart compta).
 --
--- Le filtrage passe par JOIN sur clients.consultant_id pour éviter de
--- dupliquer la règle sur chaque table et rester cohérent avec les
--- dossiers (même propriétaire métier).
+-- Idempotent (DROP POLICY IF EXISTS + CREATE).
+-- =============================================================================
 
 BEGIN;
 
 ALTER TABLE public.encaissements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.encaissements FORCE  ROW LEVEL SECURITY;
 
--- SELECT : propriétaire du client OU manager OU back-office
+-- ---------------------------------------------------------------------------
+-- SELECT
+-- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS encaissements_select ON public.encaissements;
 CREATE POLICY encaissements_select ON public.encaissements
   FOR SELECT TO public
   USING (
-    is_manager()
-    OR is_back_office()
+    public.is_manager()
+    OR public.is_back_office()
+    OR consultant_id = public.get_current_consultant_id()
     OR EXISTS (
-      SELECT 1 FROM public.clients c
-       WHERE c.id = encaissements.client_id
-         AND c.consultant_id = get_current_consultant_id()
+      SELECT 1
+        FROM public.dossiers d
+        JOIN public.clients  c ON c.id = d.client_id
+       WHERE d.id = encaissements.dossier_id
+         AND c.consultant_id = public.get_current_consultant_id()
     )
   );
 
--- INSERT : idem — empêche un consultant d'encaisser sur un client qui
---          n'est pas le sien.
+-- ---------------------------------------------------------------------------
+-- INSERT — empêche un consultant d'écrire sur un dossier qui n'est pas le sien
+-- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS encaissements_insert ON public.encaissements;
 CREATE POLICY encaissements_insert ON public.encaissements
   FOR INSERT TO public
   WITH CHECK (
-    is_manager()
-    OR is_back_office()
+    public.is_manager()
+    OR public.is_back_office()
+    OR consultant_id = public.get_current_consultant_id()
     OR EXISTS (
-      SELECT 1 FROM public.clients c
-       WHERE c.id = encaissements.client_id
-         AND c.consultant_id = get_current_consultant_id()
+      SELECT 1
+        FROM public.dossiers d
+        JOIN public.clients  c ON c.id = d.client_id
+       WHERE d.id = encaissements.dossier_id
+         AND c.consultant_id = public.get_current_consultant_id()
     )
   );
 
--- UPDATE : idem. USING contrôle la ligne lue, WITH CHECK la ligne écrite.
+-- ---------------------------------------------------------------------------
+-- UPDATE — USING contrôle la ligne lue, WITH CHECK la ligne écrite
+-- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS encaissements_update ON public.encaissements;
 CREATE POLICY encaissements_update ON public.encaissements
   FOR UPDATE TO public
   USING (
-    is_manager()
-    OR is_back_office()
+    public.is_manager()
+    OR public.is_back_office()
+    OR consultant_id = public.get_current_consultant_id()
     OR EXISTS (
-      SELECT 1 FROM public.clients c
-       WHERE c.id = encaissements.client_id
-         AND c.consultant_id = get_current_consultant_id()
+      SELECT 1
+        FROM public.dossiers d
+        JOIN public.clients  c ON c.id = d.client_id
+       WHERE d.id = encaissements.dossier_id
+         AND c.consultant_id = public.get_current_consultant_id()
     )
   )
   WITH CHECK (
-    is_manager()
-    OR is_back_office()
+    public.is_manager()
+    OR public.is_back_office()
+    OR consultant_id = public.get_current_consultant_id()
     OR EXISTS (
-      SELECT 1 FROM public.clients c
-       WHERE c.id = encaissements.client_id
-         AND c.consultant_id = get_current_consultant_id()
+      SELECT 1
+        FROM public.dossiers d
+        JOIN public.clients  c ON c.id = d.client_id
+       WHERE d.id = encaissements.dossier_id
+         AND c.consultant_id = public.get_current_consultant_id()
     )
   );
 
--- DELETE : managers uniquement. Un encaissement supprimé = écart compta.
+-- ---------------------------------------------------------------------------
+-- DELETE — managers uniquement
+-- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS encaissements_delete ON public.encaissements;
 CREATE POLICY encaissements_delete ON public.encaissements
   FOR DELETE TO public
-  USING (is_manager());
+  USING (public.is_manager());
 
 COMMIT;
 
--- Smoke test après apply :
---   SELECT relname, relrowsecurity, relforcerowsecurity
---   FROM   pg_class WHERE relname = 'encaissements';
---   → attendu : t / t
+-- =============================================================================
+-- Smoke test après apply (à exécuter dans Supabase SQL editor)
+-- =============================================================================
 --
---   SELECT policyname, cmd FROM pg_policies WHERE tablename = 'encaissements';
---   → attendu : 4 policies (select / insert / update / delete).
+-- 1. RLS activée + forcée :
+--    SELECT relname, relrowsecurity, relforcerowsecurity
+--      FROM pg_class WHERE relname = 'encaissements';
+--    → attendu : encaissements | t | t
 --
--- Vérification front : se connecter en tant que consultant, lister
--- ses encaissements via `/dashboard/encaissements`, vérifier qu'il ne
--- voit que les siens. Idem en tant que manager : tout doit remonter.
+-- 2. Policies présentes :
+--    SELECT policyname, cmd FROM pg_policies WHERE tablename = 'encaissements';
+--    → attendu : 4 lignes (encaissements_{select,insert,update,delete})
+--
+-- 3. Vérification fonctionnelle :
+--    a. Se connecter en tant que consultant lambda → /dashboard/encaissements
+--       doit n'afficher QUE les encaissements de ses propres clients/dossiers.
+--    b. Se connecter en tant que manager → tous les encaissements remontent.
+--    c. Tenter un INSERT direct depuis l'anon key sur un dossier d'un autre
+--       consultant → doit échouer en RLS violation.
+--
+-- 4. Mise à jour du baseline :
+--    Réexécuter scripts/rls-baseline.sql et confirmer que `encaissements`
+--    est désormais en RLS_ENABLED dans le rapport.
+-- =============================================================================
