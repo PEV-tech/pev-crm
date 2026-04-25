@@ -23,6 +23,7 @@ import {
   Eye,
 } from 'lucide-react'
 import { computeKycCompletion } from '@/lib/kyc-completion'
+import { computeEndettement, formatBreakdown } from '@/lib/kyc-endettement'
 import { COUNTRY_NAMES } from '@/lib/countries'
 import {
   LOGEMENT_OPTIONS,
@@ -1470,30 +1471,27 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
 
       // Taux d'endettement = (charges mensuelles totales / revenus mensuels) × 100
       //
-      // Formule corrigée le 2026-04-21 (Chantier #3) : on somme désormais le
-      // champ numérique `echeance_mensuelle` de chaque emprunt (euros/mois)
-      // au lieu de l'ancien `echeance` qui était en réalité une DATE de fin
-      // — le sum précédent additionnait des chaînes de caractères et
-      // retournait systématiquement 0.
-      //
-      // `emprunts_incomplets` signale les fiches legacy où l'échéance
-      // mensuelle n'a jamais été renseignée : elles faussent le taux tant
-      // que les valeurs n'ont pas été remontées par le consultant.
-      const empruntsArr: EmpruntRow[] = (data.emprunts || []) as EmpruntRow[]
-      const totalEcheancesMensuelles = empruntsArr.reduce(
-        (sum, e) => sum + (typeof e.echeance_mensuelle === 'number' ? e.echeance_mensuelle : 0),
-        0,
-      )
-      const empruntsIncomplets = empruntsArr.filter(
-        (e) =>
-          typeof e.echeance_mensuelle !== 'number' ||
-          !Number.isFinite(e.echeance_mensuelle),
-      ).length
-      const revenusMensuels = totalRevenus / 12
-      const tauxEndettement =
-        revenusMensuels > 0
-          ? Math.round((totalEcheancesMensuelles / revenusMensuels) * 10000) / 100
-          : 0
+      // Chantier #3 (2026-04-21) : formule corrigée pour utiliser
+      // `echeance_mensuelle` au lieu de l'ancien champ DATE `echeance`.
+      // Chantier #7.5 (2026-04-24) : le numérateur inclut désormais aussi
+      // `montant_loyer` (si locataire) et `charges_residence_principale`
+      // (si propriétaire / usufruitier). La logique est factorisée dans
+      // `@/lib/kyc-endettement` et réutilisée par le générateur PDF.
+      const endettement = computeEndettement({
+        proprietaire_locataire: data.proprietaire_locataire,
+        montant_loyer: data.montant_loyer,
+        charges_residence_principale: data.charges_residence_principale,
+        total_revenus_annuel: data.total_revenus_annuel,
+        revenus_pro_net: data.revenus_pro_net,
+        revenus_fonciers: data.revenus_fonciers,
+        autres_revenus: data.autres_revenus,
+        emprunts: (data.emprunts || []) as EmpruntRow[],
+      })
+      const tauxEndettement = endettement.taux
+      const revenusMensuels = endettement.revenusMensuels
+      const empruntsIncomplets = endettement.empruntsIncomplets
+      const endettementBreakdown = formatBreakdown(endettement)
+      const hasAucuneCharge = endettement.chargesTotales === 0
 
       return (
         <div className="border-b border-gray-200 last:border-b-0">
@@ -1581,14 +1579,15 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                   </div>
 
                   {/* Taux d'endettement — toujours affiché pour que l'absence
-                      d'emprunt soit un état explicite et pas un oubli. */}
+                      de charges soit un état explicite et pas un oubli.
+                      Inclut mensualités crédits + loyer + charges RP. */}
                   <div className="mt-2 border-t pt-2">
                     <p className="text-xs font-semibold text-gray-600">
                       Taux d'endettement
                     </p>
-                    {empruntsArr.length === 0 ? (
+                    {hasAucuneCharge ? (
                       <p className="text-sm font-bold mt-1 text-gray-500">
-                        0% — aucun emprunt enregistré
+                        0% — aucune charge structurelle
                       </p>
                     ) : revenusMensuels <= 0 ? (
                       <p className="text-sm font-bold mt-1 text-gray-500">
@@ -1609,9 +1608,14 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           {tauxEndettement > 35 && ' ⚠️ Élevé'}
                         </p>
                         <p className="text-[11px] text-gray-500 mt-0.5">
-                          {formatCurrency(totalEcheancesMensuelles)} /mois sur{' '}
+                          {formatCurrency(endettement.chargesTotales)} /mois sur{' '}
                           {formatCurrency(revenusMensuels)} /mois de revenus
                         </p>
+                        {endettementBreakdown && (
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            dont {endettementBreakdown}
+                          </p>
+                        )}
                         {empruntsIncomplets > 0 && (
                           <p className="text-[11px] text-orange-600 mt-0.5">
                             ⚠ {empruntsIncomplets} emprunt
@@ -1661,9 +1665,9 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     <p className="text-xs font-semibold text-gray-600">
                       Taux d'endettement
                     </p>
-                    {empruntsArr.length === 0 ? (
+                    {hasAucuneCharge ? (
                       <p className="text-sm font-bold text-gray-500">
-                        0% — aucun emprunt enregistré
+                        0% — aucune charge structurelle
                       </p>
                     ) : revenusMensuels <= 0 ? (
                       <p className="text-sm font-bold text-gray-500">
@@ -1684,9 +1688,14 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                           {tauxEndettement > 35 && ' ⚠️ Élevé'}
                         </p>
                         <p className="text-[11px] text-gray-500 mt-0.5">
-                          {formatCurrency(totalEcheancesMensuelles)} /mois sur{' '}
+                          {formatCurrency(endettement.chargesTotales)} /mois sur{' '}
                           {formatCurrency(revenusMensuels)} /mois de revenus
                         </p>
+                        {endettementBreakdown && (
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            dont {endettementBreakdown}
+                          </p>
+                        )}
                         {empruntsIncomplets > 0 && (
                           <p className="text-[11px] text-orange-600 mt-0.5">
                             ⚠ {empruntsIncomplets} emprunt
