@@ -18,8 +18,9 @@
  * signature côté DB reste valide indépendamment.
  */
 
+import nodePath from 'path'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { generateKycPdfBytes, type KycPdfSignature } from '@/lib/kyc-pdf'
+import { generateKycPdfBytes, type KycPdfSignature } from '@/lib/kyc-pdf-template'
 
 export type KycPdfGenInput = {
   clientId: string
@@ -79,9 +80,29 @@ export async function generateAndStoreKycPdf(
       consentAccuracy: args.consentAccuracy,
     }
 
+    // Résolution du nom du consultant
+    let consultantName: string | null = null
+    const consultantId = (client as Record<string, unknown>).consultant_id
+    if (consultantId) {
+      const { data: consultant } = await admin
+        .from('consultants')
+        .select('nom, prenom')
+        .eq('id', consultantId as string)
+        .single()
+      if (consultant) {
+        consultantName =
+          `${(consultant as { prenom?: string; nom?: string }).prenom ?? ''} ${(consultant as { prenom?: string; nom?: string }).nom ?? ''}`.trim() ||
+          null
+      }
+    }
+
+    const logoPath = nodePath.join(process.cwd(), 'public', 'logo-pev-icon.png')
+
     const pdfBytes = await generateKycPdfBytes(
       client as Record<string, unknown>,
       signature,
+      logoPath,
+      consultantName,
     )
 
     const stamp = signature.signedAt
