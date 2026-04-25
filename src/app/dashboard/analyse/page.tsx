@@ -255,16 +255,20 @@ export default function AnalysePage() {
   )
 
   // Filtered data
+  // 2026-04-25 : alignement avec Ma Clientèle (point 3.1 du 2026-04-24).
+  // On filtre par `consultant_id` (UUID) et plus par `consultant_nom +
+  // consultant_prenom` qui est sensible aux variations de casse / espace
+  // (bug Hugues/Stéphane). Les chiffres entre les deux pages sont
+  // désormais cohérents sans dépendre de la qualité des chaînes nom/prénom.
   const filteredData = React.useMemo(() => {
     return data.filter((d) => {
       if (periodeDebut && d.date_operation && d.date_operation < periodeDebut) return false
       if (periodeFin && d.date_operation && d.date_operation > periodeFin) return false
       if (filtreConsultant !== 'tous') {
-        const cons = consultants.find((c) => c.id === filtreConsultant)
-        if (cons && !(d.consultant_nom === cons.nom && d.consultant_prenom === cons.prenom)) return false
+        if (d.consultant_id !== filtreConsultant) return false
       }
       if (!isManager && currentUser) {
-        if (!(d.consultant_nom === currentUser.nom && d.consultant_prenom === currentUser.prenom)) return false
+        if (d.consultant_id !== currentUser.id) return false
       }
       if (filtreStatut !== 'tous' && d.statut !== filtreStatut) return false
       if (filtreProduit !== 'tous' && d.produit_nom !== filtreProduit) return false
@@ -272,7 +276,7 @@ export default function AnalysePage() {
       if (filtrePays !== 'tous' && d.client_pays !== filtrePays) return false
       return true
     })
-  }, [data, periodeDebut, periodeFin, filtreConsultant, filtreStatut, filtreProduit, filtreCompagnie, filtrePays, consultants, isManager, currentUser])
+  }, [data, periodeDebut, periodeFin, filtreConsultant, filtreStatut, filtreProduit, filtreCompagnie, filtrePays, isManager, currentUser])
 
   // ===== AGGREGATES =====
   const agg = React.useMemo(() => {
