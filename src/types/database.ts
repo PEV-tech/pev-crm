@@ -428,7 +428,7 @@ export type Database = {
           email: string | null
           employeur: string | null
           emprunts: Json | null
-          enfants_details: string | null
+          enfants_details: Json | null
           forme_juridique: string | null
           google_drive_url: string | null
           id: string
@@ -511,7 +511,7 @@ export type Database = {
           email?: string | null
           employeur?: string | null
           emprunts?: Json | null
-          enfants_details?: string | null
+          enfants_details?: Json | null
           forme_juridique?: string | null
           google_drive_url?: string | null
           id?: string
@@ -594,7 +594,7 @@ export type Database = {
           email?: string | null
           employeur?: string | null
           emprunts?: Json | null
-          enfants_details?: string | null
+          enfants_details?: Json | null
           forme_juridique?: string | null
           google_drive_url?: string | null
           id?: string
@@ -2887,6 +2887,19 @@ export type GrillesCommissionnement = Database["public"]["Tables"]["grilles_comm
 export type VisibilitySettings = Database["public"]["Tables"]["visibility_settings"]["Row"]
 export type FacturationConsultant = Database["public"]["Tables"]["facturation_consultant"]["Row"]
 export type ManagerCagnotte = Database["public"]["Tables"]["manager_cagnotte"]["Row"]
+
+// Sous-fiches enfants — stockées en JSONB array dans clients.enfants_details.
+// Tous les champs sont optionnels pour supporter (a) saisies partielles côté
+// portail public, (b) entrées legacy backfillées depuis l'ancien champ TEXT
+// (où seul `legacy_notes` est rempli).
+export type EnfantDetail = {
+  nom?: string | null
+  prenom?: string | null
+  sexe?: 'homme' | 'femme' | 'autre' | null
+  date_naissance?: string | null // YYYY-MM-DD
+  a_charge?: boolean | null
+  legacy_notes?: string | null   // ne devrait apparaître que sur les entrées migrées du champ TEXT
+}
 
 // Views
 export type VDossiersComplets = Database["public"]["Views"]["v_dossiers_complets"]["Row"]
