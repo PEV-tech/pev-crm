@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 // DataTable removed — detail section was redundant with dossiers page
 import { StatusBadge } from '@/components/shared/status-badge'
 import {
-  BarChart3, Download, Filter, TrendingUp,
+  Download, Filter, TrendingUp,
   DollarSign, FileText, Users, ArrowUpRight,
   PieChart, Calendar, Globe, Package, Building, Receipt,
 } from 'lucide-react'
@@ -412,6 +412,20 @@ export default function AnalysePage() {
     exportCSV(filteredData, cols, { filename: getExportFilename('analyse-pev') })
   }
 
+  // Bandeau "période active" — useMemo doit être appelé AVANT toute early return
+  // pour respecter les Rules of Hooks (sinon erreur React #310 quand loading bascule).
+  const periodeDescription = React.useMemo(() => {
+    if (!periodeDebut && !periodeFin) return null // Toute la période → pas de bandeau
+    const formatFr = (iso: string) => {
+      if (!iso) return ''
+      const [y, m, d] = iso.split('-')
+      return `${d}/${m}/${y}`
+    }
+    const debut = periodeDebut ? formatFr(periodeDebut) : 'origine'
+    const fin = periodeFin ? formatFr(periodeFin) : 'aujourd\'hui'
+    return `${debut} → ${fin}`
+  }, [periodeDebut, periodeFin])
+
   // Reset
   const resetFilters = () => {
     const now = new Date()
@@ -424,31 +438,17 @@ export default function AnalysePage() {
     setFiltrePays('tous')
   }
 
+  const clearPeriode = () => {
+    setPeriodeDebut('')
+    setPeriodeFin('')
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px] text-gray-500">
         Chargement de l&apos;analyse...
       </div>
     )
-  }
-
-  // Helpers d'affichage pour le bandeau "période active" (post-merge fix
-  // 2026-04-24 : éviter la confusion 216 vs 605 — la page Analyse pré-filtrait
-  // sur l'année en cours sans le signaler clairement à l'utilisateur).
-  const formatFrDate = (iso: string): string => {
-    if (!iso) return ''
-    const [y, m, d] = iso.split('-')
-    return `${d}/${m}/${y}`
-  }
-  const periodeDescription = React.useMemo(() => {
-    if (!periodeDebut && !periodeFin) return null // Toute la période → pas de bandeau
-    const debut = periodeDebut ? formatFrDate(periodeDebut) : 'origine'
-    const fin = periodeFin ? formatFrDate(periodeFin) : 'aujourd\'hui'
-    return `${debut} → ${fin}`
-  }, [periodeDebut, periodeFin])
-  const clearPeriode = () => {
-    setPeriodeDebut('')
-    setPeriodeFin('')
   }
 
   return (
