@@ -25,217 +25,164 @@ export interface CommissionRule {
 
 /**
  * All 9 commission rules for the PEV CRM.
+ *
+ * 2026-04-25 — Les valeurs reflètent les pourcentages EFFECTIVEMENT
+ * appliqués (après distribution intra-pool). Cohérent avec le seed DB
+ * de la table `commission_split_rules` (cf. migration 2026-04-25).
+ *
+ * Sert de fail-safe quand la DB est inaccessible — `rules-loader.ts`
+ * fetch d'abord la DB, fallback sur ce tableau si erreur.
  */
 export const COMMISSION_RULES: CommissionRule[] = [
   {
     id: 1,
     name: 'Client chassé par Thélo',
-    description: 'Client sourced by Thélo (manager)',
+    description: 'Client sourced by Thélo (manager) — Thélo touche les 50% comme consultant.',
     split: {
-      part_consultant: 50, // Thélo
-      part_pool_plus: 10,
-      part_thelo: 0, // Already counted in consultant
-      part_maxine: 10,
-      part_stephane: 0,
-      part_cabinet: 30,
+      part_consultant: 50, part_pool_plus: 10, part_thelo: 0, part_maxine: 10, part_stephane: 0, part_cabinet: 30,
     },
   },
   {
     id: 2,
     name: 'Client chassé par Maxine',
-    description: 'Client sourced by Maxine (admin/manager)',
+    description: 'Client sourced by Maxine (admin/manager) — Maxine touche les 50% comme consultant.',
     split: {
-      part_consultant: 50, // Maxine
-      part_pool_plus: 10,
-      part_thelo: 10,
-      part_maxine: 0, // Already counted in consultant
-      part_stephane: 0,
-      part_cabinet: 30,
+      part_consultant: 50, part_pool_plus: 10, part_thelo: 10, part_maxine: 0, part_stephane: 0, part_cabinet: 30,
     },
   },
   {
     id: 3,
     name: 'Client apporté par le Pool',
-    description: 'Client sourced by the Pool (Maxine + Thélo together)',
+    description: 'Client sourced by the Pool — pot pool de 70% réparti en 3 (POOL+ / Thélo / Maxine), cabinet 30%.',
     split: {
-      part_consultant: 0, // Distributed among pool members
-      part_pool_plus: 70, // Distributed as 23.3% to POOL+, 23.3% to Thélo, 23.3% to Maxine
-      part_thelo: 0, // Part of pool distribution
-      part_maxine: 0, // Part of pool distribution
-      part_stephane: 0,
-      part_cabinet: 30,
+      part_consultant: 0, part_pool_plus: 23.33, part_thelo: 23.33, part_maxine: 23.33, part_stephane: 0, part_cabinet: 30,
     },
   },
   {
     id: 4,
     name: 'Stéphane — Entrée',
-    description: 'Deal sourced by Stéphane (entry)',
+    description: 'Deal sourced by Stéphane (entry) — Stéphane touche 50% comme apporteur, pot pool 25% en 3.',
     split: {
-      part_consultant: 50, // Stéphane
-      part_pool_plus: 25, // Distributed as 8.3% to POOL+, 8.3% to Thélo, 8.3% to Maxine
-      part_thelo: 0, // Part of pool distribution
-      part_maxine: 0, // Part of pool distribution
-      part_stephane: 0, // Already counted in consultant
-      part_cabinet: 25,
+      part_consultant: 0, part_pool_plus: 8.33, part_thelo: 8.33, part_maxine: 8.33, part_stephane: 50, part_cabinet: 25,
     },
   },
   {
     id: 5,
     name: 'Stéphane — France',
-    description: 'Stéphane manages French clients',
+    description: 'Stéphane manages French clients — splits identiques à Stéphane Entrée.',
     split: {
-      part_consultant: 50, // Stéphane
-      part_pool_plus: 25, // Distributed as 8.3% to POOL+, 8.3% to Thélo, 8.3% to Maxine
-      part_thelo: 0, // Part of pool distribution
-      part_maxine: 0, // Part of pool distribution
-      part_stephane: 0, // Already counted in consultant
-      part_cabinet: 25,
+      part_consultant: 0, part_pool_plus: 8.33, part_thelo: 8.33, part_maxine: 8.33, part_stephane: 50, part_cabinet: 25,
     },
   },
   {
     id: 6,
     name: 'Consultant tier 65%',
-    description: 'Hugues, James, Guillaume, Maxine at 65%',
+    description: 'Hugues, James, Guillaume, Maxine at 65% — pot pool de 10% réparti en 3.',
     split: {
-      part_consultant: 65,
-      part_pool_plus: 10, // Distributed as ~3.33% to POOL+, ~3.33% to Thélo, ~3.33% to Maxine
-      part_thelo: 0, // Part of pool distribution
-      part_maxine: 0, // Part of pool distribution
-      part_stephane: 0,
-      part_cabinet: 25,
+      part_consultant: 65, part_pool_plus: 3.33, part_thelo: 3.33, part_maxine: 3.33, part_stephane: 0, part_cabinet: 25,
     },
   },
   {
     id: 7,
     name: 'Consultant tier 50%',
-    description: 'Mathias, Thélo at 50%',
+    description: 'Mathias, Thélo at 50% — pot pool de 25% réparti en 3.',
     split: {
-      part_consultant: 50,
-      part_pool_plus: 25, // Distributed as 8.3% to POOL+, 8.3% to Thélo, 8.3% to Maxine
-      part_thelo: 0, // Part of pool distribution
-      part_maxine: 0, // Part of pool distribution
-      part_stephane: 0,
-      part_cabinet: 25,
+      part_consultant: 50, part_pool_plus: 8.33, part_thelo: 8.33, part_maxine: 8.33, part_stephane: 0, part_cabinet: 25,
     },
   },
   {
     id: 8,
     name: 'Consultant tier 30%',
-    description: 'Valentin, Gilles at 30%',
+    description: 'Valentin, Gilles at 30% — pot pool de 40% réparti en 3.',
     split: {
-      part_consultant: 30,
-      part_pool_plus: 40, // Distributed as 13.3% to POOL+, 13.3% to Thélo, 13.3% to Maxine
-      part_thelo: 0, // Part of pool distribution
-      part_maxine: 0, // Part of pool distribution
-      part_stephane: 0,
-      part_cabinet: 30,
+      part_consultant: 30, part_pool_plus: 13.33, part_thelo: 13.33, part_maxine: 13.33, part_stephane: 0, part_cabinet: 30,
     },
   },
   {
     id: 9,
     name: 'Encours de gestion (CAV/CAPI)',
-    description:
-      'Recurring management fees on CAV LUX/CAPI LUX contracts (25% PEV, 30% Cabinet pre-deduction)',
+    description: 'Recurring management fees on CAV LUX/CAPI LUX contracts (25% PEV, 30% Cabinet pre-deduction). Parts déterminées dynamiquement par le moteur — ne pas modifier.',
     split: {
-      part_consultant: 0, // Determined by matching dossier rule
-      part_pool_plus: 0, // Determined by matching dossier rule
-      part_thelo: 0, // Determined by matching dossier rule
-      part_maxine: 0, // Determined by matching dossier rule
-      part_stephane: 0,
-      part_cabinet: 0, // Determined by matching dossier rule + 30% pre-deduction
+      part_consultant: 0, part_pool_plus: 0, part_thelo: 0, part_maxine: 0, part_stephane: 0, part_cabinet: 0,
     },
   },
 ]
 
-/**
- * Mapping of consultant names to their tier and applicable rule.
- * Used by determineRule to automatically select the correct commission rule.
- */
-const CONSULTANT_TIER_MAP: {
-  [key: string]: { tier: string; ruleIds: number[] }
-} = {
-  Thélo: { tier: '50%', ruleIds: [1, 7] },
-  Maxine: { tier: '65%', ruleIds: [2, 6] },
-  Stéphane: { tier: 'source', ruleIds: [4, 5] },
-  Mathias: { tier: '50%', ruleIds: [7] },
-  Guillaume: { tier: '65%', ruleIds: [6] },
-  James: { tier: '65%', ruleIds: [6] },
-  Hugues: { tier: '65%', ruleIds: [6] },
-  Gilles: { tier: '30%', ruleIds: [8] },
-  Valentin: { tier: '30%', ruleIds: [8] },
-}
+// CONSULTANT_TIER_MAP retiré 2026-04-25 — la logique de mapping
+// (consultant + dossier) → rule_key vit désormais dans determineRuleKey()
+// directement, sans table intermédiaire.
 
 /**
- * Automatically determines which commission rule applies based on:
- * - Consultant name and tier (from taux_remuneration)
- * - Dossier fields (apporteur_label, client sourcing indicators)
+ * Determine the applicable rule_key (string identifier) for a (consultant, dossier)
+ * pair. Pure function : ne dépend pas du tableau de règles, juste du scénario métier.
  *
- * @param consultant The consultant record
- * @param dossier The dossier record
- * @returns The applicable CommissionRule
+ * 2026-04-25 — Extrait de l'ancien `determineRule()` pour permettre le branchement
+ * sur la table DB `commission_split_rules` sans dupliquer la logique de matching.
  */
-export function determineRule(consultant: Consultant, dossier: Dossier): CommissionRule {
-  // Check for encours de gestion (CAV/CAPI) - Rule 9
-  // This would be determined by the product type and payment method in the dossier
-  // For now, assume this is handled at a higher level in the engine
-
-  const consultantName = consultant.nom.trim()
-
-  // Point 3.2 (2026-04-24) — Si le consultant rattaché au dossier est
-  // le consultant fictif POOL (cf. add-consultant-pool.sql), on applique
-  // automatiquement la Rule 3 (répartition 70 % pool / 30 % cabinet).
-  // Prioritaire sur les autres branches : un dossier POOL ne suit pas
-  // les règles tier 50/65 même si un apporteur_label est renseigné.
+export function determineRuleKey(consultant: Consultant, dossier: Dossier): string {
+  // Point 3.2 (2026-04-24) — Consultant fictif POOL → règle 'pool' direct,
+  // prioritaire sur les autres branches.
   const isPoolConsultant =
     (consultant.prenom && consultant.prenom.trim().toUpperCase() === 'POOL') ||
     (consultant.nom && consultant.nom.trim().toUpperCase() === 'POOL')
-  if (isPoolConsultant) {
-    return COMMISSION_RULES[2] // Rule 3 — Client apporté par le Pool
-  }
+  if (isPoolConsultant) return 'pool'
 
-  // Check if the dossier is apporteur-based (sourced by specific consultant)
+  // Apporteur-based : matching sur dossier.apporteur_label
   if (dossier.apporteur_label) {
     const apporteurName = dossier.apporteur_label.trim()
-
-    // Rule 1: Client chassé par Thélo
-    if (apporteurName === 'Thélo') {
-      return COMMISSION_RULES[0]
-    }
-
-    // Rule 2: Client chassé par Maxine
-    if (apporteurName === 'Maxine') {
-      return COMMISSION_RULES[1]
-    }
-
-    // Rules 4-5: Stéphane — Entrée or France
-    if (apporteurName === 'Stéphane') {
-      // Rule 5 for France zone, Rule 4 otherwise
-      // For simplicity, return Rule 4 (they have identical splits)
-      return COMMISSION_RULES[3]
-    }
-
-    // Rule 3: Client apporté par le Pool (if apporteur_label indicates pool sourcing)
-    if (apporteurName.toLowerCase().includes('pool')) {
-      return COMMISSION_RULES[2]
-    }
+    if (apporteurName === 'Thélo') return 'chasse_thelo'
+    if (apporteurName === 'Maxine') return 'chasse_maxine'
+    if (apporteurName === 'Stéphane') return 'stephane_entree' // France & Entrée ont splits identiques
+    if (apporteurName.toLowerCase().includes('pool')) return 'pool'
   }
 
-  // Default based on consultant tier (taux_remuneration)
-  // Rule 6: Consultant tier 65% (Hugues, James, Guillaume, Maxine)
-  if (consultant.taux_remuneration === 0.65) {
-    return COMMISSION_RULES[5]
-  }
+  // Default tier-based (taux_remuneration sur consultant)
+  if (consultant.taux_remuneration === 0.65) return 'tier_65'
+  if (consultant.taux_remuneration === 0.5) return 'tier_50'
+  if (consultant.taux_remuneration === 0.3) return 'tier_30'
 
-  // Rule 7: Consultant tier 50% (Mathias, Thélo at 50% default)
-  if (consultant.taux_remuneration === 0.5) {
-    return COMMISSION_RULES[6]
-  }
+  // Fallback : tier 50%
+  return 'tier_50'
+}
 
-  // Rule 8: Consultant tier 30% (Valentin, Gilles)
-  if (consultant.taux_remuneration === 0.3) {
-    return COMMISSION_RULES[7]
+/**
+ * Determine la règle applicable en utilisant un tableau de règles fourni
+ * (typiquement chargé depuis Supabase via loadCommissionRules()).
+ *
+ * @param consultant Le consultant rattaché au dossier
+ * @param dossier Le dossier
+ * @param rules Le tableau de règles (DB-backed)
+ * @returns La règle qui s'applique
+ */
+export function determineRuleFromArray(
+  consultant: Consultant,
+  dossier: Dossier,
+  rules: CommissionRule[],
+): CommissionRule {
+  const ruleKey = determineRuleKey(consultant, dossier)
+  const ruleKeyToId: Record<string, number> = {
+    chasse_thelo: 1,
+    chasse_maxine: 2,
+    pool: 3,
+    stephane_entree: 4,
+    stephane_france: 5,
+    tier_65: 6,
+    tier_50: 7,
+    tier_30: 8,
+    encours: 9,
   }
+  const targetId = ruleKeyToId[ruleKey] ?? 7
+  return rules.find((r) => r.id === targetId) ?? rules[6] ?? COMMISSION_RULES[6]
+}
 
-  // Default fallback to Rule 7 (50% tier)
-  return COMMISSION_RULES[6]
+/**
+ * Legacy synchrone : utilise les constantes statiques COMMISSION_RULES.
+ * Conservée pour la rétro-compatibilité des call sites synchrones non
+ * encore migrés vers loadCommissionRules() async. À termet, à remplacer.
+ *
+ * @deprecated Préférer `determineRuleFromArray(consultant, dossier, rules)`
+ *             avec un tableau chargé depuis Supabase via `loadCommissionRules()`.
+ */
+export function determineRule(consultant: Consultant, dossier: Dossier): CommissionRule {
+  return determineRuleFromArray(consultant, dossier, COMMISSION_RULES)
 }

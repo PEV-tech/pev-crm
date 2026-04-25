@@ -4,6 +4,38 @@ import {
   allocateLine, summarizeAllocations,
   type EncaissementAllocationDraft, type AllocationTarget, type AllocationSummary,
 } from './allocation'
+import { COMMISSION_RULES, type CommissionRule } from '@/lib/commissions/rules'
+
+// 2026-04-25 — Loader des règles de split (DB → fallback statique).
+async function loadRulesForValidation(supabase: SB): Promise<CommissionRule[]> {
+  try {
+    const { data, error } = await supabase
+      .from('commission_split_rules' as never)
+      .select('*')
+      .order('sort_order', { ascending: true })
+    if (error || !data || (data as unknown[]).length === 0) return COMMISSION_RULES
+    const ruleKeyToId: Record<string, number> = {
+      chasse_thelo: 1, chasse_maxine: 2, pool: 3,
+      stephane_entree: 4, stephane_france: 5,
+      tier_65: 6, tier_50: 7, tier_30: 8, encours: 9,
+    }
+    return (data as unknown as Array<Record<string, unknown>>).map((row) => ({
+      id: ruleKeyToId[row.rule_key as string] ?? Number(row.sort_order),
+      name: String(row.name),
+      description: String(row.description ?? ''),
+      split: {
+        part_consultant: Number(row.part_consultant),
+        part_pool_plus: Number(row.part_pool_plus),
+        part_thelo: Number(row.part_thelo),
+        part_maxine: Number(row.part_maxine),
+        part_stephane: Number(row.part_stephane),
+        part_cabinet: Number(row.part_cabinet),
+      },
+    }))
+  } catch {
+    return COMMISSION_RULES
+  }
+}
 
 export interface ValidateBatchInput {
   batchId: string
@@ -152,6 +184,9 @@ export async function validateBatch(supabase: SB, input: ValidateBatchInput): Pr
     for (const c of cData as Array<{ id: string }>) consultantsById.set(c.id, c)
   }
 
+  // Charge les règles de split (DB → fallback statique).
+  const rules = await loadRulesForValidation(supabase)
+
   const allDrafts: EncaissementAllocationDraft[] = []
 
   for (const line of lines) {
@@ -186,6 +221,7 @@ export async function validateBatch(supabase: SB, input: ValidateBatchInput): Pr
         },
         rem_apporteur_ext_montant: remApporteurExt,
         rem_apporteur_interne_montant: 0,
+        rules,
       })
       allDrafts.push(...drafts)
       result.lines_processed += 1
