@@ -87,7 +87,7 @@ export async function generateAndStoreKycPdf(
       const { data: consultant } = await admin
         .from('consultants')
         .select('nom, prenom')
-        .eq('id', consultantId)
+        .eq('id', consultantId as string)
         .single()
       if (consultant) {
         consultantName =
