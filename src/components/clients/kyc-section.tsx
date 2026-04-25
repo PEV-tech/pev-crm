@@ -49,6 +49,12 @@ import {
   type ExternalJointAsset,
 } from '@/lib/kyc-bidi'
 import { KYCSignatureDialog } from './kyc-signature-dialog'
+import {
+  EnfantsEditor,
+  normalizeEnfantsDetails,
+  formatEnfantsSummary,
+} from './enfants-editor'
+import type { EnfantDetail } from '@/types/database'
 
 interface KYCSectionProps {
   client: any // The full client object from Supabase with all KYC fields
@@ -1209,41 +1215,21 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600">
-                        Nombre d'enfants
-                      </label>
-                      <input
-                        type="number"
-                        value={data.nombre_enfants || 0}
-                        onChange={e =>
-                          setEditData({
-                            ...editData,
-                            nombre_enfants: parseInt(e.target.value) || 0,
-                          })
-                        }
-                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-600">
-                        Détails enfants
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="p.ex. 11 ans, 15 ans"
-                        value={data.enfants_details || ''}
-                        onChange={e =>
-                          setEditData({
-                            ...editData,
-                            enfants_details: e.target.value,
-                          })
-                        }
-                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
-                      />
-                    </div>
-                  </div>
+                  {/* Sous-fiches enfants — dynamiques. nombre_enfants est
+                      synchronisé automatiquement avec la longueur du tableau
+                      pour ne pas avoir 2 sources de vérité (cf. retour
+                      Maxine 2026-04-25). */}
+                  <EnfantsEditor
+                    variant="crm"
+                    value={normalizeEnfantsDetails(data.enfants_details)}
+                    onChange={(next) =>
+                      setEditData({
+                        ...editData,
+                        enfants_details: next as unknown as EnfantDetail[],
+                        nombre_enfants: next.length,
+                      })
+                    }
+                  />
                 </>
               ) : (
                 <>
@@ -1263,19 +1249,16 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-gray-500">Nombre d'enfants</p>
-                      <p className="text-sm font-medium text-gray-900">
-                        {data.nombre_enfants || '-'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Détails enfants</p>
-                      <p className="text-sm font-medium text-gray-900">
-                        {displayValue(data.enfants_details)}
-                      </p>
-                    </div>
+                  <div>
+                    <p className="text-xs text-gray-500">
+                      Enfants{' '}
+                      <span className="text-gray-400">
+                        ({normalizeEnfantsDetails(data.enfants_details).length})
+                      </span>
+                    </p>
+                    <p className="text-sm font-medium text-gray-900 mt-0.5">
+                      {formatEnfantsSummary(data.enfants_details)}
+                    </p>
                   </div>
                 </>
               )}
