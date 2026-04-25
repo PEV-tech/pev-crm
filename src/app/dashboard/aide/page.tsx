@@ -4,8 +4,7 @@ import Link from 'next/link'
 import { useUser } from '@/hooks/use-user'
 import {
   BookOpen, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Star, Zap,
-  Mail, Calendar, Home, Shield, FolderOpen, Users, CreditCard, DollarSign,
-  Bell, BarChart2, Settings, FileText, Lock, X, ExternalLink, TrendingUp,
+  Mail, Calendar, Home, X,
 } from 'lucide-react'
 
 const ROLE_LABELS: Record<string, string> = {
@@ -31,9 +30,35 @@ const FAQ_CATEGORIES = [
         roles: ['consultant', 'manager', 'back_office'],
       },
       {
-        q: "La connexion Google ne fonctionne pas — que faire ?",
-        a: "Allez dans Paramètres, cliquez 'Connecter Google', puis sélectionnez votre compte @private-equity-valley.com. Si le problème persiste, déconnectez-vous du CRM, reconnectez-vous, et réessayez.",
+        q: "Comment changer mon mot de passe ?",
+        a: "Allez dans Paramètres → onglet 'Mon compte'. Vous y trouverez votre identité, un bouton de changement de mot de passe, et la déconnexion.",
         roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "La connexion Google ne fonctionne pas — que faire ?",
+        a: "Allez dans Paramètres → Communication, cliquez 'Connecter Google', puis sélectionnez votre compte @private-equity-valley.com. Si le problème persiste, déconnectez-vous du CRM, reconnectez-vous, et réessayez.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+    ],
+  },
+  {
+    id: 'clients',
+    label: 'Clients & Fiches',
+    questions: [
+      {
+        q: "Comment créer une fiche client sans dossier (prospect) ?",
+        a: "Cliquez 'Nouveau client' dans le header. Vous pouvez créer une Personne Physique (PP) ou une Personne Morale (PM). Le client devient un prospect tant qu'il n'a pas de dossier.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Comment dissocier un couple en deux fiches ?",
+        a: "Chaque membre du couple doit avoir sa propre fiche client. Utilisez le champ 'Co-titulaire' / 'Lien de relation' pour les rattacher (mariage, PACS…). Chaque fiche conserve son patrimoine et son KYC propre.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Que veut dire le statut 'Non abouti' ?",
+        a: "Un client marqué 'Non abouti' sort de votre liste principale (filtre dédié). Cas typique : prospect qui ne donne plus suite. Bouton 'Réactiver' disponible à tout moment.",
+        roles: ['consultant', 'manager'],
       },
     ],
   },
@@ -42,14 +67,19 @@ const FAQ_CATEGORIES = [
     label: 'Dossiers',
     questions: [
       {
-        q: "Comment ajouter un client qui n'existe pas encore ?",
-        a: "Lors de la création d'un dossier, tapez le nom du client dans le champ Client — si le client n'existe pas, une option 'Créer ce client' apparaîtra automatiquement.",
+        q: "Comment créer un dossier ?",
+        a: "La création passe obligatoirement par la fiche client. Ouvrez le client, cliquez 'Nouveau dossier'. Si le client n'existe pas encore, créez-le avant via 'Nouveau client'.",
         roles: ['consultant', 'manager'],
       },
       {
         q: "Comment retrouver un dossier rapidement ?",
-        a: "Utilisez les filtres dans la page Dossiers : par statut, produit, compagnie, ou montant. La barre de recherche en haut filtre aussi par nom de client.",
+        a: "Utilisez les filtres dans la page Dossiers : statut, produit, compagnie, catégorie, montant. La barre de recherche filtre par nom de client. Vous pouvez aussi exporter en CSV.",
         roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Comment fonctionnent les 3 dropdowns Compagnie / Produit / Taux ?",
+        a: "Sélectionnez d'abord la Compagnie, puis le Produit (filtré par Compagnie), enfin la ligne de taux qui détermine la commission. Le bandeau bleu affiche le taux retenu — modifiable au cas par cas.",
+        roles: ['consultant', 'manager'],
       },
       {
         q: "Quand passer un dossier en 'Client finalisé' ?",
@@ -57,15 +87,46 @@ const FAQ_CATEGORIES = [
         roles: ['consultant', 'manager'],
       },
       {
-        q: "Puis-je modifier un dossier après sa création ?",
-        a: "Oui, cliquez sur le dossier puis sur le bouton d'édition. Vous pouvez modifier le montant, le statut, le produit et la date d'opération.",
+        q: "Où voir l'historique des modifications d'un dossier ?",
+        a: "En bas de la fiche dossier, section 'Historique' : qui a modifié quoi et quand (créations, changements de statut, montant, commission…).",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+    ],
+  },
+  {
+    id: 'kyc',
+    label: 'KYC & Conformité',
+    questions: [
+      {
+        q: "Comment faire signer un KYC à distance ?",
+        a: "Sur la fiche client → section KYC, cliquez 'Envoyer le lien de signature' (chantier 3). Un email est envoyé au client avec un lien sécurisé. À la signature, vous recevez le PDF par email.",
         roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Que se passe-t-il si le client signe un KYC incomplet ?",
+        a: "Le système exige une double validation (consentement + certification). Le PDF généré indique clairement le taux de complétude et les champs manquants. Une bannière rouge apparaît sur la fiche jusqu'à complétion.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Comment relancer un client qui n'a pas signé son KYC ?",
+        a: "Les relances KYC sont automatiques (paramétrables par consultant dans Paramètres → Communication). Vous pouvez aussi déclencher une relance manuelle depuis la fiche.",
+        roles: ['consultant', 'manager'],
+      },
+      {
+        q: "Où retrouver le PDF du KYC signé ?",
+        a: "Bouton 'Télécharger le PDF signé' dans la bannière verte 'Signé' sur la fiche client, ou dans les pièces jointes du client.",
+        roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Quels sont les 6 documents de conformité requis ?",
+        a: "KYC (questionnaire client), DER (Document d'Entrée en Relation), PI (Profil Investisseur), PRECO (Recommandations personnalisées), LM (Lettre de Mission), RM (Rapport de Mission).",
+        roles: ['consultant', 'manager', 'back_office'],
       },
     ],
   },
   {
     id: 'facturation',
-    label: 'Facturation & Paiements',
+    label: 'Facturation & Encaissements',
     questions: [
       {
         q: "Comment savoir si une commission a été payée ?",
@@ -79,24 +140,60 @@ const FAQ_CATEGORIES = [
       },
       {
         q: "Qui peut marquer une commission comme payée ?",
-        a: "Seul le back-office et les managers peuvent valider le paiement d'une commission. Les consultants voient uniquement le statut.",
+        a: "Seul le back-office et les managers peuvent valider le paiement. Les consultants voient uniquement le statut.",
         roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "À quoi sert le module Encours V2 ?",
+        a: "Il gère la saisie en lot des encours mensuels (batches → lignes → allocations). On charge un fichier compagnie, on alloue par dossier, et la validation génère automatiquement les encaissements.",
+        roles: ['manager', 'back_office'],
       },
     ],
   },
   {
-    id: 'reglementaire',
-    label: 'Réglementaire',
+    id: 'analyse',
+    label: 'Analyse',
     questions: [
       {
-        q: "Quels sont les 6 documents de conformité requis ?",
-        a: "KYC (questionnaire client), DER (Document d'Entrée en Relation), PI (Profil Investisseur), PRECO (Recommandations personnalisées), LM (Lettre de Mission), RM (Rapport de Mission).",
-        roles: ['consultant', 'manager', 'back_office'],
+        q: "Pourquoi je ne vois que les chiffres de l'année en cours ?",
+        a: "Par défaut la période est filtrée sur l'année courante. Un bandeau bleu en haut affiche la période active — cliquez 'Voir toute la période →' pour le retirer.",
+        roles: ['manager', 'back_office'],
       },
       {
-        q: "Comment mettre à jour la conformité d'un client ?",
-        a: "Ouvrez la fiche client, section 'Réglementaire', cliquez le crayon ✏️, cochez les documents reçus et validés, puis sauvegardez. Le score se met à jour automatiquement.",
-        roles: ['consultant', 'manager', 'back_office'],
+        q: "Comment exporter les données en CSV ?",
+        a: "Bouton 'Exporter CSV' en haut à droite de l'Analyse. L'export reflète les filtres actifs (période, consultant, produit, compagnie, pays…).",
+        roles: ['manager', 'back_office'],
+      },
+      {
+        q: "Comment voir le détail d'un mois sur le graphique ?",
+        a: "Cliquez sur la barre du mois — une popup affiche les dossiers, la collecte et les commissions de ce mois.",
+        roles: ['manager', 'back_office'],
+      },
+    ],
+  },
+  {
+    id: 'parametres',
+    label: 'Paramètres',
+    questions: [
+      {
+        q: "Comment configurer les grilles de rémunération ?",
+        a: "Paramètres → Rémunération. Deux onglets : LUX (assurance-vie FR + Lux, droit d'entrée + encours) et PE (Private Equity, dégressif 100K-1M).",
+        roles: ['manager'],
+      },
+      {
+        q: "Comment ajouter un produit pour un partenaire ?",
+        a: "Paramètres → Catalogue. Choisissez la Compagnie, ajoutez une ligne avec le 'Nom du produit' (ex. ACTIVIMMO, COMETE), les frais d'entrée, frais d'encours, prix de la part. Plusieurs produits autorisés par partenaire.",
+        roles: ['manager'],
+      },
+      {
+        q: "Comment configurer les paliers Mandat 65/75/85 d'un consultant ?",
+        a: "Paramètres → Équipe → ouvrir la fiche consultant → section repliable 'Paliers Mandat' (chevron). Disponible pour Guillaume, James, Hugues, Valentin, Gilles, Véronique.",
+        roles: ['manager'],
+      },
+      {
+        q: "Comment personnaliser les emails KYC ?",
+        a: "Paramètres → Communication → Templates email. Édition unique avec chips de variables (nom client, lien, etc.) et preview live. Sauvegarde automatique.",
+        roles: ['manager'],
       },
     ],
   },
@@ -106,7 +203,7 @@ const FAQ_CATEGORIES = [
     questions: [
       {
         q: "Les emails du client n'apparaissent pas dans sa fiche — pourquoi ?",
-        a: "Vérifiez trois points : (1) votre compte Google est connecté dans Paramètres, (2) l'adresse email du client est renseignée dans ses Coordonnées, (3) cliquez sur l'icône ↻ Actualiser dans l'onglet Emails.",
+        a: "Vérifiez trois points : (1) votre compte Google est connecté dans Paramètres → Communication, (2) l'adresse email du client est renseignée dans ses Coordonnées, (3) cliquez sur ↻ Actualiser dans l'onglet Emails.",
         roles: ['consultant', 'manager'],
       },
       {
@@ -142,8 +239,13 @@ const FAQ_CATEGORIES = [
       },
       {
         q: "Le nombre de lignes par page est-il configurable ?",
-        a: "Oui, chaque tableau affiche 50 lignes par défaut. Un sélecteur en bas du tableau permet de changer à 25, 50, 100 ou 250 lignes.",
+        a: "Oui, chaque tableau affiche 50 lignes par défaut. Un sélecteur en bas permet de changer à 25, 50, 100 ou 250 lignes.",
         roles: ['consultant', 'manager', 'back_office'],
+      },
+      {
+        q: "Comment consulter l'audit des modifications ?",
+        a: "Page Audit (managers/back-office) : filtres par table et utilisateur, export CSV. Trace tous les UPDATE/INSERT/DELETE des tables sensibles.",
+        roles: ['manager', 'back_office'],
       },
     ],
   },
@@ -153,12 +255,15 @@ const NAV_SECTIONS = [
   { id: 'bienvenue', label: 'Bienvenue' },
   { id: 'roles', label: 'Rôles & accès' },
   { id: 'navigation', label: 'Navigation' },
-  { id: 'dossiers', label: 'Dossiers' },
   { id: 'clients', label: 'Fiches clients' },
+  { id: 'dossiers', label: 'Dossiers' },
+  { id: 'kyc', label: 'KYC & signature' },
   { id: 'facturation', label: 'Facturation' },
+  { id: 'encours', label: 'Encours V2' },
   { id: 'relances', label: 'Relances' },
   { id: 'reglementaire', label: 'Réglementaire' },
   { id: 'google', label: 'Google Gmail & Calendar' },
+  { id: 'parametres', label: 'Paramètres' },
   { id: 'manager', label: 'Fonctions Manager' },
   { id: 'backoffice', label: 'Fonctions Back-office' },
   { id: 'faq', label: 'FAQ' },
@@ -382,15 +487,18 @@ export default function AidePage() {
             <div className="space-y-2">
               {[
                 ['Tableau de bord', "Vue d'ensemble, KPIs, statistiques rapides", true],
-                ['Dossiers', 'Tous vos dossiers clients avec filtres et recherche', true],
-                ['Ma clientèle', 'Fiches clients détaillées', !isBackOffice],
+                ['Ma clientèle', 'Vos fiches clients (PP / PM, prospects, finalisés)', !isBackOffice],
+                ['Dossiers', 'Tous vos dossiers — filtres statut/produit/catégorie/compagnie + export CSV', true],
                 ['Facturation', 'Commissions à émettre ou émises', true],
                 ['Encaissements', 'Commissions reçues et historique de paiements', true],
-                ['Relances', 'Suivi et planification des relances clients', !isBackOffice],
+                ['Encours V2', 'Saisie en lot des encours (batches → lignes → allocations)', isManagerOrBO],
+                ['Relances', 'Suivi et planification des relances (manuelles + dérivées)', !isBackOffice],
                 ['Réglementaire', 'Conformité documentaire des clients (KYC, DER, PI…)', true],
+                ['Audit', 'Historique des modifications avec filtres + export CSV', isManagerOrBO],
                 ['Analyse', 'Statistiques, graphiques et exports', isManagerOrBO],
+                ['Challenges', 'Classement consultants', !isBackOffice],
                 ['Aide & Manuel', 'Ce guide', true],
-                ['Paramètres', 'Profil, connexion Google', true],
+                ['Paramètres', 'Équipe, Catalogue, Rémunération, Communication, Mon compte', true],
               ].filter(function(item) { return !!item[2] }).map(function(item) {
                 return (
                   <div key={String(item[0])} className="flex items-start gap-3 py-1.5 border-b border-gray-100 last:border-0">
@@ -406,16 +514,37 @@ export default function AidePage() {
         {/* DOSSIERS */}
         <section>
           <SectionTitle id="dossiers">Dossiers</SectionTitle>
-          <p className="text-gray-600 mb-4">Un dossier représente une opération d'investissement d'un client.</p>
+          <p className="text-gray-600 mb-4">Un dossier représente une opération d&apos;investissement d&apos;un client. La création passe par la fiche client.</p>
 
           <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
             <p className="font-semibold text-gray-900 mb-4">Créer un dossier</p>
             <StepList steps={[
-              ["Aller dans 'Dossiers'", "Accédez à la liste de vos dossiers."],
-              ["Cliquer 'Nouveau dossier'", "Le formulaire de création s'ouvre."],
-              ["Remplir les champs obligatoires", "Client, produit, compagnie, montant, type de financement, date."],
+              ["Ouvrir la fiche client", "Si le client n'existe pas, créez-le via 'Nouveau client'."],
+              ["Cliquer 'Nouveau dossier'", "Le formulaire pré-remplit le client."],
+              ["Choisir Compagnie → Produit → Taux", "Les 3 dropdowns sont en cascade — le bandeau bleu affiche le taux retenu."],
+              ["Renseigner montant, financement, date", "Catégorie déduite du produit."],
               ["Sauvegarder", "Le dossier apparaît avec le statut Prospect."],
             ]} />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Filtres &amp; export</p>
+            <p className="text-sm text-gray-600 mb-2">La liste Dossiers propose des filtres combinables :</p>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• Statut (Prospect, En cours, Finalisé, Non abouti)</li>
+              <li>• Catégorie (SCPI, PE, LUX, CAPI LUX, Trilake, Girardin)</li>
+              <li>• Produit, Compagnie, Pays, Consultant (managers)</li>
+              <li>• Bouton <strong>Exporter CSV</strong> qui respecte les filtres actifs</li>
+            </ul>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Historique du dossier</p>
+            <p className="text-sm text-gray-700">
+              En bas de chaque fiche dossier, la section <strong>Historique</strong> liste toutes
+              les modifications (création, statut, montant, commission…) avec auteur et horodatage.
+              Source : table d&apos;audit.
+            </p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
@@ -433,16 +562,23 @@ export default function AidePage() {
                 <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">Client finalisé</span>
                 <p className="text-sm text-gray-700">Opération terminée, commission calculée automatiquement</p>
               </div>
+              <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-lg">
+                <span className="bg-amber-100 text-amber-700 text-xs font-medium px-2 py-0.5 rounded-full">Non abouti</span>
+                <p className="text-sm text-gray-700">Sort de la liste principale, accessible via filtre dédié — réversible</p>
+              </div>
             </div>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
-            <p className="font-semibold text-gray-900 mb-3">Types de produits</p>
+            <p className="font-semibold text-gray-900 mb-3">Catégories de produits</p>
             <div className="flex flex-wrap gap-2">
-              {['SCPI', 'Private Equity', 'CAV LUX', 'CAPI LUX', 'Trilake', 'Girardin'].map(function(p) {
+              {['SCPI', 'Private Equity', 'LUX (CAV / CAPI)', 'Trilake', 'Girardin'].map(function(p) {
                 return <span key={p} className="bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-full border border-indigo-200 font-medium">{p}</span>
               })}
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Le nom commercial du produit (ACTIVIMMO, COMETE, ODYSSEY…) est défini dans le Catalogue (Paramètres → Catalogue).
+            </p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
@@ -612,6 +748,113 @@ export default function AidePage() {
           </InfoBox>
         </section>
 
+        {/* KYC */}
+        <section>
+          <SectionTitle id="kyc">KYC &amp; signature</SectionTitle>
+          <p className="text-gray-600 mb-4">
+            Le KYC (Know Your Customer) est saisi puis signé par le client. Le CRM gère
+            la complétude, la signature à distance, la génération du PDF et la traçabilité
+            ACPR/DDA.
+          </p>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-4">Faire signer un KYC à distance</p>
+            <StepList steps={[
+              ["Saisir le KYC sur la fiche client", "Section KYC : situation, patrimoine, revenus, charges, succession, enfants, donations…"],
+              ["Cliquer 'Envoyer le lien de signature'", "Un email automatique part vers le client avec un lien sécurisé (rate-limité, jeton à usage unique)."],
+              ["Le client remplit ses propositions", "Il peut compléter les champs manquants côté lien public — vous validez ensuite côté CRM."],
+              ["Le client signe", "Capture nom + IP + horodatage + taux de complétude. Le PDF est généré automatiquement."],
+              ["Vous recevez le PDF par email", "PDF aussi disponible dans la fiche client (bouton 'Télécharger le PDF signé')."],
+            ]} />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Que contient le KYC PDF ?</p>
+            <ul className="text-sm text-gray-700 space-y-1">
+              <li>• <strong>Personne Physique</strong> : identité, situation familiale, enfants, profession, patrimoine, revenus, charges, donations, succession</li>
+              <li>• <strong>Personne Morale</strong> : raison sociale, forme juridique, SIREN, capital, représentant légal</li>
+              <li>• Bloc signature avec nom du signataire, IP, date, taux de complétude</li>
+              <li>• Liste des champs manquants (si signature incomplète)</li>
+            </ul>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Relances KYC automatiques</p>
+            <p className="text-sm text-gray-700">
+              Si le client n'a pas signé dans les délais paramétrés, le CRM relance automatiquement.
+              Le calendrier de relance est configurable dans <strong>Paramètres → Communication → Relances KYC</strong>.
+            </p>
+          </div>
+
+          <InfoBox color="amber">
+            <strong>Signature incomplète :</strong> double validation obligatoire (consentement
+            "informations incomplètes" + certification d'exactitude). Une bannière rouge reste
+            visible sur la fiche tant que le KYC n'est pas complété.
+          </InfoBox>
+        </section>
+
+        {/* ENCOURS V2 — manager / back-office only */}
+        {isManagerOrBO && (
+          <section>
+            <SectionTitle id="encours">Encours V2</SectionTitle>
+            <p className="text-gray-600 mb-4">
+              Module de saisie en lot des encours mensuels. Modèle : Batch (un fichier compagnie
+              par mois) → Lignes (positions remontées) → Allocations (par dossier). La validation
+              alimente automatiquement les Encaissements.
+            </p>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+              <p className="font-semibold text-gray-900 mb-4">Workflow type</p>
+              <StepList steps={[
+                ["Créer un batch", "Compagnie + mois de référence."],
+                ["Saisir les lignes", "Une ligne par position remontée par la compagnie."],
+                ["Allouer aux dossiers", "Modale unifiée : recherche client → choix dossier → montant alloué."],
+                ["Vérifier l'aperçu", "Total alloué vs total batch — alerte si écart."],
+                ["Valider le batch", "Les encaissements sont créés automatiquement, visibles dans la page Encaissements."],
+              ]} />
+            </div>
+
+            <InfoBox color="blue">
+              <strong>Annulation :</strong> un batch validé peut être dévalidé — les encaissements
+              générés sont alors automatiquement supprimés (poubelle dans le drill-down).
+            </InfoBox>
+          </section>
+        )}
+
+        {/* PARAMÈTRES */}
+        <section>
+          <SectionTitle id="parametres">Paramètres</SectionTitle>
+          <p className="text-gray-600 mb-4">
+            Page Paramètres organisée en 5 sections. Visibilité variable selon le rôle.
+          </p>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+            <p className="font-semibold text-gray-900 mb-3">Les sections</p>
+            <div className="space-y-2">
+              {[
+                ['Mon compte', 'Identité, mot de passe, déconnexion. Visible par tous.'],
+                ['Équipe', 'Liste des consultants, rôles, fiches détaillées. Manager : ouverture de la fiche → paliers Mandat 65/75/85 (chevron).'],
+                ['Catalogue', "Compagnies → Produits avec frais d'entrée, frais d'encours, prix de la part. 'Nom du produit' = nom commercial (ACTIVIMMO, COMETE…)."],
+                ['Rémunération', "Grilles LUX et PE + objectifs annuels par catégorie (SCPI / PE / LUX)."],
+                ['Communication', 'Templates email, relances KYC paramétrables, connexion Google.'],
+                ['Administration', 'Visibilité globale, accès avancés (manager only).'],
+              ].map(function(s) {
+                return (
+                  <div key={s[0]} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                    <span className="text-sm font-medium text-gray-900 w-32 flex-shrink-0">{s[0]}</span>
+                    <span className="text-xs text-gray-500">{s[1]}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <InfoBox color="indigo">
+            Les taux affichés dans le Catalogue sont <strong>indicatifs</strong> — chaque consultant
+            peut les surcharger au niveau du dossier lors de la saisie.
+          </InfoBox>
+        </section>
+
         {/* GOOGLE */}
         <section>
           <SectionTitle id="google">Google Gmail &amp; Calendar</SectionTitle>
@@ -630,10 +873,10 @@ export default function AidePage() {
           <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
             <p className="font-semibold text-gray-900 mb-4">Étape 1 — Connecter votre compte Google</p>
             <StepList steps={[
-              ["Aller dans Paramètres", "Menu de gauche > Paramètres."],
+              ["Aller dans Paramètres → Communication", "Menu de gauche > Paramètres > onglet Communication."],
               ["Cliquer 'Connecter mon compte Google'", "Vous êtes redirigé vers la page d'autorisation Google."],
               ["Sélectionner votre compte @private-equity-valley.com", "Choisissez le bon compte si vous en avez plusieurs."],
-              ["Accepter les autorisations", "Lecture Gmail et Calendar uniquement."],
+              ["Accepter les autorisations", "Lecture Gmail et Calendar + envoi de mail KYC."],
               ["Retour automatique", "Le CRM confirme la connexion — vous êtes prêt."],
             ]} />
           </div>
@@ -697,22 +940,33 @@ export default function AidePage() {
                   <p className="font-semibold text-gray-900 mb-3">Accès étendu</p>
                   <div className="space-y-2 text-sm text-gray-700">
                     <p>• Voir <strong>tous les dossiers</strong> de tous les consultants</p>
-                    <p>• Vue globale de la facturation du cabinet</p>
-                    <p>• Accès aux <strong>rémunérations</strong> de chaque consultant</p>
-                    <p>• <strong>Page Analyse</strong> avec statistiques cabinet, graphs, export Excel</p>
-                    <p>• Classement des consultants par collecte</p>
-                    <p>• Gestion des paramètres et configurations</p>
+                    <p>• Vue globale de la facturation et des encaissements</p>
+                    <p>• Accès aux <strong>rémunérations</strong> de chaque consultant + paliers Mandat</p>
+                    <p>• <strong>Analyse</strong> : stats cabinet, graphs cliquables, export CSV</p>
+                    <p>• <strong>Audit</strong> : historique modifications avec filtres + export CSV</p>
+                    <p>• <strong>Encours V2</strong> : saisie en lot des encours mensuels</p>
+                    <p>• <strong>Paramètres</strong> : équipe, catalogue, grilles LUX/PE, objectifs, templates email</p>
                   </div>
                 </div>
 
                 <div className="bg-white border border-gray-200 rounded-xl p-5">
                   <p className="font-semibold text-gray-900 mb-3">Page Analyse</p>
                   <div className="space-y-1 text-sm text-gray-600">
-                    <p>• Filtres par période, consultant, produit, compagnie</p>
-                    <p>• Graphique collecte mensuelle (cliquez un mois pour le détail)</p>
-                    <p>• Répartition par produit et financement</p>
-                    <p>• Indicateurs facturation : émises, payées, impayées</p>
-                    <p>• Export Excel de tous les dossiers filtrés</p>
+                    <p>• Filtres par période, consultant, statut, produit, compagnie, pays</p>
+                    <p>• Bandeau de période active explicite + bouton "Voir toute la période"</p>
+                    <p>• Graphiques collecte / commissions par mois (cliquez un mois pour le détail)</p>
+                    <p>• Distributions par pays, produit, compagnie, financement</p>
+                    <p>• Top 5 clients + classement consultants</p>
+                    <p>• Export CSV des dossiers filtrés</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                  <p className="font-semibold text-gray-900 mb-3">Page Audit</p>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p>• Filtres par table (clients, dossiers, commissions, factures…) et utilisateur</p>
+                    <p>• Trace tous les UPDATE / INSERT / DELETE des tables sensibles</p>
+                    <p>• Export CSV (cap 10 000 lignes, BOM UTF-8)</p>
                   </div>
                 </div>
               </div>
@@ -726,8 +980,9 @@ export default function AidePage() {
                     <p>• Valider le paiement des commissions (passage à "Payée")</p>
                     <p>• Consulter tous les dossiers en lecture</p>
                     <p>• Suivi du réglementaire de l'ensemble des clients</p>
-                    <p>• Vue complète de la facturation cabinet</p>
-                    <p>• Accès aux encaissements globaux</p>
+                    <p>• Vue complète de la facturation cabinet et des encaissements</p>
+                    <p>• Saisir et valider les <strong>batches d'encours</strong> mensuels</p>
+                    <p>• Accès à l'<strong>Audit</strong> (historique des modifications + export CSV)</p>
                   </div>
                 </div>
               </div>
