@@ -3,10 +3,11 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Download, ChevronDown, ChevronUp, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { TrendingUp, Download, ChevronDown, ChevronUp, X, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { VDossiersComplets } from '@/types/database'
 import { NewEncoursModal } from '@/app/dashboard/encours/new-encours-modal'
 import { useToast } from '@/components/ui/toast'
+import { DeleteEncaissementModal } from './delete-encaissement-modal'
 
 const ITEMS_PER_PAGE = 25
 
@@ -29,6 +30,8 @@ const MONTH_LABELS: Record<string, string> = {
 
 // ───── Types ─────
 
+type EncaissementSource = 'auto' | 'encours_v2' | 'facture'
+
 interface RemEntry {
   id: string
   mois: string
@@ -42,6 +45,9 @@ interface RemEntry {
   consultant: number
   mathias: number
   part_cabinet: number
+  // Métadonnées pour la suppression depuis le drill-down
+  source_id: string
+  source_type: EncaissementSource
 }
 
 interface Totals {
@@ -153,6 +159,8 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
     pool_plus: pp, thelo: th, maxine: mx,
     steph_fr, steph_asie, consultant, mathias: 0,
     part_cabinet: cabinetShare,
+    source_id: f.id || '',
+    source_type: 'facture' as const,
   }
 }
 
@@ -162,6 +170,9 @@ function encaissementToRemEntry(e: any): RemEntry {
   const stephane = isStephane(e.consultant_prenom)
   const france = isFrance(e.client_pays)
   const remConsultant = Number(e.rem_consultant || 0)
+
+  // source_type vient de la vue v_encaissements_unified ('auto' ou 'encours_v2')
+  const sourceType: EncaissementSource = (e.source_type === 'encours_v2' ? 'encours_v2' : 'auto')
 
   return {
     id: e.id || e.dossier_id || `enc-${Math.random()}`,
@@ -176,6 +187,8 @@ function encaissementToRemEntry(e: any): RemEntry {
     consultant: !stephane ? remConsultant : 0,
     mathias: 0,
     part_cabinet: Number(e.part_cabinet || 0),
+    source_id: e.id || '',
+    source_type: sourceType,
   }
 }
 
@@ -201,9 +214,18 @@ function getEntryValue(entry: RemEntry, col: ColKey): number {
   return Number((entry as any)[col] || 0)
 }
 
+interface DrillDownEntry {
+  label: string
+  mois: string
+  amount: number
+  // Métadonnées portées pour la suppression depuis le drill-down
+  source_id: string
+  source_type: EncaissementSource
+}
+
 interface DrillDownInfo {
   title: string
-  entries: { label: string; mois: string; amount: number }[]
+  entries: DrillDownEntry[]
   total: number
 }
 
@@ -234,14 +256,23 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
   // Drill-down: show dossiers for a given column, optionally filtered by month
   const openDrillDown = (col: ColKey, mois?: string) => {
     const source = mois ? data.filter(e => e.mois === mois) : data
-    const entries = source
-      .map(e => ({ label: e.label, mois: e.mois, amount: getEntryValue(e, col) }))
+    const entries: DrillDownEntry[] = source
+      .map(e => ({
+        label: e.label,
+        mois: e.mois,
+        amount: getEntryValue(e, col),
+        source_id: e.source_id,
+        source_type: e.source_type,
+      }))
       .filter(e => e.amount !== 0)
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
     const total = entries.reduce((s, e) => s + e.amount, 0)
     const monthLabel = mois ? (MONTH_LABELS[mois] || mois) + ' — ' : ''
     setDrillDown({ title: `${monthLabel}${COL_LABELS[col]}`, entries, total })
   }
+
+  // Suppression depuis le drill-down
+  const [deleteTarget, setDeleteTarget] = React.useState<DrillDownEntry | null>(null)
 
   const byMonth = React.useMemo(() => {
     const grouped: Record<string, RemEntry[]> = {}
@@ -452,6 +483,9 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                       <th className="py-2 pr-4 font-medium">Dossier</th>
                       <th className="py-2 px-2 font-medium">Mois</th>
                       <th className="py-2 px-2 font-medium text-right">Montant</th>
+                      {(isManager || isBackOffice) && (
+                        <th className="py-2 pl-2 font-medium w-10"></th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -460,6 +494,19 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                         <td className="py-2 pr-4 text-gray-900">{e.label}</td>
                         <td className="py-2 px-2 text-gray-500">{MONTH_LABELS[e.mois] || e.mois}</td>
                         <td className="py-2 px-2 text-right font-medium">{formatCurrency(e.amount)}</td>
+                        {(isManager || isBackOffice) && (
+                          <td className="py-2 pl-2">
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(e)}
+                              className="p-1 rounded hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors"
+                              title="Supprimer cet encaissement"
+                              aria-label="Supprimer"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -591,6 +638,26 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
           </Card>
         )
       })}
+
+      {/* Modale de confirmation de suppression depuis le drill-down */}
+      <DeleteEncaissementModal
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={() => {
+          showToast('Encaissement supprimé. Recharge la page pour mettre à jour les totaux.', 'success')
+          setDrillDown(null)
+          setDeleteTarget(null)
+          // Soft refresh : recharge la page au prochain tick pour re-fetcher les données
+          setTimeout(() => window.location.reload(), 800)
+        }}
+        line={deleteTarget ? {
+          source_id: deleteTarget.source_id,
+          source_type: deleteTarget.source_type,
+          label: deleteTarget.label,
+          mois: MONTH_LABELS[deleteTarget.mois] || deleteTarget.mois,
+          montant: deleteTarget.amount,
+        } : null}
+      />
     </div>
   )
 }

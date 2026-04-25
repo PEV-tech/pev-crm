@@ -88,28 +88,99 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   }
 }
 
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+/**
+ * DELETE /api/encours/lines/[id]
+ *
+ * Query param `?force=true` :
+ *   - Si le lot est `valide` : on dé-valide automatiquement avant la
+ *     suppression (supprime toutes les allocations du lot, repasse le
+ *     statut en `brouillon`), puis supprime la ligne.
+ *   - Si le lot est `brouillon` : delete classique (cascade sur ses
+ *     propres allocations).
+ *   - Si le lot est `comptabilise` ou `annule` : on refuse même avec
+ *     force (état terminal).
+ *
+ * Sans force=true (default), comportement strict : refuse si le lot
+ * n'est pas en brouillon.
+ */
+export async function DELETE(req: NextRequest, ctx: RouteContext) {
   try {
     const { id } = await ctx.params
     if (!isUuid(id)) return NextResponse.json({ error: 'id invalide' }, { status: 400 })
+    const force = req.nextUrl.searchParams.get('force') === 'true'
+
     const supabase = await createClient()
     const { data: authData, error: authErr } = await supabase.auth.getUser()
     if (authErr || !authData?.user) return NextResponse.json({ error: 'Authentification requise' }, { status: 401 })
 
     const { data: lineRow } = await supabase
       .from('encaissement_lines' as never).select('batch_id').eq('id', id).maybeSingle()
-    if (lineRow) {
-      const { data: batchRow } = await supabase
-        .from('encaissement_batches' as never).select('statut')
-        .eq('id', (lineRow as { batch_id: string }).batch_id).maybeSingle()
-      if (batchRow && (batchRow as { statut: string }).statut !== 'brouillon') {
-        return NextResponse.json({ error: `Lot en statut "${(batchRow as { statut: string }).statut}". Dé-valider d'abord.` }, { status: 409 })
+
+    if (!lineRow) return NextResponse.json({ error: 'Ligne introuvable' }, { status: 404 })
+
+    const batchId = (lineRow as { batch_id: string }).batch_id
+
+    const { data: batchRow } = await supabase
+      .from('encaissement_batches' as never).select('statut')
+      .eq('id', batchId).maybeSingle()
+
+    if (!batchRow) return NextResponse.json({ error: 'Lot introuvable' }, { status: 404 })
+
+    const statut = (batchRow as { statut: string }).statut
+
+    // États terminaux : refus quel que soit force
+    if (statut === 'comptabilise' || statut === 'annule') {
+      return NextResponse.json(
+        { error: `Lot en statut "${statut}", non modifiable.` },
+        { status: 409 },
+      )
+    }
+
+    // Statut valide : si force, on dé-valide d'abord
+    if (statut === 'valide') {
+      if (!force) {
+        return NextResponse.json(
+          { error: `Lot en statut "valide". Passe ?force=true pour dé-valider et supprimer.` },
+          { status: 409 },
+        )
+      }
+
+      // Dé-validation : supprime toutes les allocations du lot + repasse en brouillon
+      const { data: allLines } = await supabase
+        .from('encaissement_lines' as never)
+        .select('id')
+        .eq('batch_id' as never, batchId)
+
+      if (allLines && allLines.length > 0) {
+        const ids = (allLines as Array<{ id: string }>).map((l) => l.id)
+        const { error: delAllocsErr } = await supabase
+          .from('encaissement_line_allocations' as never)
+          .delete()
+          .in('encaissement_line_id' as never, ids)
+        if (delAllocsErr) {
+          return NextResponse.json({ error: `Suppression allocations : ${delAllocsErr.message}` }, { status: 500 })
+        }
+      }
+
+      const { error: updErr } = await supabase
+        .from('encaissement_batches' as never)
+        .update({ statut: 'brouillon', validated_at: null, validated_by: null } as never)
+        .eq('id', batchId)
+
+      if (updErr) {
+        return NextResponse.json({ error: `Bascule statut : ${updErr.message}` }, { status: 500 })
       }
     }
 
+    // Statut brouillon (ou re-passé en brouillon) : suppression de la ligne
+    // (cascade automatique sur ses propres allocations via FK)
     const { error } = await supabase.from('encaissement_lines' as never).delete().eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
+
+    return NextResponse.json({
+      ok: true,
+      batch_unvalidated: statut === 'valide' && force,
+    })
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Erreur interne' }, { status: 500 })
   }
