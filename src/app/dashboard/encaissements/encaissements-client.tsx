@@ -3,8 +3,10 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Download, ChevronDown, ChevronUp, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingUp, Download, ChevronDown, ChevronUp, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { VDossiersComplets } from '@/types/database'
+import { NewEncoursModal } from '@/app/dashboard/encours/new-encours-modal'
+import { useToast } from '@/components/ui/toast'
 
 const ITEMS_PER_PAGE = 25
 
@@ -219,6 +221,8 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
   const [expandedMonths, setExpandedMonths] = React.useState<Record<string, boolean>>({})
   const [drillDown, setDrillDown] = React.useState<DrillDownInfo | null>(null)
   const [monthPagination, setMonthPagination] = React.useState<Record<string, number>>({})
+  const [newEncoursOpen, setNewEncoursOpen] = React.useState<boolean>(false)
+  const { showToast, ToastContainer } = useToast()
 
   const toggleMonth = (mois: string) => {
     setExpandedMonths(prev => ({ ...prev, [mois]: !prev[mois] }))
@@ -325,11 +329,24 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
             Commissions reçues et répartition — {data.length} entrée(s) sur {byMonth.length} mois
           </p>
         </div>
-        <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
-          <Download size={18} />
-          Exporter CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="default" className="gap-2" onClick={() => setNewEncoursOpen(true)}>
+            <Plus size={18} />
+            Encours
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
+            <Download size={18} />
+            Exporter CSV
+          </Button>
+        </div>
       </div>
+
+      <NewEncoursModal
+        isOpen={newEncoursOpen}
+        onClose={() => setNewEncoursOpen(false)}
+        onCreated={(batchId) => { showToast(`Lot créé (${batchId.slice(0, 8)}…)`, 'success') }}
+      />
+      {ToastContainer}
 
       {/* ───── Barre récapitulative ───── */}
       <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-8' : 'md:grid-cols-7'} gap-3`}>
