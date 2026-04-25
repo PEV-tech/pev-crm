@@ -218,12 +218,11 @@ export default function AnalysePage() {
 
   const supabase = React.useMemo(() => createClient(), [])
 
-  // Default period = current year
-  React.useEffect(() => {
-    const now = new Date()
-    setPeriodeDebut(`${now.getFullYear()}-01-01`)
-    setPeriodeFin(now.toISOString().split('T')[0])
-  }, [])
+  // 2026-04-25 — Plus de période par défaut. La page démarre sur "toute
+  // la période" pour rester cohérente avec /dashboard/dossiers (Clients)
+  // et /dashboard/ma-clientele qui n'ont pas de filtre période actif par
+  // défaut. L'utilisateur peut activer une période via les date pickers
+  // — le bandeau bleu apparaît alors automatiquement.
 
   // Fetch
   React.useEffect(() => {
@@ -430,11 +429,10 @@ export default function AnalysePage() {
     return `${debut} → ${fin}`
   }, [periodeDebut, periodeFin])
 
-  // Reset
+  // Reset — vide aussi la période (cohérent avec le défaut "toute la période")
   const resetFilters = () => {
-    const now = new Date()
-    setPeriodeDebut(`${now.getFullYear()}-01-01`)
-    setPeriodeFin(now.toISOString().split('T')[0])
+    setPeriodeDebut('')
+    setPeriodeFin('')
     setFiltreConsultant('tous')
     setFiltreStatut('tous')
     setFiltreProduit('tous')

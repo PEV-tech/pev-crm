@@ -76,76 +76,75 @@ export function DossiersClient({
   const [filterProduit, setFilterProduit] = React.useState('')
   const [filterPays, setFilterPays] = React.useState('')
   const [filterConsultant, setFilterConsultant] = React.useState('')
+  // 2026-04-25 — Filtre période (alignement avec Analyse). Pas de défaut :
+  // la page démarre sur "toute la période". Quand actif, le bandeau bleu
+  // apparaît en tête (cf. Analyse).
+  const [periodeDebut, setPeriodeDebut] = React.useState('')
+  const [periodeFin, setPeriodeFin] = React.useState('')
   const [searchQuery, setSearchQuery] = React.useState(searchParams.get('q') || '')
 
-  // Filter data based on active tab, filters, and search
+  // 2026-04-25 — Filtrage en deux étages :
+  //   1. `scopeData` applique tous les filtres "globaux" (période,
+  //      catégorie, produit, pays, consultant) + l'exclusion des
+  //      non_abouti. C'est la base sur laquelle on calcule les KPIs et
+  //      les comptes par onglet → garantit la cohérence avec Analyse.
+  //   2. `filteredData` ajoute `activeTab` + `searchQuery` pour le
+  //      tableau lui-même.
+  // Les filtres `activeTab` et `searchQuery` n'affectent pas les KPIs
+  // (un changement d'onglet ne doit pas modifier les compteurs).
+  const scopeData = React.useMemo(() => {
+    let result = data.filter((d) => d.client_statut !== 'non_abouti')
+
+    if (filterCategorie) result = result.filter((d) => d.produit_categorie === filterCategorie)
+    if (filterProduit) result = result.filter((d) => d.produit_nom === filterProduit)
+    if (filterPays) result = result.filter((d) => d.client_pays === filterPays)
+    // Filter by consultant — Point 3.1 (2026-04-24) : consultant_id (UUID)
+    // pour éviter les collisions de prénoms (bug Hugues/Stéphane).
+    if (filterConsultant) result = result.filter((d) => (d as any).consultant_id === filterConsultant)
+    // Filter by période (date_operation). Les lignes sans date_operation
+    // (orphan/prospect dérivés) sont conservées — elles ne portent pas de
+    // date, donc on ne peut pas les filtrer dessus.
+    if (periodeDebut) result = result.filter((d) => !d.date_operation || d.date_operation >= periodeDebut)
+    if (periodeFin) result = result.filter((d) => !d.date_operation || d.date_operation <= periodeFin)
+
+    return result
+  }, [data, filterCategorie, filterProduit, filterPays, filterConsultant, periodeDebut, periodeFin])
+
+  // Vue dédiée aux non_abouti (onglet séparé).
+  const nonAboutiData = React.useMemo(
+    () => data.filter((d) => d.client_statut === 'non_abouti'),
+    [data],
+  )
+
+  // Filter data based on active tab and search (par-dessus scopeData).
   const filteredData = React.useMemo(() => {
-    // Bug 2 + 3 (2026-04-24) — Logique d'affichage selon l'onglet.
-    // Les non_abouti sont masqués par défaut. L'onglet "Non abouti" lève
-    // le masquage ET filtre explicitement dessus (basé sur client_statut,
-    // pas d.statut — car un client non_abouti orphan a d.statut='prospect'
-    // mais client_statut='non_abouti'). Le toggle "Inclure les non aboutis"
-    // a été retiré : l'onglet dédié suffit et évite de polluer les stats.
-    let result = data
+    let result: DossierRow[]
     if (activeTab === 'non_abouti') {
-      // Onglet dédié : seuls les non_abouti.
-      result = data.filter((d) => d.client_statut === 'non_abouti')
+      // Onglet dédié : seuls les non_abouti — sans filtres globaux pour
+      // ne pas masquer un client archivé qui pourrait sortir de la période.
+      result = nonAboutiData
     } else {
-      // Autres onglets : on exclut les non_abouti (même s'ils ont un
-      // dossier avec statut 'en_cours' / 'finalise' / 'prospect').
-      result = data.filter((d) => d.client_statut !== 'non_abouti')
+      result = scopeData
+      if (activeTab === 'prospects') result = result.filter((d) => d.statut === 'prospect')
+      else if (activeTab === 'en_cours') result = result.filter((d) => d.statut === 'client_en_cours')
+      else if (activeTab === 'finalises') result = result.filter((d) => d.statut === 'client_finalise')
     }
 
-    // Text search
+    // Text search (s'applique sur toutes les vues)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       result = result.filter((d) => {
         const text = [
           d.client_nom, d.client_prenom, d.produit_nom,
           d.compagnie_nom, d.consultant_nom, d.consultant_prenom,
-          d.client_pays
+          d.client_pays,
         ].filter(Boolean).join(' ').toLowerCase()
         return text.includes(q)
       })
     }
 
-    // Filter by statut (onglets autres que non_abouti)
-    // L'onglet non_abouti filtre déjà via client_statut ci-dessus, donc
-    // pas besoin de filtrer ici.
-    if (activeTab !== 'tous' && activeTab !== 'non_abouti') {
-      result = result.filter((d) => {
-        if (activeTab === 'prospects') return d.statut === 'prospect'
-        if (activeTab === 'en_cours') return d.statut === 'client_en_cours'
-        if (activeTab === 'finalises') return d.statut === 'client_finalise'
-        return true
-      })
-    }
-
-    // Filter by catégorie
-    if (filterCategorie) {
-      result = result.filter((d) => d.produit_categorie === filterCategorie)
-    }
-
-    // Filter by produit
-    if (filterProduit) {
-      result = result.filter((d) => d.produit_nom === filterProduit)
-    }
-
-    // Filter by pays
-    if (filterPays) {
-      result = result.filter((d) => d.client_pays === filterPays)
-    }
-
-    // Filter by consultant — Point 3.1 (2026-04-24) : on filtre par
-    // consultant_id (UUID stable) et plus par concat prenom+nom, car
-    // cette dernière matchait par erreur des dossiers de consultants
-    // homonymes ou avec espace/casse différente (bug Hugues/Stéphane).
-    if (filterConsultant) {
-      result = result.filter((d) => (d as any).consultant_id === filterConsultant)
-    }
-
     return result
-  }, [data, activeTab, filterCategorie, filterProduit, filterPays, filterConsultant, searchQuery])
+  }, [scopeData, nonAboutiData, activeTab, searchQuery])
 
   const handleExportCSV = React.useCallback(() => {
     const exportData = filteredData.map((d) => ({
@@ -220,27 +219,24 @@ export function DossiersClient({
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [data])
 
-  // Calculate stats
+  // 2026-04-25 — KPIs et comptes par onglet basés sur `scopeData` (filtres
+  // globaux appliqués), pas plus sur `data` brut. Les compteurs reflètent
+  // donc la période active et les filtres catégorie/produit/pays/consultant.
+  // Le compteur Non abouti reste basé sur le dataset complet (la fiche
+  // archivée n'a pas vocation à disparaître quand on filtre par période).
   const stats = React.useMemo(() => {
-    // Bug 2 + 3 (2026-04-24) — Les stats ignorent les non_abouti (onglet
-    // dédié les affiche séparément). Plus de toggle — l'onglet suffit.
-    const visibleData = data.filter((d) => d.client_statut !== 'non_abouti')
-    // Bug 1 (2026-04-24) — totalCount côté serveur renvoyait un nombre
-    // gonflé par le DISTINCT ON de v_dossiers_complets (duplicates via
-    // LEFT JOIN commissions/factures). On privilégie maintenant
-    // visibleData.length après déduplication côté front.
     const counts = {
-      tous: visibleData.length,
-      prospects: visibleData.filter((d) => d.statut === 'prospect').length,
-      en_cours: visibleData.filter((d) => d.statut === 'client_en_cours').length,
-      finalises: visibleData.filter((d) => d.statut === 'client_finalise').length,
-      non_abouti: data.filter((d) => d.client_statut === 'non_abouti').length,
+      tous: scopeData.length,
+      prospects: scopeData.filter((d) => d.statut === 'prospect').length,
+      en_cours: scopeData.filter((d) => d.statut === 'client_en_cours').length,
+      finalises: scopeData.filter((d) => d.statut === 'client_finalise').length,
+      non_abouti: nonAboutiData.length,
     }
 
-    const totalMontant = visibleData.reduce((sum, d) => sum + (d.montant || 0), 0)
+    const totalMontant = scopeData.reduce((sum, d) => sum + (d.montant || 0), 0)
 
     return { counts, totalMontant }
-  }, [data])
+  }, [scopeData, nonAboutiData])
 
   /**
    * Point 2.3 (2026-04-24) — Navigation sur clic de ligne.
@@ -392,6 +388,19 @@ export function DossiersClient({
     },
   ]
 
+  // Helpers d'affichage pour le bandeau "période active" (cohérent avec Analyse).
+  const formatFrDate = (iso: string): string => {
+    if (!iso) return ''
+    const [y, m, d] = iso.split('-')
+    return `${d}/${m}/${y}`
+  }
+  const periodeDescription = React.useMemo(() => {
+    if (!periodeDebut && !periodeFin) return null
+    const debut = periodeDebut ? formatFrDate(periodeDebut) : 'origine'
+    const fin = periodeFin ? formatFrDate(periodeFin) : "aujourd'hui"
+    return `${debut} → ${fin}`
+  }, [periodeDebut, periodeFin])
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -411,6 +420,27 @@ export function DossiersClient({
           </Button>
         </div>
       </div>
+
+      {/* Bandeau "période active" — apparaît uniquement quand une période
+          est saisie. Cohérent avec /dashboard/analyse. */}
+      {periodeDescription && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-indigo-900">
+            <span>
+              Les chiffres ci-dessous sont filtrés sur la période :
+              {' '}<strong>{periodeDescription}</strong>
+              {' '}(<strong>{stats.counts.tous}</strong> dossiers sur l&apos;ensemble du CRM)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setPeriodeDebut(''); setPeriodeFin('') }}
+            className="shrink-0 text-xs font-medium text-indigo-700 hover:text-indigo-900 hover:underline"
+          >
+            Voir toute la période →
+          </button>
+        </div>
+      )}
 
       {/* Stats Bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -476,6 +506,24 @@ export function DossiersClient({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="max-w-sm"
               />
+              {/* 2026-04-25 — Filtre période. Pas de défaut : "toute la
+                  période" tant qu'aucune date n'est saisie. */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-600 whitespace-nowrap">Du</label>
+                <input
+                  type="date"
+                  value={periodeDebut}
+                  onChange={(e) => setPeriodeDebut(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <label className="text-xs text-gray-600 whitespace-nowrap">Au</label>
+                <input
+                  type="date"
+                  value={periodeFin}
+                  onChange={(e) => setPeriodeFin(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
               <Select
                 value={filterCategorie}
                 onChange={(e) => setFilterCategorie(e.target.value)}
