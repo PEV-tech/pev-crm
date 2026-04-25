@@ -54,7 +54,16 @@ import {
   normalizeEnfantsDetails,
   formatEnfantsSummary,
 } from './enfants-editor'
-import type { EnfantDetail } from '@/types/database'
+import {
+  DonationsEditor,
+  normalizeDonations,
+  formatDonationsSummary,
+} from './donations-editor'
+import {
+  SuccessionScalarsEditor,
+  type SuccessionScalars,
+} from './succession-scalars-editor'
+import type { EnfantDetail, DonationRecue } from '@/types/database'
 
 interface KYCSectionProps {
   client: any // The full client object from Supabase with all KYC fields
@@ -93,6 +102,8 @@ export interface KYCSectionHandle {
 //      pour 'co_titulaire' et 'joint', null sinon.
 interface ImmobilierRow {
   type_bien?: string
+  // 2026-04-25 — précision libre quand `type_bien === 'Autre'` (vidé sinon).
+  type_bien_libre?: string
   designation?: string
   date_acq?: string
   valeur_acq?: number
@@ -109,6 +120,8 @@ interface ImmobilierRow {
 
 interface ProduitFinancierRow {
   type_produit?: string
+  // 2026-04-25 — précision libre quand `type_produit === 'Autre'` (vidé sinon).
+  type_produit_libre?: string
   designation?: string
   /**
    * @deprecated champ texte libre historique — remplacé par `detenteur_type`
@@ -176,6 +189,109 @@ interface PatrimoineProRow {
   description?: string
   detenteur_type?: DetenteurType
   co_titulaire_client_id?: string | null
+}
+
+// =====================================================================
+// Helpers commentaires par section (2026-04-25)
+// =====================================================================
+function readCommentaires(
+  src: Record<string, unknown>
+): Record<string, string> {
+  const v = src.commentaires_kyc
+  if (v && typeof v === 'object' && !Array.isArray(v))
+    return v as Record<string, string>
+  return {}
+}
+
+function SectionCommentField({
+  sectionKey,
+  data,
+  editData,
+  setEditData,
+}: {
+  sectionKey: string
+  data: Record<string, unknown>
+  editData: EditState
+  setEditData: React.Dispatch<React.SetStateAction<EditState>>
+}) {
+  const current = readCommentaires((editData.commentaires_kyc ? editData : data) as Record<string, unknown>)
+  const value = current[sectionKey] || ''
+  return (
+    <div className="pt-2 border-t border-gray-200">
+      <label className="text-xs font-semibold text-gray-600 block mb-1">
+        Commentaire libre
+      </label>
+      <textarea
+        rows={2}
+        value={value}
+        placeholder="Précisions internes pour cette section…"
+        onChange={(e) => {
+          const next = { ...current }
+          if (e.target.value === '') delete next[sectionKey]
+          else next[sectionKey] = e.target.value
+          setEditData({ ...editData, commentaires_kyc: next })
+        }}
+        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+      />
+    </div>
+  )
+}
+
+function SectionCommentReadOnly({
+  sectionKey,
+  data,
+}: {
+  sectionKey: string
+  data: Record<string, unknown>
+}) {
+  const current = readCommentaires(data)
+  const value = current[sectionKey]
+  if (!value) return null
+  return (
+    <div className="pt-2 border-t border-gray-200">
+      <p className="text-xs text-gray-500">Commentaire</p>
+      <p className="text-sm text-gray-900 whitespace-pre-wrap">{value}</p>
+    </div>
+  )
+}
+
+function SuccessionReadOnly({ data }: { data: Record<string, unknown> }) {
+  const items: Array<[string, string]> = []
+  if (data.union_precedente === true) {
+    items.push([
+      'Union précédente',
+      (data.union_precedente_details as string) || 'Oui',
+    ])
+  }
+  if (data.loi_applicable_pays || data.loi_applicable_details) {
+    items.push([
+      'Loi applicable',
+      [data.loi_applicable_pays, data.loi_applicable_details]
+        .filter(Boolean)
+        .join(' — ') as string,
+    ])
+  }
+  if (data.a_testament === true) {
+    items.push(['Testament', (data.testament_details as string) || 'Oui'])
+  }
+  if (data.a_donation_entre_epoux === true) {
+    items.push([
+      'Donation entre époux',
+      (data.donation_entre_epoux_details as string) || 'Oui',
+    ])
+  }
+  if (items.length === 0) return null
+  return (
+    <div className="pt-2 border-t border-gray-200 space-y-1">
+      <p className="text-xs text-gray-500 font-semibold">Succession</p>
+      {items.map(([k, v]) => (
+        <div key={k} className="flex gap-2 text-sm">
+          <span className="text-gray-500 shrink-0 w-44">{k}</span>
+          <span className="text-gray-900 whitespace-pre-wrap">{v}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
@@ -300,6 +416,24 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           ? client.patrimoine_divers
           : [],
         emprunts: Array.isArray(client?.emprunts) ? client.emprunts : [],
+        // 2026-04-25 — succession + commentaires
+        union_precedente: client?.union_precedente ?? null,
+        union_precedente_details: client?.union_precedente_details ?? null,
+        loi_applicable_pays: client?.loi_applicable_pays ?? null,
+        loi_applicable_details: client?.loi_applicable_details ?? null,
+        a_testament: client?.a_testament ?? null,
+        testament_details: client?.testament_details ?? null,
+        a_donation_entre_epoux: client?.a_donation_entre_epoux ?? null,
+        donation_entre_epoux_details: client?.donation_entre_epoux_details ?? null,
+        donations_recues: Array.isArray(client?.donations_recues)
+          ? client.donations_recues
+          : [],
+        commentaires_kyc:
+          client?.commentaires_kyc &&
+          typeof client.commentaires_kyc === 'object' &&
+          !Array.isArray(client.commentaires_kyc)
+            ? client.commentaires_kyc
+            : {},
       }
       setEditData(initialData)
     }, [client])
@@ -510,6 +644,17 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
           produits_financiers: editData.produits_financiers,
           patrimoine_divers: editData.patrimoine_divers,
           emprunts: editData.emprunts,
+          // 2026-04-25 — succession + commentaires + donations
+          union_precedente: editData.union_precedente,
+          union_precedente_details: editData.union_precedente_details,
+          loi_applicable_pays: editData.loi_applicable_pays,
+          loi_applicable_details: editData.loi_applicable_details,
+          a_testament: editData.a_testament,
+          testament_details: editData.testament_details,
+          a_donation_entre_epoux: editData.a_donation_entre_epoux,
+          donation_entre_epoux_details: editData.donation_entre_epoux_details,
+          donations_recues: editData.donations_recues,
+          commentaires_kyc: editData.commentaires_kyc,
         }
 
         const { error } = await supabase
@@ -1230,6 +1375,44 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       })
                     }
                   />
+
+                  {/* Histoire familiale & succession (2026-04-25) */}
+                  <SuccessionScalarsEditor
+                    variant="crm"
+                    value={
+                      {
+                        union_precedente: data.union_precedente,
+                        union_precedente_details: data.union_precedente_details,
+                        loi_applicable_pays: data.loi_applicable_pays,
+                        loi_applicable_details: data.loi_applicable_details,
+                        a_testament: data.a_testament,
+                        testament_details: data.testament_details,
+                        a_donation_entre_epoux: data.a_donation_entre_epoux,
+                        donation_entre_epoux_details: data.donation_entre_epoux_details,
+                      } satisfies SuccessionScalars
+                    }
+                    onChange={(next) =>
+                      setEditData({ ...editData, ...next })
+                    }
+                  />
+
+                  <DonationsEditor
+                    variant="crm"
+                    value={normalizeDonations(data.donations_recues)}
+                    onChange={(rows) =>
+                      setEditData({
+                        ...editData,
+                        donations_recues: rows as unknown as DonationRecue[],
+                      })
+                    }
+                  />
+
+                  <SectionCommentField
+                    sectionKey="situation_familiale"
+                    data={data}
+                    editData={editData}
+                    setEditData={setEditData}
+                  />
                 </>
               ) : (
                 <>
@@ -1260,6 +1443,26 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       {formatEnfantsSummary(data.enfants_details)}
                     </p>
                   </div>
+
+                  {/* Récap succession (read-only) */}
+                  <SuccessionReadOnly data={data} />
+
+                  <div>
+                    <p className="text-xs text-gray-500">
+                      Donations reçues{' '}
+                      <span className="text-gray-400">
+                        ({normalizeDonations(data.donations_recues).length})
+                      </span>
+                    </p>
+                    <p className="text-sm font-medium text-gray-900 mt-0.5">
+                      {formatDonationsSummary(data.donations_recues)}
+                    </p>
+                  </div>
+
+                  <SectionCommentReadOnly
+                    sectionKey="situation_familiale"
+                    data={data}
+                  />
                 </>
               )}
             </div>
@@ -1404,6 +1607,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       )
                     })()}
                   </div>
+
+                  <SectionCommentField
+                    sectionKey="situation_professionnelle"
+                    data={data}
+                    editData={editData}
+                    setEditData={setEditData}
+                  />
                 </>
               ) : (
                 <>
@@ -1434,6 +1644,11 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                       {displayValue(data.date_debut_emploi)}
                     </p>
                   </div>
+
+                  <SectionCommentReadOnly
+                    sectionKey="situation_professionnelle"
+                    data={data}
+                  />
                 </>
               )}
             </div>
@@ -1949,13 +2164,14 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                               <td className="py-1 px-1">
                                 <select
                                   value={row.type_bien || ''}
-                                  onChange={e =>
-                                    updateImmobilierRow(
-                                      idx,
-                                      'type_bien',
-                                      e.target.value
-                                    )
-                                  }
+                                  onChange={e => {
+                                    const v = e.target.value
+                                    updateImmobilierRow(idx, 'type_bien', v)
+                                    // Reset du libellé libre dès qu'on quitte "Autre"
+                                    if (v !== 'Autre') {
+                                      updateImmobilierRow(idx, 'type_bien_libre', '')
+                                    }
+                                  }}
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
                                 >
                                   <option value="">—</option>
@@ -1973,6 +2189,21 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                     </option>
                                   ))}
                                 </select>
+                                {row.type_bien === 'Autre' && (
+                                  <input
+                                    type="text"
+                                    placeholder="Précisez"
+                                    value={row.type_bien_libre || ''}
+                                    onChange={e =>
+                                      updateImmobilierRow(
+                                        idx,
+                                        'type_bien_libre',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full mt-1 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                  />
+                                )}
                               </td>
                               <td className="py-1 px-1">
                                 <input
@@ -2614,13 +2845,13 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                               <td className="py-1 px-1">
                                 <select
                                   value={row.type_produit || ''}
-                                  onChange={e =>
-                                    updateProduitRow(
-                                      idx,
-                                      'type_produit',
-                                      e.target.value
-                                    )
-                                  }
+                                  onChange={e => {
+                                    const v = e.target.value
+                                    updateProduitRow(idx, 'type_produit', v)
+                                    if (v !== 'Autre') {
+                                      updateProduitRow(idx, 'type_produit_libre', '')
+                                    }
+                                  }}
                                   className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
                                 >
                                   <option value="">—</option>
@@ -2638,6 +2869,21 @@ const KYCSection = React.forwardRef<KYCSectionHandle, KYCSectionProps>(
                                     </option>
                                   ))}
                                 </select>
+                                {row.type_produit === 'Autre' && (
+                                  <input
+                                    type="text"
+                                    placeholder="Précisez"
+                                    value={row.type_produit_libre || ''}
+                                    onChange={e =>
+                                      updateProduitRow(
+                                        idx,
+                                        'type_produit_libre',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full mt-1 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                  />
+                                )}
                               </td>
                               <td className="py-1 px-1">
                                 <input

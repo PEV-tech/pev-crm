@@ -98,6 +98,17 @@ export type KycPdfClient = Record<string, unknown> & {
   produits_financiers?: unknown
   patrimoine_divers?: unknown
   emprunts?: unknown
+  // 2026-04-25 — succession + commentaires
+  union_precedente?: boolean | null
+  union_precedente_details?: string | null
+  loi_applicable_pays?: string | null
+  loi_applicable_details?: string | null
+  a_testament?: boolean | null
+  testament_details?: string | null
+  a_donation_entre_epoux?: boolean | null
+  donation_entre_epoux_details?: string | null
+  donations_recues?: unknown
+  commentaires_kyc?: unknown
   // PM
   raison_sociale?: string | null
   forme_juridique?: string | null
@@ -636,6 +647,123 @@ function normalizeEnfantsForPdf(value: unknown): EnfantPdfShape[] {
   return []
 }
 
+// 2026-04-25 — Section "Histoire familiale & succession" : union précédente,
+// donations reçues, loi applicable, testament, donation entre époux.
+type DonationPdfShape = {
+  donateur?: string | null
+  montant?: number | null
+  date_donation?: string | null
+  nature?: string | null
+  commentaire?: string | null
+}
+function renderSuccession(ctx: PageCtx, c: KycPdfClient) {
+  // On ne rend la section que si au moins UN champ est rempli — sinon
+  // on saute l'en-tête pour ne pas polluer le PDF.
+  const hasUnion = c.union_precedente === true
+  const hasLoi =
+    !!(c.loi_applicable_pays as string | null) ||
+    !!(c.loi_applicable_details as string | null)
+  const hasTestament = c.a_testament === true
+  const hasDonationEpoux = c.a_donation_entre_epoux === true
+  const donations: DonationPdfShape[] = Array.isArray(c.donations_recues)
+    ? (c.donations_recues as DonationPdfShape[])
+    : []
+  if (
+    !hasUnion &&
+    !hasLoi &&
+    !hasTestament &&
+    !hasDonationEpoux &&
+    donations.length === 0
+  ) {
+    return
+  }
+  drawSectionTitle(ctx, 'Histoire familiale & succession')
+
+  if (hasUnion) {
+    drawLabelValue(
+      ctx,
+      'Union précédente',
+      (c.union_precedente_details as string) || 'Oui'
+    )
+  }
+  if (hasLoi) {
+    const txt = [c.loi_applicable_pays, c.loi_applicable_details]
+      .filter(Boolean)
+      .join(' — ')
+    drawLabelValue(ctx, 'Loi applicable au régime matrimonial', txt as string)
+  }
+  if (hasTestament) {
+    drawLabelValue(
+      ctx,
+      'Testament',
+      (c.testament_details as string) || 'Oui'
+    )
+  }
+  if (hasDonationEpoux) {
+    drawLabelValue(
+      ctx,
+      'Donation entre époux',
+      (c.donation_entre_epoux_details as string) || 'Oui'
+    )
+  }
+  donations.forEach((d, i) => {
+    const parts: string[] = []
+    if (d.donateur) parts.push(d.donateur)
+    if (typeof d.montant === 'number')
+      parts.push(
+        new Intl.NumberFormat('fr-FR', {
+          style: 'currency',
+          currency: 'EUR',
+          maximumFractionDigits: 0,
+        }).format(d.montant)
+      )
+    if (d.nature) parts.push(d.nature)
+    if (d.date_donation) {
+      try {
+        parts.push(new Date(d.date_donation).toLocaleDateString('fr-FR'))
+      } catch {
+        parts.push(d.date_donation)
+      }
+    }
+    drawLabelValue(ctx, `Donation reçue ${i + 1}`, parts.join(' · ') || '—')
+    if (d.commentaire) {
+      drawLabelValue(ctx, '  Note', d.commentaire)
+    }
+  })
+}
+
+// Rendu des commentaires libres par section (2026-04-25). Une section
+// dédiée en fin de document, n'apparaît que si au moins un commentaire
+// non vide est présent.
+function renderCommentaires(ctx: PageCtx, c: KycPdfClient) {
+  const v = c.commentaires_kyc
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return
+  const entries = Object.entries(v as Record<string, unknown>).filter(
+    ([, val]) => typeof val === 'string' && (val as string).trim() !== ''
+  )
+  if (entries.length === 0) return
+  drawSectionTitle(ctx, 'Commentaires complémentaires')
+  const labelOf = (k: string): string => {
+    const map: Record<string, string> = {
+      identite: 'Identité',
+      coordonnees: 'Coordonnées',
+      situation_fiscale: 'Situation fiscale',
+      situation_familiale: 'Situation familiale',
+      situation_professionnelle: 'Situation professionnelle',
+      revenus: 'Revenus annuels',
+      impots: 'Impôt sur le revenu',
+      patrimoine_immobilier: 'Patrimoine immobilier',
+      produits_financiers: 'Produits financiers',
+      patrimoine_divers: 'Patrimoine divers',
+      emprunts: 'Emprunts',
+    }
+    return map[k] || k
+  }
+  for (const [k, val] of entries) {
+    drawLabelValue(ctx, labelOf(k), (val as string).trim())
+  }
+}
+
 function renderRessources(ctx: PageCtx, c: KycPdfClient) {
   drawSectionTitle(ctx, 'Situation professionnelle & ressources')
   drawLabelValue(ctx, 'Profession', (c.profession as string) ?? null)
@@ -922,12 +1050,14 @@ export async function generateKycPdfBytes(
   } else {
     renderEtatCivilPP(ctx, client)
     renderSituationFamiliale(ctx, client)
+    renderSuccession(ctx, client)
     renderRessources(ctx, client)
     renderBiensEtDettesPP(ctx, client)
     renderFiscalite(ctx, client)
   }
 
   renderObjectifs(ctx, client)
+  renderCommentaires(ctx, client)
   renderCnilNotice(ctx)
   renderSignature(ctx, signature, client)
 
