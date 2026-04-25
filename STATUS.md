@@ -148,18 +148,18 @@ Documentation associée :
 ### P0 résiduel — Dette révélée par types honnêtes
 Tous post-V1, **aucun ne bloque l'usage quotidien** (cf. section "Dette révélée" plus haut pour le détail) :
 1. ~~Recréer la vue `v_dossiers_complets` pour exposer `co_titulaire_id` et `apporteur_id`~~ → **DONE 2026-04-21** : script appliqué en prod via Chrome/pg-meta (autorisation Maxine, pas de CLI service_role token), types TS patchés manuellement dans `database.ts`, `as any` co_titulaire retirés dans `dossier-detail-wrapper.tsx`. Smoke test validé : les 2 vues exposent bien `apporteur_id`, `co_titulaire_id`, `co_titulaire_nom`, `co_titulaire_prenom`.
-2. Harmoniser `document-checklist` / `client-relances` : élargir les interfaces locales vers les `Row` Supabase.
+2. ~~Harmoniser `document-checklist` / `client-relances`~~ → **DONE** : interfaces locales déjà élargies (cf. commentaire "Alignement avec les `Row` Supabase" dans `document-checklist.tsx`). `tsc --noEmit` = 0 erreur.
 3. ~~Annotations `map/reduce` dans `kyc-section.tsx` (~15 implicit-any)~~ → **DONE** (commit `9a71c26`, Batch C KYC).
-4. Bump `tsconfig.target` à ES2018+ pour régler `parse-kyc/route.ts`.
+4. ~~Bump `tsconfig.target` à ES2018+ pour régler `parse-kyc/route.ts`~~ → **N/A 2026-04-25** : `tsconfig.target` est déjà `es2020` et la route `/api/parse-kyc` a été supprimée (point 1.8 corrections 2026-04-24).
 
 ### P1 — Dette technique
-5. **Tracer le DDL `apporteurs`** dans `scripts/create-apporteurs.sql` (reverse-engineering depuis Supabase) pour qu'un futur env propre soit reproductible.
-6. **Découper `parametres/page.tsx`** (1817 lignes) en sous-pages (Consultants, Produits, Grilles, Challenges).
+5. ~~Tracer le DDL `apporteurs`~~ → **DONE 2026-04-25** : `scripts/create-apporteurs.sql` reverse-engineered depuis `src/types/database.ts` (table + index + 4 policies RLS + FK depuis `dossiers`). Idempotent. À appliquer uniquement sur un nouvel environnement (pas en prod, où la table existe déjà).
+6. **Découper `parametres/page.tsx`** → ✅ **DONE** : `parametres/page.tsx` désormais à 128 lignes, sections extraites dans `_tabs/` (admin, catalogue, communication, compte, équipe, relances, rémunération).
 7. **Setup Supabase CLI migrations** pour remplacer les scripts manuels appliqués via le SQL editor.
 8. **ESLint strict** + lint-staged en pre-commit pour bloquer les `console.log`, catchs vides, et `as any` régressions.
 
 ### P0 sécurité — Sprint V1 2026-04-21 (à appliquer avant mise à disposition)
-9. **`fix-rls-encaissements.sql`** — RLS manquante sur une table financière, tout utilisateur authentifié lit aujourd'hui tous les encaissements via l'anon key. **Bloquant V1** — mis de côté 2026-04-21 sur décision Maxine, à reprendre.
+9. **`fix-rls-encaissements.sql`** — RLS manquante sur une table financière, tout utilisateur authentifié lit aujourd'hui tous les encaissements via l'anon key. **Bloquant V1** — réécrit 2026-04-25 (la V1 du script joignait sur `client_id` inexistant ; nouvelle version utilise `consultant_id` direct + fallback via dossier→client). **À appliquer en prod via SQL editor.**
 10. ~~**`dissociate-dumont-penard.sql`**~~ → **DONE 2026-04-21** (Matthieu conserve les dossiers, fiche jointe supprimée).
 11. ~~**`fix-clients-drive-column-dedup.sql`**~~ → **DONE 2026-04-21** (colonne fantôme supprimée + types TS patchés).
 12. ~~**Scan secrets Git**~~ → **DONE 2026-04-21** via `detect-secrets` (gitleaks binary inaccessible depuis le sandbox). 0 secret commité. Finding mineur : endpoint `/api/migrate/route.ts` exposé 3 min le 2026-04-14 → rotation `SUPABASE_SERVICE_ROLE_KEY` à planifier avant 2026-10 (cf. [`docs/ROTATION.md`](docs/ROTATION.md) §9).
