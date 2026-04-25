@@ -130,7 +130,7 @@ function ConfirmPhase({ reconciled, unreconciled, reconciledTotal, allowUnreconc
       <div className="bg-blue-50 border border-blue-200 rounded-md px-4 py-3">
         <p className="text-xs text-blue-600 uppercase font-semibold mb-1">Ce qui va être figé</p>
         <p className="text-sm text-gray-800"><strong>{reconciled.length}</strong> ligne(s) rapprochée(s) — montant brut total <strong className="tabular-nums">{fmtEUR.format(reconciledTotal)}</strong>.</p>
-        <p className="text-xs text-gray-600 mt-1">Chaque ligne génère une allocation figée via determineRule. Immutable après validation.</p>
+        <p className="text-xs text-gray-600 mt-1">Chaque ligne génère une allocation figée selon la grille de splits actuelle (cf. Paramètres → Rémunération → Splits). Immutable après validation.</p>
       </div>
 
       {unreconciled.length > 0 && (

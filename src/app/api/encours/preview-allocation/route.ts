@@ -1,6 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { allocateLine, summarizeAllocations, type AllocationTarget } from '@/lib/encours/allocation'
+import { COMMISSION_RULES, type CommissionRule } from '@/lib/commissions/rules'
+
+// 2026-04-25 — Loader serveur pour les rules de split. Lit la table
+// `commission_split_rules` (éditable par les managers en Paramètres) ;
+// fallback sur les COMMISSION_RULES statiques si DB inaccessible/vide.
+async function loadRulesServer(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<CommissionRule[]> {
+  const { data, error } = await supabase
+    .from('commission_split_rules' as never)
+    .select('*')
+    .order('sort_order', { ascending: true })
+  if (error || !data || data.length === 0) return COMMISSION_RULES
+  const ruleKeyToId: Record<string, number> = {
+    chasse_thelo: 1, chasse_maxine: 2, pool: 3,
+    stephane_entree: 4, stephane_france: 5,
+    tier_65: 6, tier_50: 7, tier_30: 8, encours: 9,
+  }
+  return (data as Array<Record<string, unknown>>).map((row) => ({
+    id: ruleKeyToId[row.rule_key as string] ?? Number(row.sort_order),
+    name: String(row.name),
+    description: String(row.description ?? ''),
+    split: {
+      part_consultant: Number(row.part_consultant),
+      part_pool_plus: Number(row.part_pool_plus),
+      part_thelo: Number(row.part_thelo),
+      part_maxine: Number(row.part_maxine),
+      part_stephane: Number(row.part_stephane),
+      part_cabinet: Number(row.part_cabinet),
+    },
+  }))
+}
 
 function isUuid(x: unknown): x is string {
   return typeof x === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x)
@@ -69,6 +101,9 @@ export async function POST(req: NextRequest) {
     const remApporteurExt = typeof b.override_rem_apporteur_ext === 'number'
       ? b.override_rem_apporteur_ext : montantBrut * tauxApporteurExt
 
+    // Charge les règles de split depuis la DB (éditables managers).
+    const rules = await loadRulesServer(supabase)
+
     const drafts = allocateLine({
       line: { id: '00000000-0000-0000-0000-000000000000', type_commission: b.type_commission as 'entree' | 'encours', montant_brut_percu: montantBrut },
       dossier: dossier as unknown as Parameters<typeof allocateLine>[0]['dossier'],
@@ -83,6 +118,7 @@ export async function POST(req: NextRequest) {
       },
       rem_apporteur_ext_montant: remApporteurExt,
       rem_apporteur_interne_montant: 0,
+      rules,
     })
     const summary = summarizeAllocations(drafts)
 

@@ -1,5 +1,8 @@
 import type { Consultant, Dossier } from '@/types/database'
-import { COMMISSION_RULES, determineRule, type CommissionRule, type CommissionSplit } from '@/lib/commissions/rules'
+import {
+  COMMISSION_RULES, determineRuleFromArray,
+  type CommissionRule, type CommissionSplit,
+} from '@/lib/commissions/rules'
 import {
   buildConsultantSnapshot, buildDossierSnapshot, buildRuleSnapshot,
   resolvePrededuction, round2,
@@ -15,6 +18,13 @@ export interface AllocateLineInput {
   dossierEnrichment?: Partial<Omit<DossierSnapshot, 'dossier_id'>>
   rem_apporteur_ext_montant?: number
   rem_apporteur_interne_montant?: number
+  /**
+   * Tableau de règles à utiliser pour le calcul. Si non fourni, fallback
+   * sur les COMMISSION_RULES statiques (legacy). Recommandé : passer le
+   * résultat de `loadCommissionRules()` pour que les éditions managers
+   * en Paramètres prennent effet.
+   */
+  rules?: CommissionRule[]
 }
 
 export interface EncaissementAllocationDraft {
@@ -50,18 +60,16 @@ interface SplitAmounts {
   part_maxine: number; part_stephane: number; part_cabinet: number
 }
 
+// 2026-04-25 — Refactor : applique directement les pourcentages issus de
+// `rule.split` (DB-backed via loadCommissionRules() ou fallback statique
+// de COMMISSION_RULES). Plus de hardcoding — éditer les valeurs en DB
+// dans Paramètres → Rémunération → Splits change immédiatement les
+// allocations futures.
+//
+// Garanti par le seed initial : les valeurs DB matchent les anciens
+// pourcentages hardcodés à l'arrondi près (sum ≈ 100 sauf rule 9
+// "encours" qui reste à 0 — déterminé dynamiquement par dossier).
 function applyRuleSplit(rule: CommissionRule, amount: number): SplitAmounts {
-  const zero: SplitAmounts = { part_consultant: 0, part_pool_plus: 0, part_thelo: 0, part_maxine: 0, part_stephane: 0, part_cabinet: 0 }
-  if (rule.id === 3) return { ...zero, part_pool_plus: amount * 0.233, part_thelo: amount * 0.233, part_maxine: amount * 0.233, part_cabinet: amount * 0.3 }
-  if (rule.id === 4 || rule.id === 5) return { ...zero, part_stephane: amount * 0.5, part_pool_plus: amount * 0.083, part_thelo: amount * 0.083, part_maxine: amount * 0.083, part_cabinet: amount * 0.25 }
-  if (rule.id === 6) return { ...zero, part_consultant: amount * 0.65, part_pool_plus: amount * 0.03333, part_thelo: amount * 0.03333, part_maxine: amount * 0.03333, part_cabinet: amount * 0.25 }
-  if (rule.id === 7) return { ...zero, part_consultant: amount * 0.5, part_pool_plus: amount * 0.083, part_thelo: amount * 0.083, part_maxine: amount * 0.083, part_cabinet: amount * 0.25 }
-  if (rule.id === 8) return { ...zero, part_consultant: amount * 0.3, part_pool_plus: amount * 0.133, part_thelo: amount * 0.133, part_maxine: amount * 0.133, part_cabinet: amount * 0.3 }
-  if (rule.id === 1 || rule.id === 2) {
-    const base: SplitAmounts = { ...zero, part_consultant: amount * 0.5, part_cabinet: amount * 0.3, part_pool_plus: amount * 0.1 }
-    return rule.id === 1 ? { ...base, part_maxine: amount * 0.1 } : { ...base, part_thelo: amount * 0.1 }
-  }
-  if (rule.id === 9) return zero
   const s: CommissionSplit = rule.split
   return {
     part_consultant: amount * (s.part_consultant / 100),
@@ -74,7 +82,9 @@ function applyRuleSplit(rule: CommissionRule, amount: number): SplitAmounts {
 }
 
 export function allocateLine(input: AllocateLineInput): EncaissementAllocationDraft[] {
-  const { line, dossier, targets, dossierEnrichment } = input
+  const { line, dossier, targets, dossierEnrichment, rules } = input
+  // Tableau de règles effectif : DB-loaded (préféré) ou fallback statique.
+  const activeRules = rules && rules.length > 0 ? rules : COMMISSION_RULES
   if (targets.length === 0) throw new Error(`allocateLine: aucun target pour la ligne ${line.id}`)
   const sumPct = targets.reduce((s, t) => s + t.split_pct, 0)
   if (sumPct < 0.9999 || sumPct > 1.0001) {
@@ -97,7 +107,7 @@ export function allocateLine(input: AllocateLineInput): EncaissementAllocationDr
   const dossierSnap = buildDossierSnapshot(dossier, dossierEnrichment)
 
   return targets.map((target) => {
-    const rule = determineRule(target.consultant, dossier)
+    const rule = determineRuleFromArray(target.consultant, dossier, activeRules)
     const ruleSnap = buildRuleSnapshot(rule)
     const consultantSnap = buildConsultantSnapshot(target.consultant)
 
