@@ -34,6 +34,11 @@ import {
   StandardFonts,
   rgb,
 } from 'pdf-lib'
+import {
+  computeEndettement,
+  formatBreakdown,
+  type EmpruntLike,
+} from './kyc-endettement'
 
 // =====================================================
 // Constantes cabinet (source de vérité PDF post-arbitrage Maxine)
@@ -629,6 +634,72 @@ function renderBiensEtDettesPP(ctx: PageCtx, c: KycPdfClient) {
   )
   drawSectionTitle(ctx, 'Dettes')
   renderJsonBlock(ctx, 'Emprunts en cours', c.emprunts)
+  renderTauxEndettement(ctx, c)
+}
+
+/**
+ * Bloc « Taux d'endettement » — chantier 7.5 (2026-04-24).
+ * Réutilise le helper partagé avec le dashboard pour garantir une formule
+ * unique : (mensualités crédits + loyer + charges RP) / revenus mensuels.
+ */
+function renderTauxEndettement(ctx: PageCtx, c: KycPdfClient) {
+  const e = computeEndettement({
+    proprietaire_locataire: c.proprietaire_locataire,
+    montant_loyer: c.montant_loyer,
+    charges_residence_principale: c.charges_residence_principale,
+    total_revenus_annuel: c.total_revenus_annuel,
+    revenus_pro_net: c.revenus_pro_net,
+    revenus_fonciers: c.revenus_fonciers,
+    autres_revenus: c.autres_revenus,
+    emprunts: (c.emprunts as EmpruntLike[] | null) ?? [],
+  })
+
+  drawText(ctx, 'Taux d\u2019endettement', {
+    size: 10,
+    font: ctx.bold,
+    color: COLORS.muted,
+  })
+
+  if (e.chargesTotales === 0) {
+    drawText(ctx, '0 % \u2014 aucune charge structurelle d\u00e9clar\u00e9e', {
+      size: 9.5,
+      font: ctx.italic,
+      color: COLORS.muted,
+    })
+    ctx.y -= 4
+    return
+  }
+
+  if (e.revenusManquants) {
+    drawText(ctx, 'Non calculable \u2014 revenus non renseign\u00e9s', {
+      size: 9.5,
+      font: ctx.italic,
+      color: COLORS.muted,
+    })
+    ctx.y -= 4
+    return
+  }
+
+  const tauxLine = `${e.taux} %${e.taux > 35 ? '  \u2014 \u00c9LEV\u00c9 (>35 %)' : ''}`
+  drawText(ctx, tauxLine, { size: 11, font: ctx.bold })
+
+  const detail = `${formatEuro(e.chargesTotales)} / mois sur ${formatEuro(e.revenusMensuels)} / mois de revenus`
+  drawText(ctx, detail, { size: 9.5, color: COLORS.muted })
+
+  const breakdown = formatBreakdown(e)
+  if (breakdown) {
+    drawText(ctx, `dont ${breakdown}`, { size: 9.5, color: COLORS.muted })
+  }
+
+  if (e.empruntsIncomplets > 0) {
+    drawText(
+      ctx,
+      `\u26A0 ${e.empruntsIncomplets} emprunt${e.empruntsIncomplets > 1 ? 's' : ''} sans \u00e9ch\u00e9ance mensuelle \u2014 le taux est sous-estim\u00e9.`,
+      { size: 9, font: ctx.italic, color: COLORS.muted }
+    )
+  }
+
+  ctx.y -= 4
 }
 
 function renderJsonBlock(ctx: PageCtx, label: string, raw: unknown) {
