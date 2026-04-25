@@ -296,6 +296,61 @@ function describeDivers(row: Record<string, unknown>): {
   return { title, subtitle, lines }
 }
 
+// 2026-04-25 : describer pour les sous-fiches enfants (champ enfants_details
+// passé de TEXT libre à JSONB array). Permet au consultant de voir clairement
+// dans le diff "Léa Dupont — Femme, née le 12/03/2015, à charge" plutôt qu'un
+// JSON brut.
+function describeEnfant(row: Record<string, unknown>): {
+  title: string
+  subtitle: string | null
+  lines: RowLine[]
+} {
+  // Cas legacy : entrée backfillée depuis l'ancien champ TEXT.
+  if (row.legacy_notes) {
+    return {
+      title: 'Saisie historique',
+      subtitle: String(row.legacy_notes),
+      lines: [],
+    }
+  }
+  const fullName = [row.prenom, row.nom]
+    .filter((v) => typeof v === 'string' && v.trim() !== '')
+    .join(' ')
+    .trim()
+  const sexe =
+    row.sexe === 'homme'
+      ? 'Homme'
+      : row.sexe === 'femme'
+        ? 'Femme'
+        : row.sexe === 'autre'
+          ? 'Autre'
+          : null
+  const dateNaissance = row.date_naissance
+    ? (() => {
+        try {
+          return new Date(String(row.date_naissance)).toLocaleDateString('fr-FR')
+        } catch {
+          return String(row.date_naissance)
+        }
+      })()
+    : null
+  const aCharge =
+    row.a_charge === true
+      ? 'À charge'
+      : row.a_charge === false
+        ? 'Non à charge'
+        : null
+  const lines: RowLine[] = []
+  if (sexe) lines.push({ label: 'Sexe', value: sexe })
+  if (dateNaissance) lines.push({ label: 'Date de naissance', value: dateNaissance })
+  if (aCharge) lines.push({ label: 'Statut', value: aCharge })
+  return {
+    title: fullName || 'Enfant sans nom',
+    subtitle: null,
+    lines,
+  }
+}
+
 type StructuredDescriber = (row: Record<string, unknown>) => {
   title: string
   subtitle: string | null
@@ -307,6 +362,7 @@ const STRUCTURED_FIELDS: Record<string, StructuredDescriber> = {
   produits_financiers: describeProduit,
   emprunts: describeEmprunt,
   patrimoine_divers: describeDivers,
+  enfants_details: describeEnfant,
 }
 
 /**

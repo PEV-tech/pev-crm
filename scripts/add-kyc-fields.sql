@@ -18,7 +18,11 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS proprietaire_locataire VARCHAR;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS situation_matrimoniale VARCHAR;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS regime_matrimonial VARCHAR;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS nombre_enfants INTEGER;
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS enfants_details TEXT;
+-- 2026-04-25 : initialement TEXT (saisie libre type "11 ans, 15 ans"),
+-- migré en JSONB array (sous-fiches structurées par enfant — voir
+-- migrate-enfants-details-to-jsonb.sql). Sur une base fraîche, on crée
+-- directement en JSONB.
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS enfants_details JSONB;
 
 -- Situation professionnelle fields
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS profession VARCHAR;

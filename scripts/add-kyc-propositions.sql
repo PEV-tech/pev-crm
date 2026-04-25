@@ -440,11 +440,13 @@ BEGIN
       situation_matrimoniale = CASE WHEN 'situation_matrimoniale' = ANY(accepted_keys) THEN prop.proposed_data->>'situation_matrimoniale' ELSE c.situation_matrimoniale END,
       regime_matrimonial     = CASE WHEN 'regime_matrimonial'     = ANY(accepted_keys) THEN prop.proposed_data->>'regime_matrimonial'     ELSE c.regime_matrimonial     END,
       nombre_enfants         = CASE WHEN 'nombre_enfants'         = ANY(accepted_keys) THEN (prop.proposed_data->>'nombre_enfants')::INT  ELSE c.nombre_enfants         END,
-      -- Fix 2026-04-21 : la colonne `enfants_details` est TEXT (cf.
-      -- add-kyc-fields.sql:21), donc on extrait en TEXT (`->>`) et non
-      -- en JSONB (`->`), sinon PG refuse avec "CASE types text and
-      -- jsonb cannot be matched". Patch prod = fix-apply-proposition-enfants-details.sql.
-      enfants_details        = CASE WHEN 'enfants_details'        = ANY(accepted_keys) THEN prop.proposed_data->>'enfants_details'        ELSE c.enfants_details        END,
+      -- 2026-04-25 : la colonne `enfants_details` est désormais JSONB
+      -- (sous-fiches enfants structurées — migration
+      -- migrate-enfants-details-to-jsonb.sql). On revient à `->` (JSONB)
+      -- côté droit du CASE pour conserver la cohérence des types. Le fix
+      -- TEXT du 2026-04-21 (fix-apply-proposition-enfants-details.sql) est
+      -- caduc à partir de cette migration.
+      enfants_details        = CASE WHEN 'enfants_details'        = ANY(accepted_keys) THEN prop.proposed_data->'enfants_details'         ELSE c.enfants_details        END,
       profession             = CASE WHEN 'profession'             = ANY(accepted_keys) THEN prop.proposed_data->>'profession'             ELSE c.profession             END,
       statut_professionnel   = CASE WHEN 'statut_professionnel'   = ANY(accepted_keys) THEN prop.proposed_data->>'statut_professionnel'   ELSE c.statut_professionnel   END,
       employeur              = CASE WHEN 'employeur'              = ANY(accepted_keys) THEN prop.proposed_data->>'employeur'              ELSE c.employeur              END,

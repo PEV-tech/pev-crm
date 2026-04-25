@@ -17,6 +17,11 @@ import {
   getRegimesForSituation,
   type DetenteurType,
 } from '@/lib/kyc-enums'
+import {
+  EnfantsEditor,
+  normalizeEnfantsDetails,
+} from '@/components/clients/enfants-editor'
+import type { EnfantDetail } from '@/types/database'
 
 /**
  * Portail KYC public /kyc/[token]
@@ -183,11 +188,9 @@ const SECTIONS: Array<{
         // même règle que la section KYC consultant (kyc-section.tsx).
         cond: (d) => needsRegimeMatrimonial(d.situation_matrimoniale as string | null | undefined),
       },
-      {
-        key: 'nombre_enfants',
-        label: 'Nombre d\'enfants',
-        type: 'number',
-      },
+      // 2026-04-25 : `nombre_enfants` n'est plus saisi ici (champ retiré
+      // pour éviter la double source de vérité). Il est auto-dérivé de la
+      // longueur du tableau `enfants_details` rempli via EnfantsEditor.
     ],
   },
   {
@@ -261,25 +264,26 @@ const SECTIONS: Array<{
 ]
 
 // Clés JSONB éditables depuis le portail (#4b.2 : patrimoine + emprunts).
-// Les 4 tableaux ci-dessous sont rendus sous forme de tableaux éditables
+// Les tableaux ci-dessous sont rendus sous forme de tableaux éditables
 // avec ajout/suppression de lignes. Le format de ligne reste simple
 // (pas de résolution FK côté client : le consultant résout les
 // co-titulaires à la validation).
+// 2026-04-25 : `enfants_details` rejoint cette liste (sous-fiches enfants
+// dynamiques côté portail). `nombre_enfants` est auto-dérivé.
 const EDITABLE_JSONB_KEYS = [
   'patrimoine_immobilier',
   'produits_financiers',
   'patrimoine_divers',
   'emprunts',
+  'enfants_details',
 ] as const
 
 // Clés JSONB transmises telles quelles à la RPC (non éditables ici).
-// `enfants_details` reste géré côté consultant en V1 (nombre_enfants
-// reste éditable par le client).
 // Point 4.3 (2026-04-24) : `patrimoine_professionnel` transite en
 // read-only via le portail public tant qu'il n'y a pas d'éditeur dédié
 // côté client. Important : le laisser en READONLY (et non EDITABLE)
 // évite que la soumission ne wipe la section — saisie consultant only.
-const READONLY_JSONB_KEYS = ['enfants_details', 'patrimoine_professionnel'] as const
+const READONLY_JSONB_KEYS = ['patrimoine_professionnel'] as const
 
 // Shapes simplifiées — miroir des interfaces consultant (kyc-section.tsx)
 // sans les FK UUID (co_titulaire_client_id). Côté client, le co-titulaire
@@ -517,6 +521,16 @@ export function KycPublicClient({ token }: { token: string }) {
     if (initialData.type_personne) {
       out.type_personne = initialData.type_personne
     }
+    // 2026-04-25 : `nombre_enfants` n'est plus saisi via SECTIONS (il est
+    // auto-dérivé de la longueur du tableau enfants_details côté setField).
+    // On le renvoie explicitement pour que la RPC apply mette à jour la
+    // colonne INT en cohérence avec l'array JSONB.
+    const enfants = formData.enfants_details
+    if (Array.isArray(enfants)) {
+      out.nombre_enfants = enfants.length
+    } else if (typeof formData.nombre_enfants === 'number') {
+      out.nombre_enfants = formData.nombre_enfants
+    }
     return out
   }
 
@@ -618,6 +632,19 @@ export function KycPublicClient({ token }: { token: string }) {
               </div>
             </section>
           ))}
+
+          {/* Sous-fiches enfants (JSONB éditable, 2026-04-25). Le compteur
+              `nombre_enfants` est auto-synchronisé côté setField pour ne pas
+              avoir 2 sources de vérité — l'utilisateur ne le saisit plus
+              manuellement. */}
+          <EnfantsEditor
+            variant="public"
+            value={normalizeEnfantsDetails(formData.enfants_details)}
+            onChange={(rows) => {
+              setField('enfants_details', rows as unknown as JsonbValue)
+              setField('nombre_enfants', rows.length)
+            }}
+          />
 
           {/* Patrimoine immobilier (JSONB éditable) */}
           <ImmobilierEditor

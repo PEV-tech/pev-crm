@@ -78,7 +78,10 @@ export type KycPdfClient = Record<string, unknown> & {
   situation_matrimoniale?: string | null
   regime_matrimonial?: string | null
   nombre_enfants?: number | null
-  enfants_details?: string | null
+  /** 2026-04-25 : passé en JSONB array (sous-fiches enfants structurées).
+   *  Le type reste `unknown` pour ne pas pré-supposer le shape — le
+   *  rendu se charge de normaliser via normalizeEnfantsDetails(). */
+  enfants_details?: unknown
   profession?: string | null
   statut_professionnel?: string | null
   employeur?: string | null
@@ -569,16 +572,68 @@ function renderSituationFamiliale(ctx: PageCtx, c: KycPdfClient) {
     'Régime matrimonial',
     (c.regime_matrimonial as string) ?? null
   )
+
+  // Sous-fiches enfants — depuis 2026-04-25 stockées en JSONB array.
+  // On rend une ligne par enfant avec nom, prénom, sexe, date naissance,
+  // statut "à charge". Les entrées legacy (champ TEXT migré, ne contenant
+  // que `legacy_notes`) sont rendues telles quelles.
+  const enfants = normalizeEnfantsForPdf(c.enfants_details)
   drawLabelValue(
     ctx,
     "Nombre d'enfants/personnes à charge",
-    c.nombre_enfants !== undefined && c.nombre_enfants !== null
-      ? String(c.nombre_enfants)
-      : null
+    enfants.length > 0
+      ? String(enfants.length)
+      : c.nombre_enfants !== undefined && c.nombre_enfants !== null
+        ? String(c.nombre_enfants)
+        : null
   )
-  if (c.enfants_details) {
-    drawLabelValue(ctx, 'Détails enfants', (c.enfants_details as string) ?? null)
+  enfants.forEach((enf, i) => {
+    if (enf.legacy_notes) {
+      drawLabelValue(ctx, `Enfant ${i + 1}`, enf.legacy_notes)
+      return
+    }
+    const fullName = [enf.prenom, enf.nom].filter(Boolean).join(' ').trim()
+    const meta: string[] = []
+    if (enf.sexe) {
+      meta.push(
+        enf.sexe === 'homme' ? 'Homme' : enf.sexe === 'femme' ? 'Femme' : 'Autre'
+      )
+    }
+    if (enf.date_naissance) {
+      try {
+        meta.push(
+          'né(e) le ' +
+            new Date(enf.date_naissance).toLocaleDateString('fr-FR')
+        )
+      } catch {
+        meta.push('né(e) le ' + enf.date_naissance)
+      }
+    }
+    if (enf.a_charge === true) meta.push('à charge')
+    else if (enf.a_charge === false) meta.push('non à charge')
+    const value = [fullName || '—', meta.join(' · ')].filter(Boolean).join(' — ')
+    drawLabelValue(ctx, `Enfant ${i + 1}`, value)
+  })
+}
+
+// Normalisation locale pour ne pas créer une dépendance entre kyc-pdf.ts
+// (côté serveur, runtime Node) et un composant React. Schéma identique à
+// `EnfantDetail` exporté depuis @/types/database.
+type EnfantPdfShape = {
+  nom?: string | null
+  prenom?: string | null
+  sexe?: 'homme' | 'femme' | 'autre' | null
+  date_naissance?: string | null
+  a_charge?: boolean | null
+  legacy_notes?: string | null
+}
+function normalizeEnfantsForPdf(value: unknown): EnfantPdfShape[] {
+  if (Array.isArray(value)) return value as EnfantPdfShape[]
+  if (typeof value === 'string' && value.trim() !== '') {
+    return [{ legacy_notes: value }]
   }
+  if (value && typeof value === 'object') return [value as EnfantPdfShape]
+  return []
 }
 
 function renderRessources(ctx: PageCtx, c: KycPdfClient) {
