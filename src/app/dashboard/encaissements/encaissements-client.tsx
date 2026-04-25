@@ -311,19 +311,14 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     URL.revokeObjectURL(url)
   }, [data, isBackOffice])
 
-  // ───── Cellule cliquable ─────
-  const ClickableCell = ({ value, col, mois, className = '' }: { value: number; col: ColKey; mois?: string; className?: string }) => {
+  // ───── Cellule du tableau mensuel ─────
+  // Le clic sur les cellules individuelles a été retiré (option B 2026-04-25).
+  // Le drill-down par poche × mois est accessible via la barre récap en haut
+  // OU via les chiffres d'en-tête de chaque mois (Max:/Thélo:/Cab:/POOL:).
+  // Le paramètre `col` est conservé pour compatibilité de signature.
+  const ClickableCell = ({ value, className = '' }: { value: number; col: ColKey; mois?: string; className?: string }) => {
     const display = formatCurrency(value)
-    if (display === '-') return <td className={`py-2 px-2 text-right ${className}`}>-</td>
-    return (
-      <td
-        className={`py-2 px-2 text-right cursor-pointer hover:bg-indigo-50 hover:underline rounded transition-colors ${className}`}
-        onClick={(e) => { e.stopPropagation(); openDrillDown(col, mois) }}
-        title={`Voir le détail ${COL_LABELS[col]}`}
-      >
-        {display}
-      </td>
-    )
+    return <td className={`py-2 px-2 text-right ${className}`}>{display}</td>
   }
 
   // ───── Ligne du tableau mensuel ─────
@@ -559,13 +554,37 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                 <div className="flex items-center gap-6 text-sm">
                   {isManager ? (
                     <>
-                      <span className="text-purple-600">Max: {formatCurrency(mt.maxine)}</span>
-                      <span className="text-blue-600">Thélo: {formatCurrency(mt.thelo)}</span>
+                      <span
+                        className="text-purple-600 cursor-pointer hover:underline"
+                        onClick={(e) => { e.stopPropagation(); openDrillDown('maxine', mois) }}
+                        title="Voir le détail Maxine pour ce mois"
+                      >
+                        Max: {formatCurrency(mt.maxine)}
+                      </span>
+                      <span
+                        className="text-blue-600 cursor-pointer hover:underline"
+                        onClick={(e) => { e.stopPropagation(); openDrillDown('thelo', mois) }}
+                        title="Voir le détail Thélo pour ce mois"
+                      >
+                        Thélo: {formatCurrency(mt.thelo)}
+                      </span>
                     </>
                   ) : (
-                    <span className="text-indigo-600">POOL: {formatCurrency(pool(mt))}</span>
+                    <span
+                      className="text-indigo-600 cursor-pointer hover:underline"
+                      onClick={(e) => { e.stopPropagation(); openDrillDown('pool', mois) }}
+                      title="Voir le détail POOL pour ce mois"
+                    >
+                      POOL: {formatCurrency(pool(mt))}
+                    </span>
                   )}
-                  <span className="text-gray-600">Cab: {formatCurrency(mt.part_cabinet)}</span>
+                  <span
+                    className="text-gray-600 cursor-pointer hover:underline"
+                    onClick={(e) => { e.stopPropagation(); openDrillDown('part_cabinet', mois) }}
+                    title="Voir le détail Cabinet pour ce mois"
+                  >
+                    Cab: {formatCurrency(mt.part_cabinet)}
+                  </span>
                   {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                 </div>
               </div>
