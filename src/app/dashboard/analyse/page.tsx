@@ -432,6 +432,25 @@ export default function AnalysePage() {
     )
   }
 
+  // Helpers d'affichage pour le bandeau "période active" (post-merge fix
+  // 2026-04-24 : éviter la confusion 216 vs 605 — la page Analyse pré-filtrait
+  // sur l'année en cours sans le signaler clairement à l'utilisateur).
+  const formatFrDate = (iso: string): string => {
+    if (!iso) return ''
+    const [y, m, d] = iso.split('-')
+    return `${d}/${m}/${y}`
+  }
+  const periodeDescription = React.useMemo(() => {
+    if (!periodeDebut && !periodeFin) return null // Toute la période → pas de bandeau
+    const debut = periodeDebut ? formatFrDate(periodeDebut) : 'origine'
+    const fin = periodeFin ? formatFrDate(periodeFin) : 'aujourd\'hui'
+    return `${debut} → ${fin}`
+  }, [periodeDebut, periodeFin])
+  const clearPeriode = () => {
+    setPeriodeDebut('')
+    setPeriodeFin('')
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -445,6 +464,28 @@ export default function AnalysePage() {
           Exporter CSV
         </Button>
       </div>
+
+      {/* Bandeau "période active" — explicite que les chiffres sont filtrés.
+          Permet aussi de basculer en "toute la période" en un clic. */}
+      {periodeDescription && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-indigo-900">
+            <Calendar size={16} className="text-indigo-600" />
+            <span>
+              Les chiffres ci-dessous sont filtrés sur la période :
+              {' '}<strong>{periodeDescription}</strong>
+              {' '}(<strong>{filteredData.length}</strong> dossiers sur l'ensemble du CRM)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={clearPeriode}
+            className="shrink-0 text-xs font-medium text-indigo-700 hover:text-indigo-900 hover:underline"
+          >
+            Voir toute la période →
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>
