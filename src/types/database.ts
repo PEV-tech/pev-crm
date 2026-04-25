@@ -415,8 +415,11 @@ export type Database = {
           autres_revenus: number | null
           capital_social: number | null
           charges_residence_principale: number | null
+          a_donation_entre_epoux: boolean | null
+          a_testament: boolean | null
           code_postal: string | null
           commentaires: string | null
+          commentaires_kyc: Json | null
           conformite: string | null
           consultant_id: string | null
           created_at: string | null
@@ -425,6 +428,8 @@ export type Database = {
           date_entree_relation: string | null
           date_naissance: string | null
           der: boolean | null
+          donation_entre_epoux_details: string | null
+          donations_recues: Json | null
           email: string | null
           employeur: string | null
           emprunts: Json | null
@@ -455,6 +460,8 @@ export type Database = {
           kyc_uploaded_at: string | null
           lieu_naissance: string | null
           lm: boolean | null
+          loi_applicable_details: string | null
+          loi_applicable_pays: string | null
           montant_loyer: number | null
           nationalite: string | null
           nif: string | null
@@ -487,19 +494,25 @@ export type Database = {
           statut_kyc: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel: string | null
           telephone: string | null
+          testament_details: string | null
           titre: string | null
           total_revenus_annuel: number | null
           type_personne: string
+          union_precedente: boolean | null
+          union_precedente_details: string | null
           updated_at: string | null
           ville: string | null
         }
         Insert: {
+          a_donation_entre_epoux?: boolean | null
+          a_testament?: boolean | null
           adresse?: string | null
           autres_revenus?: number | null
           capital_social?: number | null
           charges_residence_principale?: number | null
           code_postal?: string | null
           commentaires?: string | null
+          commentaires_kyc?: Json | null
           conformite?: string | null
           consultant_id?: string | null
           created_at?: string | null
@@ -508,6 +521,8 @@ export type Database = {
           date_entree_relation?: string | null
           date_naissance?: string | null
           der?: boolean | null
+          donation_entre_epoux_details?: string | null
+          donations_recues?: Json | null
           email?: string | null
           employeur?: string | null
           emprunts?: Json | null
@@ -538,6 +553,8 @@ export type Database = {
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null
+          loi_applicable_details?: string | null
+          loi_applicable_pays?: string | null
           montant_loyer?: number | null
           nationalite?: string | null
           nif?: string | null
@@ -570,19 +587,25 @@ export type Database = {
           statut_kyc?: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel?: string | null
           telephone?: string | null
+          testament_details?: string | null
           titre?: string | null
           total_revenus_annuel?: number | null
           type_personne?: string
+          union_precedente?: boolean | null
+          union_precedente_details?: string | null
           updated_at?: string | null
           ville?: string | null
         }
         Update: {
+          a_donation_entre_epoux?: boolean | null
+          a_testament?: boolean | null
           adresse?: string | null
           autres_revenus?: number | null
           capital_social?: number | null
           charges_residence_principale?: number | null
           code_postal?: string | null
           commentaires?: string | null
+          commentaires_kyc?: Json | null
           conformite?: string | null
           consultant_id?: string | null
           created_at?: string | null
@@ -591,6 +614,8 @@ export type Database = {
           date_entree_relation?: string | null
           date_naissance?: string | null
           der?: boolean | null
+          donation_entre_epoux_details?: string | null
+          donations_recues?: Json | null
           email?: string | null
           employeur?: string | null
           emprunts?: Json | null
@@ -621,6 +646,8 @@ export type Database = {
           kyc_uploaded_at?: string | null
           lieu_naissance?: string | null
           lm?: boolean | null
+          loi_applicable_details?: string | null
+          loi_applicable_pays?: string | null
           montant_loyer?: number | null
           nationalite?: string | null
           nif?: string | null
@@ -653,9 +680,12 @@ export type Database = {
           statut_kyc?: Database["public"]["Enums"]["statut_kyc_type"] | null
           statut_professionnel?: string | null
           telephone?: string | null
+          testament_details?: string | null
           titre?: string | null
           total_revenus_annuel?: number | null
           type_personne?: string
+          union_precedente?: boolean | null
+          union_precedente_details?: string | null
           updated_at?: string | null
           ville?: string | null
         }
@@ -2898,7 +2928,22 @@ export type EnfantDetail = {
   sexe?: 'homme' | 'femme' | 'autre' | null
   date_naissance?: string | null // YYYY-MM-DD
   a_charge?: boolean | null
+  // 2026-04-25 : flag pour distinguer les enfants issus d'une union précédente.
+  // Utile pour la planification successorale.
+  issu_precedente_union?: boolean | null
   legacy_notes?: string | null   // ne devrait apparaître que sur les entrées migrées du champ TEXT
+}
+
+// Sous-fiches "donation reçue" — stockées en JSONB array dans
+// clients.donations_recues. Multiple donations possibles par client (héritage,
+// donation parentale en plusieurs vagues…). Tous les champs optionnels pour
+// permettre une saisie partielle.
+export type DonationRecue = {
+  donateur?: string | null      // qui a fait la donation (parent, conjoint, etc.)
+  montant?: number | null       // en euros
+  date_donation?: string | null // YYYY-MM-DD
+  nature?: string | null        // somme d'argent / bien immobilier / titres / autre
+  commentaire?: string | null
 }
 
 // Views

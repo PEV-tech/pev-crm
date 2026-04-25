@@ -191,7 +191,7 @@ export function EnfantsEditor({
                     className={inputCls}
                   />
                 </Field>
-                <Field label="À charge ?" span2>
+                <Field label="À charge ?">
                   <div className="flex items-center gap-4 text-sm pt-1">
                     {([
                       { v: true, label: 'Oui' },
@@ -212,15 +212,31 @@ export function EnfantsEditor({
                         <span>{o.label}</span>
                       </label>
                     ))}
-                    {enf.a_charge !== null && enf.a_charge !== undefined && !readOnly && (
-                      <button
-                        type="button"
-                        onClick={() => patch(i, { a_charge: null })}
-                        className="text-xs text-gray-400 hover:text-gray-600 underline"
+                  </div>
+                </Field>
+                {/* 2026-04-25 — flag "issu d'une union précédente" pour la
+                    planification successorale (réserve héréditaire spécifique). */}
+                <Field label="Issu d'une précédente union ?">
+                  <div className="flex items-center gap-4 text-sm pt-1">
+                    {([
+                      { v: true, label: 'Oui' },
+                      { v: false, label: 'Non' },
+                    ] as const).map((o) => (
+                      <label
+                        key={String(o.v)}
+                        className="inline-flex items-center gap-1.5 cursor-pointer"
                       >
-                        Réinitialiser
-                      </button>
-                    )}
+                        <input
+                          type="radio"
+                          name={`issu_precedente_union_${i}`}
+                          checked={enf.issu_precedente_union === o.v}
+                          onChange={() => patch(i, { issu_precedente_union: o.v })}
+                          disabled={readOnly}
+                          className="accent-indigo-600"
+                        />
+                        <span>{o.label}</span>
+                      </label>
+                    ))}
                   </div>
                 </Field>
               </div>

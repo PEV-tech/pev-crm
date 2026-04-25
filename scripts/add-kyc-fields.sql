@@ -50,6 +50,19 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS impot_revenu_n2 NUMERIC;
 -- Objectifs field
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS objectifs_client TEXT;
 
+-- 2026-04-25 : histoire familiale & succession (chantier KYC succession +
+-- commentaires + Autre — détails dans add-kyc-succession-commentaires.sql).
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS commentaires_kyc JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS union_precedente BOOLEAN;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS union_precedente_details TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS donations_recues JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS loi_applicable_pays TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS loi_applicable_details TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS a_testament BOOLEAN;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS testament_details TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS a_donation_entre_epoux BOOLEAN;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS donation_entre_epoux_details TEXT;
+
 -- KYC metadata
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS kyc_date_signature DATE;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS kyc_uploaded_at TIMESTAMPTZ;

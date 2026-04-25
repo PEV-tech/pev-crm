@@ -21,7 +21,15 @@ import {
   EnfantsEditor,
   normalizeEnfantsDetails,
 } from '@/components/clients/enfants-editor'
-import type { EnfantDetail } from '@/types/database'
+import {
+  DonationsEditor,
+  normalizeDonations,
+} from '@/components/clients/donations-editor'
+import {
+  SuccessionScalarsEditor,
+  type SuccessionScalars,
+} from '@/components/clients/succession-scalars-editor'
+import type { EnfantDetail, DonationRecue } from '@/types/database'
 
 /**
  * Portail KYC public /kyc/[token]
@@ -72,8 +80,13 @@ type PendingProposition = {
 // Champs scalaires éditables regroupés par section — source de vérité UI.
 // L'ordre des sections respecte le KYC consultant existant (demande
 // Maxine 2026-04-22 : « adapte seulement pour raisons techniques »).
+// 2026-04-25 : ajout d'un `commentKey` optionnel par section. Quand
+// présent, un textarea libre apparaît en bas de la section, branché sur
+// `formData.commentaires_kyc[commentKey]`.
 const SECTIONS: Array<{
   title: string
+  /** Slug stocké dans clients.commentaires_kyc (JSONB). */
+  commentKey?: string
   fields: Array<{
     key: string
     label: string
@@ -93,6 +106,7 @@ const SECTIONS: Array<{
 }> = [
   {
     title: 'Identité',
+    commentKey: 'identite',
     fields: [
       {
         key: 'raison_sociale',
@@ -116,6 +130,7 @@ const SECTIONS: Array<{
   },
   {
     title: 'Coordonnées',
+    commentKey: 'coordonnees',
     fields: [
       { key: 'email', label: 'Email', type: 'email' },
       { key: 'telephone', label: 'Téléphone', type: 'tel' },
@@ -127,6 +142,7 @@ const SECTIONS: Array<{
   },
   {
     title: 'Situation fiscale',
+    commentKey: 'situation_fiscale',
     fields: [
       { key: 'residence_fiscale', label: 'Résidence fiscale' },
       {
@@ -168,6 +184,7 @@ const SECTIONS: Array<{
   },
   {
     title: 'Situation familiale',
+    commentKey: 'situation_familiale',
     fields: [
       {
         key: 'situation_matrimoniale',
@@ -195,6 +212,7 @@ const SECTIONS: Array<{
   },
   {
     title: 'Situation professionnelle',
+    commentKey: 'situation_professionnelle',
     fields: [
       { key: 'profession', label: 'Profession' },
       {
@@ -211,6 +229,7 @@ const SECTIONS: Array<{
   },
   {
     title: 'Revenus annuels',
+    commentKey: 'revenus',
     fields: [
       {
         key: 'revenus_pro_net',
@@ -231,6 +250,7 @@ const SECTIONS: Array<{
   },
   {
     title: 'Impôt sur le revenu',
+    commentKey: 'impots',
     fields: [
       {
         key: 'impot_revenu_n',
@@ -268,14 +288,16 @@ const SECTIONS: Array<{
 // avec ajout/suppression de lignes. Le format de ligne reste simple
 // (pas de résolution FK côté client : le consultant résout les
 // co-titulaires à la validation).
-// 2026-04-25 : `enfants_details` rejoint cette liste (sous-fiches enfants
-// dynamiques côté portail). `nombre_enfants` est auto-dérivé.
+// 2026-04-25 : `enfants_details` + `donations_recues` + `commentaires_kyc`
+// rejoignent cette liste.
 const EDITABLE_JSONB_KEYS = [
   'patrimoine_immobilier',
   'produits_financiers',
   'patrimoine_divers',
   'emprunts',
   'enfants_details',
+  'donations_recues',
+  'commentaires_kyc',
 ] as const
 
 // Clés JSONB transmises telles quelles à la RPC (non éditables ici).
@@ -296,6 +318,8 @@ const READONLY_JSONB_KEYS = ['patrimoine_professionnel'] as const
 
 type ImmobilierRow = {
   type_bien?: string
+  // 2026-04-25 — précision libre quand `type_bien === 'Autre'`. Vidé sinon.
+  type_bien_libre?: string
   designation?: string
   date_acq?: string
   valeur_acq?: number | ''
@@ -311,6 +335,8 @@ type ImmobilierRow = {
 
 type ProduitFinancierRow = {
   type_produit?: string
+  // 2026-04-25 — précision libre quand `type_produit === 'Autre'`. Vidé sinon.
+  type_produit_libre?: string
   designation?: string
   etablissement?: string
   valeur?: number | ''
@@ -387,10 +413,31 @@ export function KycPublicClient({ token }: { token: string }) {
     for (const k of READONLY_JSONB_KEYS) {
       init[k] = data[k]
     }
-    // JSONB éditables : toujours normaliser vers un array (vide si null).
+    // JSONB éditables :
+    //  - les arrays (patrimoine, enfants, donations) → normaliser à []
+    //  - commentaires_kyc (object key→texte) → normaliser à {}
     for (const k of EDITABLE_JSONB_KEYS) {
       const v = data[k]
-      init[k] = Array.isArray(v) ? v : []
+      if (k === 'commentaires_kyc') {
+        init[k] =
+          v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+      } else {
+        init[k] = Array.isArray(v) ? v : []
+      }
+    }
+    // 2026-04-25 — scalaires "succession" hors SECTIONS (rendus par
+    // SuccessionScalarsEditor en bas du formulaire, pas via FieldInput).
+    for (const k of [
+      'union_precedente',
+      'union_precedente_details',
+      'loi_applicable_pays',
+      'loi_applicable_details',
+      'a_testament',
+      'testament_details',
+      'a_donation_entre_epoux',
+      'donation_entre_epoux_details',
+    ] as const) {
+      init[k] = data[k] ?? null
     }
     setFormData(init)
 
@@ -531,6 +578,30 @@ export function KycPublicClient({ token }: { token: string }) {
     } else if (typeof formData.nombre_enfants === 'number') {
       out.nombre_enfants = formData.nombre_enfants
     }
+    // 2026-04-25 : scalaires "histoire familiale & succession" rendus en
+    // dehors des SECTIONS (booléens + textareas). On les inclut ici, en ne
+    // shipping que les valeurs renseignées (null/'' → on ne pousse pas pour
+    // ne pas écraser une valeur consultant inadvertament).
+    const SUCCESSION_BOOLS = [
+      'union_precedente',
+      'a_testament',
+      'a_donation_entre_epoux',
+    ] as const
+    for (const k of SUCCESSION_BOOLS) {
+      const v = formData[k]
+      if (typeof v === 'boolean') out[k] = v
+    }
+    const SUCCESSION_TEXTS = [
+      'union_precedente_details',
+      'loi_applicable_pays',
+      'loi_applicable_details',
+      'testament_details',
+      'donation_entre_epoux_details',
+    ] as const
+    for (const k of SUCCESSION_TEXTS) {
+      const v = formData[k]
+      if (typeof v === 'string' && v.trim() !== '') out[k] = v.trim()
+    }
     return out
   }
 
@@ -599,39 +670,62 @@ export function KycPublicClient({ token }: { token: string }) {
           disabled={isSigned || !!pendingProposition}
           className="space-y-6"
         >
-          {SECTIONS.map((section) => (
-            <section
-              key={section.title}
-              className="bg-white border border-slate-200 rounded-xl shadow-sm p-6"
-            >
-              <h2 className="text-[11px] tracking-[0.18em] uppercase text-[#1F063E] font-semibold mb-4 pb-3 border-b border-slate-100">
-                {section.title}
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                {section.fields
-                  // Retour #4 — on évalue la condition sur `formData` (pas
-                  // `initialData`) : si le client change sa situation
-                  // matrimoniale, le champ régime apparaît/disparaît en
-                  // temps réel, comme dans le CRM.
-                  .filter((f) => !f.cond || f.cond(formData as KycData))
-                  .map((f) => (
-                    <FieldInput
-                      key={f.key}
-                      fieldKey={f.key}
-                      label={f.label}
-                      type={f.type || 'text'}
-                      placeholder={f.placeholder}
-                      // Point 1.7 — `optionsFor` recalcule la liste d'options
-                      // selon formData (régime matrimonial filtré par
-                      // situation). Fallback sur options statique.
-                      options={f.optionsFor ? f.optionsFor(formData as KycData) : f.options}
-                      value={formData[f.key] as ScalarValue}
-                      onChange={(v) => setField(f.key, v)}
+          {SECTIONS.map((section) => {
+            // 2026-04-25 : commentaire libre par section, stocké dans
+            // formData.commentaires_kyc[commentKey]. Évite d'avoir N
+            // colonnes texte dédiées en DB.
+            const commentaires =
+              (formData.commentaires_kyc as Record<string, string> | undefined) ||
+              {}
+            const commentValue = section.commentKey
+              ? commentaires[section.commentKey] || ''
+              : ''
+            return (
+              <section
+                key={section.title}
+                className="bg-white border border-slate-200 rounded-xl shadow-sm p-6"
+              >
+                <h2 className="text-[11px] tracking-[0.18em] uppercase text-[#1F063E] font-semibold mb-4 pb-3 border-b border-slate-100">
+                  {section.title}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                  {section.fields
+                    .filter((f) => !f.cond || f.cond(formData as KycData))
+                    .map((f) => (
+                      <FieldInput
+                        key={f.key}
+                        fieldKey={f.key}
+                        label={f.label}
+                        type={f.type || 'text'}
+                        placeholder={f.placeholder}
+                        options={f.optionsFor ? f.optionsFor(formData as KycData) : f.options}
+                        value={formData[f.key] as ScalarValue}
+                        onChange={(v) => setField(f.key, v)}
+                      />
+                    ))}
+                </div>
+                {section.commentKey && (
+                  <div className="mt-4 pt-3 border-t border-slate-100">
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Commentaire libre — {section.title.toLowerCase()}
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={commentValue}
+                      placeholder="Toute précision utile sur cette section…"
+                      onChange={(e) => {
+                        const next = { ...commentaires }
+                        if (e.target.value === '') delete next[section.commentKey!]
+                        else next[section.commentKey!] = e.target.value
+                        setField('commentaires_kyc', next as JsonbValue)
+                      }}
+                      className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-[#1F063E] focus:ring-1 focus:ring-[#1F063E]/20 focus:outline-none transition-colors"
                     />
-                  ))}
-              </div>
-            </section>
-          ))}
+                  </div>
+                )}
+              </section>
+            )
+          })}
 
           {/* Sous-fiches enfants (JSONB éditable, 2026-04-25). Le compteur
               `nombre_enfants` est auto-synchronisé côté setField pour ne pas
@@ -644,6 +738,39 @@ export function KycPublicClient({ token }: { token: string }) {
               setField('enfants_details', rows as unknown as JsonbValue)
               setField('nombre_enfants', rows.length)
             }}
+          />
+
+          {/* Histoire familiale & succession — questions scalaires (union
+              précédente, loi applicable, testament, donation entre époux).
+              2026-04-25. */}
+          <SuccessionScalarsEditor
+            variant="public"
+            value={
+              {
+                union_precedente: formData.union_precedente as boolean | null,
+                union_precedente_details: formData.union_precedente_details as string | null,
+                loi_applicable_pays: formData.loi_applicable_pays as string | null,
+                loi_applicable_details: formData.loi_applicable_details as string | null,
+                a_testament: formData.a_testament as boolean | null,
+                testament_details: formData.testament_details as string | null,
+                a_donation_entre_epoux: formData.a_donation_entre_epoux as boolean | null,
+                donation_entre_epoux_details: formData.donation_entre_epoux_details as string | null,
+              } satisfies SuccessionScalars
+            }
+            onChange={(next) => {
+              for (const [k, v] of Object.entries(next)) {
+                setField(k, v as JsonbValue)
+              }
+            }}
+          />
+
+          {/* Donations reçues (JSONB array, 2026-04-25). */}
+          <DonationsEditor
+            variant="public"
+            value={normalizeDonations(formData.donations_recues)}
+            onChange={(rows) =>
+              setField('donations_recues', rows as unknown as JsonbValue)
+            }
           />
 
           {/* Patrimoine immobilier (JSONB éditable) */}
@@ -1430,7 +1557,13 @@ function ImmobilierEditor({
           <SelectCell
             label="Type de bien"
             value={row.type_bien}
-            onChange={(v) => patch(i, { type_bien: v })}
+            onChange={(v) =>
+              patch(i, {
+                type_bien: v,
+                // Reset du libellé libre dès qu'on quitte "Autre"
+                type_bien_libre: v === 'Autre' ? row.type_bien_libre : '',
+              })
+            }
             options={[
               { v: '', label: '— Sélectionner —' },
               ...TYPE_BIEN_IMMOBILIER_OPTIONS.map((o) => ({
@@ -1439,6 +1572,15 @@ function ImmobilierEditor({
               })),
             ]}
           />
+          {/* "Précisez" — visible uniquement quand "Autre" est sélectionné. */}
+          {row.type_bien === 'Autre' && (
+            <TxtCell
+              label="Précisez le type"
+              value={row.type_bien_libre}
+              placeholder="Ex. Parts de société forestière, nue-propriété…"
+              onChange={(v) => patch(i, { type_bien_libre: String(v) })}
+            />
+          )}
           <TxtCell
             label="Désignation / adresse"
             value={row.designation}
@@ -1540,7 +1682,13 @@ function ProduitsFinanciersEditor({
           <SelectCell
             label="Type de produit"
             value={row.type_produit}
-            onChange={(v) => patch(i, { type_produit: v })}
+            onChange={(v) =>
+              patch(i, {
+                type_produit: v,
+                type_produit_libre:
+                  v === 'Autre' ? row.type_produit_libre : '',
+              })
+            }
             options={[
               { v: '', label: '— Sélectionner —' },
               ...TYPE_PRODUIT_FINANCIER_OPTIONS.map((o) => ({
@@ -1549,6 +1697,14 @@ function ProduitsFinanciersEditor({
               })),
             ]}
           />
+          {row.type_produit === 'Autre' && (
+            <TxtCell
+              label="Précisez le type"
+              value={row.type_produit_libre}
+              placeholder="Ex. Plan d'épargne entreprise spécifique…"
+              onChange={(v) => patch(i, { type_produit_libre: String(v) })}
+            />
+          )}
           <TxtCell
             label="Désignation"
             value={row.designation}

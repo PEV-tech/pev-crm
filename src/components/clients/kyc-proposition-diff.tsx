@@ -101,6 +101,17 @@ const FIELD_LABELS: Record<string, string> = {
   patrimoine_divers: 'Patrimoine divers',
   emprunts: 'Emprunts',
   objectifs_client: 'Objectifs patrimoniaux',
+  // 2026-04-25 — succession & commentaires
+  union_precedente: 'Union précédente',
+  union_precedente_details: 'Détails union précédente',
+  donations_recues: 'Donations reçues',
+  loi_applicable_pays: 'Loi applicable — pays',
+  loi_applicable_details: 'Loi applicable — détails',
+  a_testament: 'Testament',
+  testament_details: 'Détails testament',
+  a_donation_entre_epoux: 'Donation entre époux',
+  donation_entre_epoux_details: 'Détails donation entre époux',
+  commentaires_kyc: 'Commentaires libres par section',
 }
 
 function humanize(key: string): string {
@@ -357,12 +368,40 @@ type StructuredDescriber = (row: Record<string, unknown>) => {
   lines: RowLine[]
 }
 
+// 2026-04-25 — describer pour les donations reçues (JSONB array).
+function describeDonation(row: Record<string, unknown>): {
+  title: string
+  subtitle: string | null
+  lines: RowLine[]
+} {
+  const title = (row.donateur as string) || 'Donation'
+  const subtitle =
+    typeof row.montant === 'number'
+      ? new Intl.NumberFormat('fr-FR', {
+          style: 'currency',
+          currency: 'EUR',
+          maximumFractionDigits: 0,
+        }).format(row.montant)
+      : null
+  const lines: RowLine[] = []
+  if (row.date_donation) {
+    const v = fmtDate(row.date_donation)
+    if (v) lines.push({ label: 'Date', value: v })
+  }
+  if (typeof row.nature === 'string' && row.nature)
+    lines.push({ label: 'Nature', value: row.nature as string })
+  if (typeof row.commentaire === 'string' && row.commentaire)
+    lines.push({ label: 'Commentaire', value: row.commentaire as string })
+  return { title, subtitle, lines }
+}
+
 const STRUCTURED_FIELDS: Record<string, StructuredDescriber> = {
   patrimoine_immobilier: describeImmobilier,
   produits_financiers: describeProduit,
   emprunts: describeEmprunt,
   patrimoine_divers: describeDivers,
   enfants_details: describeEnfant,
+  donations_recues: describeDonation,
 }
 
 /**

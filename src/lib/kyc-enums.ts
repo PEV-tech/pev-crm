@@ -90,7 +90,9 @@ export function getRegimesForSituation(
   return []
 }
 
-/** Type d'actif immobilier — aligne sur la typologie métier de PEV. */
+/** Type d'actif immobilier — aligne sur la typologie métier de PEV.
+ *  2026-04-25 : ajout d'"Autre" en dernière position. Quand sélectionné,
+ *  l'éditeur affiche un champ libre `type_bien_libre` pour préciser. */
 export const TYPE_BIEN_IMMOBILIER_OPTIONS = [
   'Résidence principale',
   'Résidence secondaire',
@@ -100,10 +102,12 @@ export const TYPE_BIEN_IMMOBILIER_OPTIONS = [
   'Viager',
   'Terrain',
   'Commercial',
+  'Autre',
 ] as const
 export type TypeBienImmobilier = (typeof TYPE_BIEN_IMMOBILIER_OPTIONS)[number]
 
-/** Type de produit financier. */
+/** Type de produit financier. 2026-04-25 : ajout d'"Autre" + champ libre
+ *  `type_produit_libre` activé conditionnellement par l'éditeur. */
 export const TYPE_PRODUIT_FINANCIER_OPTIONS = [
   'Liquidités',
   'Livrets',
@@ -116,6 +120,7 @@ export const TYPE_PRODUIT_FINANCIER_OPTIONS = [
   'Fonds euros',
   'Obligations',
   'Private Equity',
+  'Autre',
 ] as const
 export type TypeProduitFinancier = (typeof TYPE_PRODUIT_FINANCIER_OPTIONS)[number]
 
