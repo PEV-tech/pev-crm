@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Check, X, Edit2, Trash2, Plus, TrendingUp } from 'lucide-react'
 import { formatCurrency } from '@/lib/formatting'
 import { formatPercent2, parseRateInput, rateToInput, type ShowToast, SECTION_INTRO_CLS } from './helpers'
+import { CommissionSplitsTab } from '@/components/parametres/commission-splits-tab'
 
 interface Props {
   isManager: boolean
@@ -149,7 +150,7 @@ export function RemunerationSection({ isManager, showToast }: Props) {
       </div>
 
       <Tabs defaultValue="LUX" className="space-y-3">
-        <TabsList className="grid grid-cols-2 w-full max-w-md">
+        <TabsList className="grid grid-cols-3 w-full max-w-2xl">
           {CATEGORIES.map((c) => (
             <TabsTrigger key={c.key} value={c.key}>
               {c.label}
@@ -158,6 +159,10 @@ export function RemunerationSection({ isManager, showToast }: Props) {
               </span>
             </TabsTrigger>
           ))}
+          <TabsTrigger value="splits">
+            Splits commission
+            <span className="ml-1.5 text-[10px] text-gray-500">(9)</span>
+          </TabsTrigger>
         </TabsList>
 
         {CATEGORIES.map((c) => {
@@ -227,6 +232,11 @@ export function RemunerationSection({ isManager, showToast }: Props) {
             </TabsContent>
           )
         })}
+
+        {/* 2026-04-25 — Onglet "Splits commission" : 9 règles éditables managers only. */}
+        <TabsContent value="splits" className="space-y-3">
+          <CommissionSplitsTab isManager={isManager} showToast={showToast} />
+        </TabsContent>
       </Tabs>
     </div>
   )
