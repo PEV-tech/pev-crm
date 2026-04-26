@@ -614,7 +614,27 @@ export function KycPropositionDiff({
   const allDecided = diffKeys.every((k) => decisions[k])
 
   async function apply() {
-    if (!allDecided || applying || !proposition) return
+    if (applying || !proposition) return
+    // 2026-04-26 (bug Stéphane MOLERE) : le bouton restait grisé tant que
+    // toutes les diffKeys n'avaient pas une décision explicite. Maxine
+    // cliquait "Appliquer" sans voir que certaines décisions manquaient.
+    // Désormais, si !allDecided, on demande confirmation et on auto-set
+    // les manquants à 'accept' par défaut. Le bouton est toujours
+    // cliquable.
+    if (!allDecided && diffKeys.length > 0) {
+      const missing = diffKeys.filter((k) => !decisions[k]).length
+      const ok = window.confirm(
+        `${missing} champ(s) sans décision explicite seront acceptés par défaut. Continuer ?`,
+      )
+      if (!ok) return
+      const next: Record<string, Decision> = { ...decisions }
+      for (const k of diffKeys) {
+        if (!next[k]) next[k] = 'accept'
+      }
+      setDecisions(next)
+      // Le state setter est asynchrone — pour la suite de la fonction on
+      // réutilise `next` directement plutôt que d'attendre re-render.
+    }
     setApplying(true)
     setError(null)
     setSuccess(null)
@@ -630,8 +650,14 @@ export function KycPropositionDiff({
     // payload par un `accept` implicite sur les clés inchangées — l'UPDATE
     // SQL est un no-op (valeur identique au snapshot) mais la RPC reçoit
     // la décision qu'elle attend pour chaque clé proposée.
+    // Vue effective des décisions : on inclut le auto-accept éventuel
+    // déclenché par le confirm() ci-dessus (le state setter est async).
+    const effectiveDecisions: Record<string, Decision> = { ...decisions }
+    for (const k of diffKeys) {
+      if (!effectiveDecisions[k]) effectiveDecisions[k] = 'accept'
+    }
     const payload: Record<string, Decision> = {}
-    for (const k of diffKeys) payload[k] = decisions[k]
+    for (const k of diffKeys) payload[k] = effectiveDecisions[k]
     for (const k of Object.keys(proposed)) {
       if (!(k in payload)) payload[k] = 'accept'
     }
@@ -996,7 +1022,7 @@ export function KycPropositionDiff({
             </div>
             <Button
               type="button"
-              disabled={applying || (diffKeys.length > 0 && !allDecided)}
+              disabled={applying}
               onClick={apply}
               size="lg"
               className={`shrink-0 ${

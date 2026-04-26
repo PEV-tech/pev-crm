@@ -485,6 +485,127 @@ export async function sendKycSignedNotificationToClient(
  * que la route appelante puisse les remonter côté UI (retour #7 : le
  * diff-viewer affiche quelle destination a réussi / échoué).
  */
+/**
+ * Notification consultant à la SOUMISSION d'une proposition KYC par le
+ * client via le portail public (`/kyc/[token]`). À envoyer depuis
+ * `/api/kyc/submit-public` après création de la proposition pending.
+ *
+ * 2026-04-26 — Bug Stéphane MOLERE : auparavant, le client soumettait sa
+ * proposition mais aucun mail n'était envoyé au consultant pour
+ * l'informer qu'il y avait une proposition à valider dans le CRM. Seul
+ * le mail de confirmation post-validation était implémenté.
+ */
+export async function sendKycPropositionPendingNotification(
+  ctx: KycEmailContext,
+): Promise<KycEmailResult> {
+  if (!hasCredentials()) {
+    console.warn(
+      '[kyc-email] GOOGLE_SMTP_USER/PASSWORD manquant — notification proposition pending non envoyée',
+    )
+    return { sent: false, skipped: 'no-api-key' }
+  }
+
+  // 1. Lookup client + consultant (idem sendKycSignedNotification)
+  const { data: client, error: readErr } = await ctx.admin
+    .from('clients')
+    .select('id, nom, prenom, raison_sociale, type_personne, consultant_id, email')
+    .eq('id', ctx.clientId)
+    .maybeSingle()
+
+  if (readErr || !client) {
+    return { sent: false, skipped: 'no-client', error: readErr?.message }
+  }
+
+  if (!client.consultant_id) {
+    return { sent: false, skipped: 'no-consultant' }
+  }
+
+  const { data: consultant, error: consErr } = await ctx.admin
+    .from('consultants')
+    .select('id, nom, prenom, auth_user_id')
+    .eq('id', client.consultant_id)
+    .maybeSingle()
+
+  if (consErr || !consultant || !consultant.auth_user_id) {
+    return { sent: false, skipped: 'no-consultant' }
+  }
+
+  const { data: authResp, error: authErr } =
+    await ctx.admin.auth.admin.getUserById(consultant.auth_user_id)
+
+  const consultantEmail = authResp?.user?.email
+  if (authErr || !consultantEmail) {
+    return {
+      sent: false,
+      skipped: 'no-consultant-email',
+      error: authErr?.message,
+    }
+  }
+
+  // 2. Build subject + body — wording axé "proposition à valider"
+  const clientLabel =
+    client.type_personne === 'morale'
+      ? client.raison_sociale || client.nom
+      : `${client.prenom || ''} ${client.nom}`.trim() || client.nom
+
+  const fichePath = `/dashboard/clients/${ctx.clientId}`
+  const ficheUrl = `${APP_URL}${fichePath}`
+  const signedAtStr = ctx.signedAt.toLocaleString('fr-FR', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  })
+
+  const subject = ctx.isIncomplete
+    ? `[KYC] Proposition à valider (${ctx.completionRate}%) — ${clientLabel}`
+    : `[KYC] Proposition à valider (100%) — ${clientLabel}`
+
+  const greeting = consultant.prenom
+    ? `Bonjour ${escapeHtml(consultant.prenom)},`
+    : 'Bonjour,'
+
+  const statusLine = ctx.isIncomplete
+    ? `Votre client a soumis une proposition de modification du KYC complétée à <strong>${ctx.completionRate}%</strong> (consentement signature incomplète).`
+    : `Votre client a soumis une proposition de modification du KYC complétée à 100%.`
+
+  const missingBlock =
+    ctx.isIncomplete && ctx.missingFields.length
+      ? `<p><strong>Champs manquants :</strong></p><ul>${ctx.missingFields
+          .map((f) => `<li>${escapeHtml(f)}</li>`)
+          .join('')}</ul>`
+      : ''
+
+  const text = `${consultant.prenom ? `Bonjour ${consultant.prenom},` : 'Bonjour,'}
+
+${ctx.signerName} (${clientLabel}) a soumis une proposition de modification du KYC le ${signedAtStr}.
+Taux de complétude : ${ctx.completionRate}%${ctx.isIncomplete ? ' (signature incomplète consentie)' : ''}.
+
+${ctx.isIncomplete && ctx.missingFields.length ? `Champs manquants : ${ctx.missingFields.join(', ')}\n\n` : ''}Vous devez maintenant valider chaque champ modifié avant que les données soient appliquées sur la fiche client. Connectez-vous au CRM :
+${ficheUrl}
+
+Email automatique PEV CRM — ne pas répondre.`
+
+  const html = wrapBodyInPevShell({
+    title: ctx.isIncomplete
+      ? `Proposition KYC à valider (${ctx.completionRate}%)`
+      : 'Proposition KYC à valider',
+    bodyText: `${greeting}\n\n${escapeHtml(ctx.signerName)} (${escapeHtml(clientLabel)}) a soumis une proposition de modification du KYC le ${signedAtStr}.\n\n${statusLine}\n\n${missingBlock}\n\nVous devez maintenant valider chaque champ modifié avant que les données soient appliquées sur la fiche client.\n\nLien direct vers la fiche : ${ficheUrl}`,
+    footer: 'Email automatique PEV CRM — ne pas répondre.',
+  })
+
+  const from = defaultFromAddress()
+  const result = await sendEmail({
+    from,
+    to: consultantEmail,
+    subject,
+    html,
+    text,
+  })
+  if (result.error) {
+    return { sent: false, error: result.error.message }
+  }
+  return { sent: true, messageId: result.data?.id }
+}
+
 export async function sendKycSignedNotifications(
   ctx: KycEmailContext,
 ): Promise<KycEmailBatchResult> {
