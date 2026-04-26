@@ -21,7 +21,7 @@ export function EncaissementsClientWrapper() {
         const [remRes, facturesRes] = await Promise.all([
           // Vue unifiée : table encaissements (flux auto) + lignes V2 validées
           // Cf. scripts/migrations/2026-04-25_v_encaissements_unified.sql
-          supabase.from('v_encaissements_unified' as never).select('*').order('annee', { ascending: false }).order('mois'),
+          supabase.from('v_encaissements_unified' as never).select('*').gte('annee', 2026).order('annee', { ascending: false }).order('mois'),
           supabase
             .from('v_dossiers_complets')
             .select('id, client_nom, client_prenom, client_pays, consultant_nom, consultant_prenom, taux_remuneration, apporteur_label, produit_nom, compagnie_nom, montant, commission_brute, rem_apporteur, part_cabinet, date_facture, payee')
