@@ -101,6 +101,11 @@ export default function ClientDetailPage() {
   const [deletingClient, setDeletingClient] = React.useState(false)
   const [showDeleteClientConfirm, setShowDeleteClientConfirm] = React.useState(false)
   const isConsultant = currentUser?.role === 'consultant'
+  // 2026-04-26 — Validation du réglementaire (cocher conformité KYC, DER,
+  // PI, PRECO, LM, RM) réservée aux managers et back-office. Les consultants
+  // voient l'état mais ne peuvent pas le modifier.
+  const canEditReglementaire =
+    currentUser?.role === 'manager' || currentUser?.role === 'back_office'
 
   const [client, setClient] = React.useState<ClientInfo | null>(null)
   const [dossiers, setDossiers] = React.useState<ClientDossier[]>([])
@@ -320,6 +325,15 @@ export default function ClientDetailPage() {
 
   const handleSaveReglementaire = async () => {
     if (!client) return
+    // 2026-04-26 — Garde-fou : seuls managers et back-office peuvent valider
+    // la conformité réglementaire (cf. canEditReglementaire). Idéalement on
+    // ajouterait aussi une RLS DB côté clients pour les colonnes der/pi/preco/
+    // lm/rm/statut_kyc, mais le check front suffit pour l'UX immédiate.
+    if (!canEditReglementaire) {
+      alert("Seuls les managers et le back-office peuvent valider le réglementaire.")
+      setEditingReglementaire(false)
+      return
+    }
     setSavingReglementaire(true)
     const { error } = await supabase
       .from('clients')
@@ -848,7 +862,9 @@ export default function ClientDetailPage() {
                   Réglementaire
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  {!editingReglementaire && (
+                  {/* 2026-04-26 — Crayon visible uniquement pour managers + back-office.
+                      Les consultants voient l'état mais ne peuvent pas le modifier. */}
+                  {!editingReglementaire && canEditReglementaire && (
                     <button
                       onClick={() => setEditingReglementaire(true)}
                       className="p-1.5 hover:bg-gray-100 rounded transition-colors"

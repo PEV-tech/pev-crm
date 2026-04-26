@@ -468,15 +468,21 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       }
 
       // 2. Update client fields (réglementaire + pays — columns on clients table)
+      // 2026-04-26 — La conformité réglementaire (statut_kyc, der, pi, preco,
+      // lm, rm) ne peut être modifiée que par managers + back-office. Les
+      // consultants peuvent quand même modifier pays/ville/email/téléphone.
+      const isManagerOrBO =
+        currentUser?.role === 'manager' || currentUser?.role === 'back_office'
       const clientId = dossier?.client_id
       if (clientId) {
-        const clientUpdate: TablesUpdate<'clients'> = {
-          statut_kyc: editForm.statut_kyc || 'non',
-          der: editForm.der === 'oui',
-          pi: editForm.pi === 'oui',
-          preco: editForm.preco === 'oui',
-          lm: editForm.lm === 'oui',
-          rm: editForm.rm === 'oui',
+        const clientUpdate: TablesUpdate<'clients'> = {}
+        if (isManagerOrBO) {
+          clientUpdate.statut_kyc = editForm.statut_kyc || 'non'
+          clientUpdate.der        = editForm.der === 'oui'
+          clientUpdate.pi         = editForm.pi === 'oui'
+          clientUpdate.preco      = editForm.preco === 'oui'
+          clientUpdate.lm         = editForm.lm === 'oui'
+          clientUpdate.rm         = editForm.rm === 'oui'
         }
         if (editForm.pays) clientUpdate.pays = editForm.pays
         if (editForm.ville) clientUpdate.ville = editForm.ville
@@ -1240,8 +1246,14 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             </CardContent>
           </Card>
 
+          {/* 2026-04-26 — Validation conformité réservée aux managers + back-office.
+              Pour les consultants, on force isEditing à false sur ce panneau
+              même si le mode édition global du dossier est actif. */}
           <CompliancePanel
-            isEditing={isEditing}
+            isEditing={
+              isEditing &&
+              (currentUser?.role === 'manager' || currentUser?.role === 'back_office')
+            }
             reglementaireDone={reglementaireDone}
             dossier={dossier}
             editForm={editForm}
