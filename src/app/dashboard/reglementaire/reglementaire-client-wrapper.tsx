@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ManagerOnly } from '@/components/shared/manager-only'
+import { useUser } from '@/hooks/use-user'
 import { ReglementaireClient } from './reglementaire-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -208,6 +208,7 @@ function QualityPanel({ dossiers }: { dossiers: any[] }) {
 }
 
 export function ReglementaireClientWrapper() {
+  const { consultant } = useUser()
   const [data, setData] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
 
@@ -216,14 +217,25 @@ export function ReglementaireClientWrapper() {
       try {
         const supabase = createClient()
 
+        // 2026-04-26 — Vue consultant : on filtre les dossiers par
+        // consultant_id pour qu'un consultant ne voie que les KYC de SES
+        // clients. Managers + back-office voient tout.
+        const isManagerOrBO =
+          consultant?.role === 'manager' || consultant?.role === 'back_office'
+
         // Parallèle : dossiers + signatures KYC côté client. Les infos de
         // signature (kyc_signed_at, kyc_incomplete_signed, rate) vivent sur
         // la table `clients`, pas sur la vue `v_dossiers_complets`. On
         // merge côté client pour éviter de refaire la vue SQL.
+        let dossiersQuery = supabase
+          .from('v_dossiers_complets')
+          .select('id, client_id, consultant_id, statut, date_operation, montant, client_nom, client_prenom, client_pays, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, statut_kyc, der, pi, preco, lm, rm, commission_brute, facturee')
+        if (!isManagerOrBO && consultant?.id) {
+          dossiersQuery = dossiersQuery.eq('consultant_id', consultant.id)
+        }
+
         const [dossiersRes, clientsKycRes] = await Promise.all([
-          supabase
-            .from('v_dossiers_complets')
-            .select('id, client_id, statut, date_operation, montant, client_nom, client_prenom, client_pays, consultant_nom, consultant_prenom, produit_nom, compagnie_nom, statut_kyc, der, pi, preco, lm, rm, commission_brute, facturee'),
+          dossiersQuery,
           // Cast `any` : les colonnes kyc_signature_audit ne sont pas encore
           // dans src/types/database.ts (migration appliquée en prod, types
           // non régénérés) — cf. STATUS.md dette post-regen.
@@ -263,19 +275,21 @@ export function ReglementaireClientWrapper() {
       }
     }
 
-    fetchData()
-  }, [])
+    if (consultant !== null) fetchData()
+  }, [consultant])
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Chargement...</div>
   }
 
+  // 2026-04-26 — ManagerOnly retiré. La page est désormais accessible aux
+  // consultants ; les data sont filtrées par consultant_id ci-dessus.
+  // L'édition (cocher les cases conformité) reste protégée côté
+  // client/[id] (cf. PR #58 : canEditReglementaire).
   return (
-    <ManagerOnly>
-      <div className="space-y-6">
-        <QualityPanel dossiers={data} />
-        <ReglementaireClient initialData={data} />
-      </div>
-    </ManagerOnly>
+    <div className="space-y-6">
+      <QualityPanel dossiers={data} />
+      <ReglementaireClient initialData={data} />
+    </div>
   )
 }

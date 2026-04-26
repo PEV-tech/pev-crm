@@ -117,7 +117,12 @@ export function Sidebar({ userName = 'Utilisateur', userRole = 'consultant', onL
     }
   }
 
-  const managerOnlyLabels = ['Clients', 'Facturation', 'Encaissements', 'Réglementaire', 'Relances', 'Analyse']
+  // 2026-04-26 — Refonte vues consultants (décision Maxine) :
+  //  Le consultant doit voir : Tableau de bord, Ma Clientèle, Encaissements
+  //  (siens), Rémunérations (siennes), Réglementaire (de ses clients, lecture
+  //  seule cf. PR #58), Classement, Relances (siennes), Aide, Paramètres.
+  //  Reste caché : Clients (= /dossiers global), Facturation, Analyse.
+  const managerOnlyLabels = ['Clients', 'Facturation', 'Analyse']
   const isManagerOrBO = userRole === 'manager' || userRole === 'back_office'
   // Back office: no "Ma Clientèle" (pas de clientèle propre), no "Rémunérations" (suivi seulement)
   const backOfficeHiddenLabels = ['Ma Clientèle', 'Rémunérations']
