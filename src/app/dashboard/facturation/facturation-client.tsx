@@ -82,7 +82,19 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
     })
     return result
   }, [data, activeTab, searchQuery, sortField, sortAsc])
-
+// Compteur encaissements 2026
+  const [encaissementsCount, setEncaissementsCount] = React.useState<number>(0)
+  React.useEffect(() => {
+    const fetchEncaissements = async () => {
+      const supabase = createClient()
+      const { count } = await supabase
+        .from('encaissements')
+        .select('*', { count: 'exact', head: true })
+        .eq('annee', 2026)
+      setEncaissementsCount(count || 0)
+    }
+    fetchEncaissements()
+  }, [])
   // Calculate stats
   const stats = React.useMemo(() => {
     const aEmettre = data.filter((d) => !d.facturee)
@@ -234,9 +246,9 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
           <p className="text-xs text-gray-500 mt-1">{formatCurrency(stats.emises.montant)}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-sm text-gray-600">Payées</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{stats.payees.count}</p>
-          <p className="text-xs text-gray-500 mt-1">{formatCurrency(stats.payees.montant)}</p>
+          <p className="text-sm text-gray-600">Encaissements 2026</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{encaissementsCount}</p>
+          <p className="text-xs text-gray-500 mt-1">depuis janvier 2026</p>
         </Card>
       </div>
 
