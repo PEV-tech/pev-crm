@@ -262,7 +262,7 @@ export function FacturationClient({ initialData }: FacturationClientProps) {
             <TabsList>
               <TabsTrigger value="a-emettre">À émettre ({stats.aEmettre.count})</TabsTrigger>
               <TabsTrigger value="emises">Émises ({stats.emises.count})</TabsTrigger>
-              <TabsTrigger value="payees">Payées ({stats.payees.count})</TabsTrigger>
+             <TabsTrigger value="payees">Payées ({encaissementsCount})</TabsTrigger>
             </TabsList>
 
             {/* À ÉMETTRE — with multi-select */}
