@@ -36,6 +36,11 @@ interface RemEntry {
   id: string
   mois: string
   label: string
+  // Décomposition financière (pour traçabilité)
+  commission_brute: number
+  rem_apporteur: number
+  rem_gestion: number
+  // Splits
   net_cabinet: number
   pool_plus: number
   thelo: number
@@ -51,6 +56,9 @@ interface RemEntry {
 }
 
 interface Totals {
+  commission_brute: number
+  rem_apporteur: number
+  rem_gestion: number
   net_cabinet: number
   pool_plus: number
   thelo: number
@@ -62,11 +70,14 @@ interface Totals {
   part_cabinet: number
 }
 
-const ZERO_TOTALS: Totals = { net_cabinet: 0, pool_plus: 0, thelo: 0, maxine: 0, steph_asie: 0, steph_fr: 0, consultant: 0, mathias: 0, part_cabinet: 0 }
+const ZERO_TOTALS: Totals = { commission_brute: 0, rem_apporteur: 0, rem_gestion: 0, net_cabinet: 0, pool_plus: 0, thelo: 0, maxine: 0, steph_asie: 0, steph_fr: 0, consultant: 0, mathias: 0, part_cabinet: 0 }
 
 const sumEntries = (entries: RemEntry[]): Totals =>
   entries.reduce(
     (acc, e) => ({
+      commission_brute: acc.commission_brute + Number(e.commission_brute || 0),
+      rem_apporteur: acc.rem_apporteur + Number(e.rem_apporteur || 0),
+      rem_gestion: acc.rem_gestion + Number(e.rem_gestion || 0),
       net_cabinet: acc.net_cabinet + Number(e.net_cabinet || 0),
       pool_plus: acc.pool_plus + Number(e.pool_plus || 0),
       thelo: acc.thelo + Number(e.thelo || 0),
@@ -155,6 +166,9 @@ function factureToRemEntry(f: VDossiersComplets): RemEntry {
   return {
     id: f.id || `f-${Math.random()}`,
     mois, label,
+    commission_brute: commBrute,
+    rem_apporteur: 0,
+    rem_gestion: 0,
     net_cabinet: commBrute,
     pool_plus: pp, thelo: th, maxine: mx,
     steph_fr, steph_asie, consultant, mathias: 0,
@@ -178,7 +192,10 @@ function encaissementToRemEntry(e: any): RemEntry {
     id: e.id || e.dossier_id || `enc-${Math.random()}`,
     mois: e.mois || 'INCONNU',
     label: (e.produit_nom && e.produit_nom.toUpperCase() === 'SCPI' && e.compagnie_nom) ? (e.label || '').replace(/\s*\u2014\s*SCPI\s*$/, ` \u2014 ${e.compagnie_nom}`) : (e.label || ''),
-    net_cabinet: Number(e.commission_brute || 0),
+    commission_brute: Number(e.commission_brute || 0),
+    rem_apporteur: Number(e.rem_apporteur_ext || 0),
+    rem_gestion: Number(e.rem_gestion || 0),
+    net_cabinet: Number(e.commission_nette || e.commission_brute || 0),
     pool_plus: Number(e.part_pool_plus || 0),
     thelo: Number(e.part_thelo || 0),
     maxine: Number(e.part_maxine || 0),
@@ -291,14 +308,14 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     let header: string
     let rows: string[]
     if (isBackOffice) {
-      header = 'Mois;Label;Net Cabinet;POOL;Stéphane FR;Stéphane SG;Consultant;Cabinet'
+      header = 'Mois;Label;Brut;Apporteur;Gestion;Net Cabinet;POOL;Stéphane FR;Stéphane SG;Consultant;Cabinet'
       rows = data.map(e =>
-        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${Number(e.pool_plus || 0) + Number(e.thelo || 0) + Number(e.maxine || 0)};${e.steph_fr};${e.steph_asie};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
+        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.commission_brute};${e.rem_apporteur};${e.rem_gestion};${e.net_cabinet};${Number(e.pool_plus || 0) + Number(e.thelo || 0) + Number(e.maxine || 0)};${e.steph_fr};${e.steph_asie};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
       )
     } else {
-      header = 'Mois;Label;Net Cabinet;Maxine;Thélo;POOL+;Stéphane FR;Stéphane SG;Consultant;Cabinet'
+      header = 'Mois;Label;Brut;Apporteur;Gestion;Net Cabinet;Maxine;Thélo;POOL+;Stéphane FR;Stéphane SG;Consultant;Cabinet'
       rows = data.map(e =>
-        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.net_cabinet};${e.maxine};${e.thelo};${e.pool_plus};${e.steph_fr};${e.steph_asie};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
+        `${MONTH_LABELS[e.mois] || e.mois};${e.label};${e.commission_brute};${e.rem_apporteur};${e.rem_gestion};${e.net_cabinet};${e.maxine};${e.thelo};${e.pool_plus};${e.steph_fr};${e.steph_asie};${Number(e.consultant || 0) + Number(e.mathias || 0)};${e.part_cabinet}`
       )
     }
     const csv = [header, ...rows].join('\n')
@@ -328,6 +345,9 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
     return (
       <tr className={cls}>
         <td className="py-2 pr-4 font-medium text-gray-900">{label || (entry as any).label}</td>
+        <ClickableCell value={(entry as any).commission_brute || 0} col="net_cabinet" mois={mois} className="text-gray-500" />
+        <ClickableCell value={(entry as any).rem_apporteur || 0} col="net_cabinet" mois={mois} className="text-orange-600" />
+        <ClickableCell value={(entry as any).rem_gestion || 0} col="net_cabinet" mois={mois} className="text-orange-600" />
         <ClickableCell value={entry.net_cabinet} col="net_cabinet" mois={mois} className="font-semibold" />
         {isManager ? (
           <>
@@ -599,6 +619,9 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
                     <thead>
                       <tr className="border-b text-left text-gray-500">
                         <th className="py-2 pr-4 font-medium">Dossier</th>
+                        <th className="py-2 px-2 font-medium text-right text-gray-500">Brut</th>
+                        <th className="py-2 px-2 font-medium text-right text-orange-600">Apporteur</th>
+                        <th className="py-2 px-2 font-medium text-right text-orange-600">Gestion</th>
                         <th className="py-2 px-2 font-medium text-right">Net cabinet</th>
                         {isManager ? (
                           <>
