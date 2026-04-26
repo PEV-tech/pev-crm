@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { getAdminClient } from '@/lib/supabase/admin'
+import { sendKycPropositionPendingNotification } from '@/lib/kyc-email'
 
 /**
  * POST /api/kyc/submit-public
@@ -152,11 +154,57 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // 2026-04-26 — Bug Stéphane MOLERE : envoyer un mail au consultant pour
+    // l'informer qu'il y a une proposition KYC à valider dans le CRM.
+    // Best-effort : on log mais on n'échoue pas la requête si le mail
+    // skip (pas de service_role_key, pas de consultant rattaché, etc.).
+    let emailNotifSent = false
+    let emailNotifSkipped: string | null = null
+    try {
+      const rpcResult = (rpcData ?? {}) as Record<string, unknown>
+      const clientId =
+        typeof rpcResult.client_id === 'string' ? rpcResult.client_id : null
+      const admin = getAdminClient()
+      if (clientId && admin) {
+        const result = await sendKycPropositionPendingNotification({
+          admin,
+          clientId,
+          signerName: signer_name.trim(),
+          signedAt: new Date(),
+          completionRate: Math.round(completion_rate),
+          missingFields: (missing_fields as unknown[]).map((m) => String(m)),
+          isIncomplete: completion_rate < 100,
+        })
+        emailNotifSent = result.sent === true
+        if (!emailNotifSent) {
+          emailNotifSkipped = result.skipped || result.error || 'unknown'
+          console.warn(
+            '[kyc/submit-public] mail consultant non envoyé:',
+            emailNotifSkipped,
+          )
+        }
+      } else {
+        emailNotifSkipped = !admin
+          ? 'service_role_key_missing'
+          : 'no_client_id'
+        console.warn(
+          '[kyc/submit-public] mail consultant skip:',
+          emailNotifSkipped,
+        )
+      }
+    } catch (mailErr: unknown) {
+      const msg = mailErr instanceof Error ? mailErr.message : 'threw'
+      emailNotifSkipped = msg
+      console.warn('[kyc/submit-public] mail consultant threw:', msg)
+    }
+
     return NextResponse.json({
       ok: true,
       ...(rpcData && typeof rpcData === 'object'
         ? (rpcData as Record<string, unknown>)
         : {}),
+      email_notif_sent: emailNotifSent,
+      ...(emailNotifSkipped ? { email_notif_skipped: emailNotifSkipped } : {}),
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erreur interne'
