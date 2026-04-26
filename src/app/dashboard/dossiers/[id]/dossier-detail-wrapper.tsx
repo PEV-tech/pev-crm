@@ -21,6 +21,8 @@ import { CompliancePanel } from '@/components/dossiers/compliance-panel'
 
 import { formatCurrency } from '@/lib/formatting'
 import { getDefaultGrilleForCategorie } from '@/lib/commissions/default-grilles'
+import { loadCommissionRules } from '@/lib/commissions/rules-loader'
+import { computeCommissionEntreeSplits } from '@/lib/commissions/entree-split'
 
 const formatPct = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '-'
@@ -406,6 +408,10 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
       if (dossierError) { setSaveError(dossierError.message); setSaving(false); return }
 
       // 1b. Recalculate commissions if montant changed
+      // V4 (2026-04-25) — utilise la grille DB commission_split_rules
+      // (loadCommissionRules + computeCommissionEntreeSplits) au lieu de
+      // la formule binaire consultant/cabinet historique. Stocke les 6
+      // parts + rule_key + snapshot pour traçabilité.
       const newMontant = parseFloat(editForm.montant) || 0
       if (newMontant !== dossier?.montant && newMontant > 0) {
         const taux = effectiveTauxEntree
@@ -425,12 +431,33 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             commUpdate.rem_apporteur_ext = 0
           }
 
-          if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-            const remApporteur = commissionNette * consultantTauxRemuneration
-            const partCabinet = commissionNette - remApporteur
-            commUpdate.rem_apporteur = remApporteur
-            commUpdate.part_cabinet = partCabinet
-            commUpdate.pct_cabinet = commissionBrute > 0 ? partCabinet / commissionBrute : 0
+          if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined && dossier) {
+            // Charge la grille de splits depuis la DB (cache 1 min, fallback statique).
+            const rules = await loadCommissionRules()
+            const splits = computeCommissionEntreeSplits(
+              {
+                prenom: dossier.consultant_prenom ?? '',
+                nom: dossier.consultant_nom ?? '',
+                taux_remuneration: consultantTauxRemuneration,
+              },
+              { apporteur_label: dossier.apporteur_label ?? null },
+              commissionNette,
+              rules,
+            )
+            commUpdate.rem_apporteur = splits.rem_apporteur
+            commUpdate.part_cabinet  = splits.part_cabinet
+            commUpdate.pct_cabinet   = commissionBrute > 0 ? splits.part_cabinet / commissionBrute : 0
+            // V4 colonnes additionnelles (cf. migration 2026-04-25_commissions_split_columns).
+            // Cast `as any` car types Supabase pas encore régénérés post-migration.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const update = commUpdate as any
+            update.part_consultant = splits.part_consultant
+            update.part_pool_plus  = splits.part_pool_plus
+            update.part_thelo      = splits.part_thelo
+            update.part_maxine     = splits.part_maxine
+            update.part_stephane   = splits.part_stephane
+            update.applied_rule_key = splits.applied_rule_key
+            update.applied_split_snapshot = splits.applied_split_snapshot
           }
           await supabase.from('commissions').update(commUpdate).eq('dossier_id', id)
         }
@@ -525,12 +552,34 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             updateData.rem_apporteur_ext = 0
           }
 
-          if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined) {
-            updateData.rem_apporteur = commissionNette * consultantTauxRemuneration
-            updateData.part_cabinet = commissionNette - updateData.rem_apporteur
-            updateData.pct_cabinet = updateData.commission_brute > 0
-              ? updateData.part_cabinet / updateData.commission_brute
+          if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined && dossier) {
+            // V4 (2026-04-25) — utilise la grille DB commission_split_rules
+            // pour répartir entre consultant / pool / thélo / maxine /
+            // stéphane / cabinet selon la rule applicable au dossier.
+            const rules = await loadCommissionRules()
+            const splits = computeCommissionEntreeSplits(
+              {
+                prenom: dossier.consultant_prenom ?? '',
+                nom: dossier.consultant_nom ?? '',
+                taux_remuneration: consultantTauxRemuneration,
+              },
+              { apporteur_label: dossier.apporteur_label ?? null },
+              commissionNette,
+              rules,
+            )
+            updateData.rem_apporteur = splits.rem_apporteur
+            updateData.part_cabinet  = splits.part_cabinet
+            updateData.pct_cabinet   = updateData.commission_brute > 0
+              ? splits.part_cabinet / updateData.commission_brute
               : 0
+            // Colonnes V4 ajoutées par scripts/migrations/2026-04-25_commissions_split_columns.sql.
+            updateData.part_consultant     = splits.part_consultant
+            updateData.part_pool_plus      = splits.part_pool_plus
+            updateData.part_thelo          = splits.part_thelo
+            updateData.part_maxine         = splits.part_maxine
+            updateData.part_stephane       = splits.part_stephane
+            updateData.applied_rule_key    = splits.applied_rule_key
+            updateData.applied_split_snapshot = splits.applied_split_snapshot
           }
         }
       }
