@@ -398,7 +398,10 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       {ToastContainer}
 
       {/* ───── Conformité grille V4 (double-check) ───── */}
-      <SplitsConformityBanner data={data} />
+      {/* 2026-04-26 fix : on passe `initialData` (raw vue v_encaissements_unified
+          qui contient applied_rule_key + mois + annee + consultant_*) plutôt
+          que `data` (RemEntry transformé qui a perdu ces colonnes). */}
+      <SplitsConformityBanner data={initialData} />
 
       {/* ───── Barre récapitulative ───── */}
       <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-8' : 'md:grid-cols-7'} gap-3`}>
