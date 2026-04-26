@@ -434,6 +434,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           if (consultantTauxRemuneration !== null && consultantTauxRemuneration !== undefined && dossier) {
             // Charge la grille de splits depuis la DB (cache 1 min, fallback statique).
             const rules = await loadCommissionRules()
+            // 2026-04-26 — compagnie_nom + produit_nom passés pour matcher
+            // SG/ABF/TRILAKE quand consultant = Stéphane.
             const splits = computeCommissionEntreeSplits(
               {
                 prenom: dossier.consultant_prenom ?? '',
@@ -443,6 +445,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               { apporteur_label: dossier.apporteur_label ?? null },
               commissionNette,
               rules,
+              dossier.compagnie_nom ?? null,
+              dossier.produit_nom ?? null,
             )
             commUpdate.rem_apporteur = splits.rem_apporteur
             commUpdate.part_cabinet  = splits.part_cabinet
@@ -556,6 +560,7 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
             // V4 (2026-04-25) — utilise la grille DB commission_split_rules
             // pour répartir entre consultant / pool / thélo / maxine /
             // stéphane / cabinet selon la rule applicable au dossier.
+            // 2026-04-26 — compagnie_nom + produit_nom pour le matching SG.
             const rules = await loadCommissionRules()
             const splits = computeCommissionEntreeSplits(
               {
@@ -566,6 +571,8 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
               { apporteur_label: dossier.apporteur_label ?? null },
               commissionNette,
               rules,
+              dossier.compagnie_nom ?? null,
+              dossier.produit_nom ?? null,
             )
             updateData.rem_apporteur = splits.rem_apporteur
             updateData.part_cabinet  = splits.part_cabinet

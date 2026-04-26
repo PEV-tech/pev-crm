@@ -106,8 +106,16 @@ export function allocateLine(input: AllocateLineInput): EncaissementAllocationDr
 
   const dossierSnap = buildDossierSnapshot(dossier, dossierEnrichment)
 
+  // 2026-04-26 — compagnie + produit propagés pour le matching SG/ABF/TRILAKE
+  // (voir rules.ts::determineRuleKey). Source : dossierEnrichment, sinon
+  // fallback sur les champs du dossier.
+  const compagnieNomForRule =
+    dossierEnrichment?.compagnie_nom ?? (dossier as unknown as { compagnie_nom?: string | null }).compagnie_nom ?? null
+  const produitNomForRule =
+    dossierEnrichment?.produit_nom ?? (dossier as unknown as { produit_nom?: string | null }).produit_nom ?? null
+
   return targets.map((target) => {
-    const rule = determineRuleFromArray(target.consultant, dossier, activeRules)
+    const rule = determineRuleFromArray(target.consultant, dossier, activeRules, compagnieNomForRule, produitNomForRule)
     const ruleSnap = buildRuleSnapshot(rule)
     const consultantSnap = buildConsultantSnapshot(target.consultant)
 
