@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { VDossiersComplets, Consultant } from '@/types/database'
+import { useUser } from '@/hooks/use-user'
 import { RelancesClient } from './relances-client'
 
 interface RelanceRow {
@@ -24,6 +25,7 @@ interface RelanceRow {
 }
 
 export function RelancesClientWrapper() {
+  const { consultant } = useUser()
   const [data, setData] = useState<RelanceRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -33,10 +35,20 @@ export function RelancesClientWrapper() {
         setIsLoading(true)
         const supabase = createClient()
 
+        // 2026-04-26 — Vue consultant : filtre dossiers par consultant_id
+        // pour qu'un consultant ne voie que ses propres relances. Managers +
+        // back-office voient tout.
+        const isManagerOrBO =
+          consultant?.role === 'manager' || consultant?.role === 'back_office'
+
         // Fetch complete dossiers view
-        const { data: dossiers, error: dossiersError } = await supabase
+        let dossiersQuery = supabase
           .from('v_dossiers_complets')
-          .select('id, statut, date_operation, date_facture, client_nom, consultant_nom, consultant_prenom, produit_nom, statut_kyc, der, pi, preco, lm, rm, facturee, payee')
+          .select('id, consultant_id, statut, date_operation, date_facture, client_nom, consultant_nom, consultant_prenom, produit_nom, statut_kyc, der, pi, preco, lm, rm, facturee, payee')
+        if (!isManagerOrBO && consultant?.id) {
+          dossiersQuery = dossiersQuery.eq('consultant_id', consultant.id)
+        }
+        const { data: dossiers, error: dossiersError } = await dossiersQuery
 
         if (dossiersError) throw dossiersError
 
@@ -248,7 +260,7 @@ export function RelancesClientWrapper() {
       } finally {
         setIsLoading(false)
       }
-    }, [])
+    }, [consultant])
 
   useEffect(() => {
     fetchData()
