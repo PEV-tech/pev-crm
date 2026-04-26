@@ -417,9 +417,6 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       />
       {ToastContainer}
 
-      {/* ───── Conformité grille V4 (double-check) ───── */}
-      <SplitsConformityBanner data={data} />
-
       {/* ───── Barre récapitulative ───── */}
       <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-8' : 'md:grid-cols-7'} gap-3`}>
         <div
