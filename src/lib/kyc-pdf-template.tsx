@@ -44,6 +44,12 @@ export const CABINET = {
   responsableTraitement: 'Maxine Laisné',
 } as const
 
+// Conseiller référent affiché dans le bloc réglementaire "Avec le concours de"
+const CONSEILLER_REFERENT = {
+  nom: 'Stéphane Molère',
+  email: 'stephane@private-equity-valley.com',
+} as const
+
 // ── Palette PEV ────────────────────────────────────────────────────────────
 const C = {
   violet: '#3B2C8A',
@@ -145,7 +151,12 @@ function fmtEuro(n: unknown): string {
   const num = Number(n)
   if (Number.isNaN(num)) return '—'
   try {
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(num)
+    // U+202F (espace fine insécable) et U+00A0 non supportés par Helvetica
+    // dans react-pdf — rendu comme "/" — on remplace par espace normale.
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+      .format(num)
+      .replace(/\u202f/g, '\u0020')
+      .replace(/\u00a0/g, '\u0020')
   } catch { return `${num} €` }
 }
 
@@ -387,17 +398,56 @@ const SectionEtatCivilPP = ({ c }: { c: KycPdfClient }) => (
   </View>
 )
 
-const SectionFamillePP = ({ c }: { c: KycPdfClient }) => (
-  <View>
-    <SectionHeader title="Situation familiale" />
-    <View style={S.body}>
-      <LabelValue label="Situation matrimoniale" value={str(c.situation_matrimoniale)} />
-      <LabelValue label="Régime matrimonial" value={str(c.regime_matrimonial)} />
-      <LabelValue label="Nb enfants / personnes à charge" value={c.nombre_enfants != null ? String(c.nombre_enfants) : '—'} />
-      {!!(c.enfants_details) && <LabelValue label="Détails" value={str(c.enfants_details)} />}
+type EnfantDetail = {
+  nom?: string | null
+  prenom?: string | null
+  sexe?: string | null
+  date_naissance?: string | null
+  a_charge?: boolean | null
+  issu_precedente_union?: boolean | null
+  legacy_notes?: string | null
+}
+
+const EnfantRow = ({ enfant, index }: { enfant: EnfantDetail; index: number }) => {
+  const nomComplet = [enfant.prenom, enfant.nom].filter(Boolean).join(' ') || '—'
+  const sexeLabel = enfant.sexe === 'homme' ? 'Homme' : enfant.sexe === 'femme' ? 'Femme' : enfant.sexe || null
+  const parts: string[] = [nomComplet]
+  if (sexeLabel) parts.push(sexeLabel)
+  if (enfant.date_naissance) parts.push(`né(e) le ${fmtDate(enfant.date_naissance)}`)
+  parts.push(`à charge : ${enfant.a_charge ? 'Oui' : 'Non'}`)
+  if (enfant.issu_precedente_union) parts.push('union précédente')
+  if (enfant.legacy_notes) parts.push(enfant.legacy_notes)
+  return (
+    <View style={{ flexDirection: 'row', paddingVertical: 2 }}>
+      <Text style={{ fontSize: 8, color: C.muted, width: 70, flexShrink: 0 }}>Enfant {index + 1}</Text>
+      <Text style={{ fontSize: 8, color: C.text, flex: 1 }}>{parts.join(' · ')}</Text>
     </View>
-  </View>
-)
+  )
+}
+
+const SectionFamillePP = ({ c }: { c: KycPdfClient }) => {
+  const enfants: EnfantDetail[] = Array.isArray(c.enfants_details)
+    ? (c.enfants_details as EnfantDetail[])
+    : []
+  return (
+    <View>
+      <SectionHeader title="Situation familiale" />
+      <View style={S.body}>
+        <LabelValue label="Situation matrimoniale" value={str(c.situation_matrimoniale)} />
+        <LabelValue label="Régime matrimonial" value={str(c.regime_matrimonial)} />
+        <LabelValue label="Nb enfants / personnes à charge" value={c.nombre_enfants != null ? String(c.nombre_enfants) : '—'} />
+        {enfants.length > 0 && (
+          <View style={{ marginTop: 4 }}>
+            <Text style={{ fontSize: 8, color: C.muted, marginBottom: 2 }}>Détail enfants</Text>
+            {enfants.map((e, i) => (
+              <EnfantRow key={i} enfant={e} index={i} />
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  )
+}
 
 const SectionProfessionnellePP = ({ c }: { c: KycPdfClient }) => (
   <View>
@@ -639,7 +689,8 @@ const SectionPatrimoinePM = ({ c }: { c: KycPdfClient }) => {
 const DernierePage = ({
   c,
   sig,
-  consultantName,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  consultantName: _consultantName,
 }: {
   c: KycPdfClient
   sig: KycPdfSignature
@@ -683,9 +734,10 @@ const DernierePage = ({
           <View style={S.regConseiller}>
             <Text style={S.regTitle}>Avec le concours de</Text>
             <Text style={[S.regLine, { fontFamily: 'Helvetica-Bold' }]}>
-              {consultantName || CABINET.responsableTraitement}
+              {CONSEILLER_REFERENT.nom}
             </Text>
             <Text style={S.regLineMuted}>{CABINET.raisonSociale} — {CABINET.adresse}</Text>
+            <Text style={S.regLineMuted}>{CONSEILLER_REFERENT.email}</Text>
             <Spacer size={4} />
             <Text style={S.regBullet}>• Conseiller en Investissements Financiers (CIF)</Text>
             <Text style={S.regBullet}>  N° CIF AMF : {CABINET.cif}</Text>
