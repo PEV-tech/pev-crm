@@ -118,8 +118,22 @@ export const COMMISSION_RULES: CommissionRule[] = [
  *
  * 2026-04-25 — Extrait de l'ancien `determineRule()` pour permettre le branchement
  * sur la table DB `commission_split_rules` sans dupliquer la logique de matching.
+ *
+ * 2026-04-26 — Ajout du critère SG/ABF/TRILAKE : quand consultant = Stéphane,
+ * la rule appliquée dépend maintenant aussi de la compagnie + produit du dossier.
+ *   · compagnie LIKE 'SG%' OU produit LIKE '%ABF%' / '%TRILAKE%' → 'stephane_sg' (100%)
+ *   · sinon → 'stephane_france' (15% Stéphane, pot pool 25% en 3, cabinet 60%)
+ *
+ * Pour la rétro-compat, `compagnieNom` et `produitNom` sont OPTIONNELS. Si non
+ * fournis, le matching SG ne se fait pas et on retombe sur `stephane_france`
+ * par défaut (équivalent du comportement legacy avant 2026-04-26).
  */
-export function determineRuleKey(consultant: Consultant, dossier: Dossier): string {
+export function determineRuleKey(
+  consultant: Consultant,
+  dossier: Dossier,
+  compagnieNom?: string | null,
+  produitNom?: string | null,
+): string {
   // Point 3.2 (2026-04-24) — Consultant fictif POOL → règle 'pool' direct,
   // prioritaire sur les autres branches.
   const isPoolConsultant =
@@ -127,12 +141,27 @@ export function determineRuleKey(consultant: Consultant, dossier: Dossier): stri
     (consultant.nom && consultant.nom.trim().toUpperCase() === 'POOL')
   if (isPoolConsultant) return 'pool'
 
-  // Apporteur-based : matching sur dossier.apporteur_label
+  // 2026-04-26 — Stéphane consultant principal : critère SG/ABF/TRILAKE
+  const consultantPrenomUp = (consultant.prenom || '').trim().toUpperCase()
+  if (consultantPrenomUp === 'STÉPHANE' || consultantPrenomUp === 'STEPHANE') {
+    const compagnieUp = (compagnieNom || '').toUpperCase()
+    const produitUp = (produitNom || '').toUpperCase()
+    if (
+      compagnieUp.startsWith('SG') ||
+      produitUp.includes('ABF') ||
+      produitUp.includes('TRILAKE')
+    ) {
+      return 'stephane_sg'
+    }
+    return 'stephane_france'
+  }
+
+  // Apporteur-based : matching sur dossier.apporteur_label (autres consultants)
   if (dossier.apporteur_label) {
     const apporteurName = dossier.apporteur_label.trim()
     if (apporteurName === 'Thélo') return 'chasse_thelo'
     if (apporteurName === 'Maxine') return 'chasse_maxine'
-    if (apporteurName === 'Stéphane') return 'stephane_entree' // France & Entrée ont splits identiques
+    if (apporteurName === 'Stéphane') return 'stephane_france' // legacy fallback
     if (apporteurName.toLowerCase().includes('pool')) return 'pool'
   }
 
@@ -158,8 +187,11 @@ export function determineRuleFromArray(
   consultant: Consultant,
   dossier: Dossier,
   rules: CommissionRule[],
+  compagnieNom?: string | null,
+  produitNom?: string | null,
 ): CommissionRule {
-  const ruleKey = determineRuleKey(consultant, dossier)
+  const ruleKey = determineRuleKey(consultant, dossier, compagnieNom, produitNom)
+  // 2026-04-26 — sort_order = 10 ajouté pour la nouvelle rule 'stephane_sg'.
   const ruleKeyToId: Record<string, number> = {
     chasse_thelo: 1,
     chasse_maxine: 2,
@@ -170,6 +202,7 @@ export function determineRuleFromArray(
     tier_50: 7,
     tier_30: 8,
     encours: 9,
+    stephane_sg: 10,
   }
   const targetId = ruleKeyToId[ruleKey] ?? 7
   return rules.find((r) => r.id === targetId) ?? rules[6] ?? COMMISSION_RULES[6]

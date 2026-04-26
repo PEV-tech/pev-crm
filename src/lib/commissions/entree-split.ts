@@ -58,6 +58,7 @@ const RULE_ID_TO_KEY: Record<number, string> = {
   7: 'tier_50',
   8: 'tier_30',
   9: 'encours',
+  10: 'stephane_sg',
 }
 
 /**
@@ -79,14 +80,20 @@ export function computeCommissionEntreeSplits(
   dossier: Pick<Dossier, 'apporteur_label'> & Partial<Dossier>,
   commissionNette: number,
   rules: CommissionRule[],
+  compagnieNom?: string | null,
+  produitNom?: string | null,
 ): CommissionEntreeSplits {
   // Cast vers Consultant / Dossier — determineRuleFromArray n'utilise que
   // prenom, nom, taux_remuneration côté consultant et apporteur_label
   // côté dossier. Les autres champs ne sont pas requis.
+  // 2026-04-26 — compagnieNom + produitNom optionnels pour le matching
+  // SG/ABF/TRILAKE quand consultant = Stéphane.
   const rule = determineRuleFromArray(
     consultant as Consultant,
     dossier as Dossier,
     rules,
+    compagnieNom,
+    produitNom,
   )
 
   const split = rule.split
