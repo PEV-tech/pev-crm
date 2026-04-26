@@ -397,6 +397,9 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
       />
       {ToastContainer}
 
+      {/* ───── Conformité grille V4 (double-check) ───── */}
+      <SplitsConformityBanner data={data} />
+
       {/* ───── Barre récapitulative ───── */}
       <div className={`grid grid-cols-3 ${isManager ? 'md:grid-cols-8' : 'md:grid-cols-7'} gap-3`}>
         <div
@@ -685,6 +688,140 @@ export function EncaissementsClient({ initialData, role = 'manager', facturesPai
           montant: deleteTarget.amount,
         } : null}
       />
+    </div>
+  )
+}
+
+// =============================================================================
+// SplitsConformityBanner (2026-04-26)
+//
+// Pastille verte/orange/rouge qui indique le ratio d'encaissements ayant un
+// split V4 valide (applied_rule_key non-null). Click → expand qui liste les
+// encaissements non-conformes (legacy, à investiguer).
+//
+// Source : `data` directement (chaque entry vient de v_encaissements_unified
+// qui propage applied_rule_key de la table sous-jacente).
+// =============================================================================
+interface SplitsConformityBannerProps {
+  data: ReadonlyArray<unknown>
+}
+
+function SplitsConformityBanner({ data }: SplitsConformityBannerProps) {
+  const [expanded, setExpanded] = React.useState(false)
+
+  const stats = React.useMemo(() => {
+    let total = 0
+    let withV4 = 0
+    const legacy: Array<{
+      label: string
+      mois: string
+      annee: number
+      brute: number
+      consultant: string
+    }> = []
+    for (const raw of data) {
+      total += 1
+      const entry = raw as Record<string, unknown>
+      const ruleKey = entry.applied_rule_key as string | null | undefined
+      if (ruleKey) {
+        withV4 += 1
+      } else {
+        legacy.push({
+          label: String(entry.label ?? '?'),
+          mois: String(entry.mois ?? '?'),
+          annee: Number(entry.annee ?? 0),
+          brute: Number(entry.commission_brute ?? 0),
+          consultant: String(
+            entry.consultant_prenom && entry.consultant_nom
+              ? `${entry.consultant_prenom} ${entry.consultant_nom}`
+              : entry.consultant_prenom ?? entry.consultant_nom ?? '?',
+          ),
+        })
+      }
+    }
+    const pct = total > 0 ? Math.round((withV4 / total) * 100) : 100
+    return { total, withV4, legacy, pct }
+  }, [data])
+
+  if (stats.total === 0) return null
+
+  const tone =
+    stats.pct === 100
+      ? { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', dot: 'bg-green-500', label: 'Conforme' }
+      : stats.pct >= 80
+        ? { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Partiellement conforme' }
+        : { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', dot: 'bg-red-500', label: 'Non conforme' }
+
+  return (
+    <div className={`rounded-lg border ${tone.border} ${tone.bg} px-4 py-3`}>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 text-left"
+      >
+        <div className="flex items-center gap-3">
+          <span className={`inline-block w-3 h-3 rounded-full ${tone.dot}`} />
+          <div>
+            <div className={`text-sm font-semibold ${tone.text}`}>
+              Conformité grille V4 — {tone.label}
+            </div>
+            <div className="text-xs text-gray-600 mt-0.5">
+              <strong>{stats.withV4}</strong> / {stats.total} encaissements ont la grille de splits V4 appliquée
+              {' '}(<strong>{stats.pct}%</strong>)
+              {stats.legacy.length > 0 && (
+                <span> — {stats.legacy.length} legacy à vérifier</span>
+              )}
+            </div>
+          </div>
+        </div>
+        {stats.legacy.length > 0 && (
+          <div className="text-xs text-gray-500 shrink-0">
+            {expanded ? 'Masquer ▲' : 'Voir détail ▼'}
+          </div>
+        )}
+      </button>
+
+      {expanded && stats.legacy.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          <p className="text-xs text-gray-600 mb-2">
+            Encaissements sans <code className="bg-white px-1 rounded">applied_rule_key</code> en base —
+            il s&apos;agit de saisies historiques ou de cas où le backfill V4 n&apos;a pas pu déterminer
+            la règle. Le total et la répartition restent corrects mais aucune trace de
+            la règle utilisée n&apos;est conservée.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-gray-500">
+                  <th className="px-2 py-1 font-medium">Période</th>
+                  <th className="px-2 py-1 font-medium">Label</th>
+                  <th className="px-2 py-1 font-medium">Consultant</th>
+                  <th className="px-2 py-1 font-medium text-right">Brut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.legacy.slice(0, 30).map((row, i) => (
+                  <tr key={i} className="border-b border-gray-100 last:border-0">
+                    <td className="px-2 py-1 text-gray-600">
+                      {row.mois} {row.annee}
+                    </td>
+                    <td className="px-2 py-1 text-gray-900">{row.label}</td>
+                    <td className="px-2 py-1 text-gray-600">{row.consultant}</td>
+                    <td className="px-2 py-1 text-right tabular-nums text-gray-900">
+                      {formatCurrency(row.brute)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {stats.legacy.length > 30 && (
+              <p className="text-[11px] text-gray-400 mt-2 text-center">
+                + {stats.legacy.length - 30} autres
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
