@@ -98,6 +98,60 @@ export type Database = {
           },
         ]
       }
+      apporteur_compensation_rules: {
+        Row: {
+          active: boolean
+          apporteur_id: string
+          created_at: string
+          encours_months: number | null
+          id: string
+          product_category: string
+          rate_pct: number | null
+          rule_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          active?: boolean
+          apporteur_id: string
+          created_at?: string
+          encours_months?: number | null
+          id?: string
+          product_category: string
+          rate_pct?: number | null
+          rule_type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          active?: boolean
+          apporteur_id?: string
+          created_at?: string
+          encours_months?: number | null
+          id?: string
+          product_category?: string
+          rate_pct?: number | null
+          rule_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apporteur_compensation_rules_apporteur_id_fkey"
+            columns: ["apporteur_id"]
+            isOneToOne: false
+            referencedRelation: "apporteurs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apporteur_compensation_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -743,6 +797,8 @@ export type Database = {
           part_cabinet: number | null
           pct_cabinet: number | null
           rem_apporteur: number | null
+          rem_apporteur_encours_oneshot: number | null
+          rem_apporteur_entry: number | null
           rem_apporteur_ext: number | null
           rem_support: number | null
           taux_commission: number | null
@@ -756,6 +812,8 @@ export type Database = {
           part_cabinet?: number | null
           pct_cabinet?: number | null
           rem_apporteur?: number | null
+          rem_apporteur_encours_oneshot?: number | null
+          rem_apporteur_entry?: number | null
           rem_apporteur_ext?: number | null
           rem_support?: number | null
           taux_commission?: number | null
@@ -769,6 +827,8 @@ export type Database = {
           part_cabinet?: number | null
           pct_cabinet?: number | null
           rem_apporteur?: number | null
+          rem_apporteur_encours_oneshot?: number | null
+          rem_apporteur_entry?: number | null
           rem_apporteur_ext?: number | null
           rem_support?: number | null
           taux_commission?: number | null
@@ -801,6 +861,7 @@ export type Database = {
       compagnies: {
         Row: {
           created_at: string | null
+          encours_periodicite: string | null
           id: string
           nom: string
           taux_defaut: number | null
@@ -808,6 +869,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          encours_periodicite?: string | null
           id?: string
           nom: string
           taux_defaut?: number | null
@@ -815,6 +877,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          encours_periodicite?: string | null
           id?: string
           nom?: string
           taux_defaut?: number | null
@@ -2914,6 +2977,10 @@ export type EncaissementUpdate = Database["public"]["Tables"]["encaissements"]["
 export type Apporteur = Database["public"]["Tables"]["apporteurs"]["Row"]
 export type ApporteurInsert = Database["public"]["Tables"]["apporteurs"]["Insert"]
 export type ApporteurUpdate = Database["public"]["Tables"]["apporteurs"]["Update"]
+
+export type ApporteurCompensationRule = Database["public"]["Tables"]["apporteur_compensation_rules"]["Row"]
+export type ApporteurCompensationRuleInsert = Database["public"]["Tables"]["apporteur_compensation_rules"]["Insert"]
+export type ApporteurCompensationRuleUpdate = Database["public"]["Tables"]["apporteur_compensation_rules"]["Update"]
 export type GrillesCommissionnement = Database["public"]["Tables"]["grilles_commissionnement"]["Row"]
 export type VisibilitySettings = Database["public"]["Tables"]["visibility_settings"]["Row"]
 export type FacturationConsultant = Database["public"]["Tables"]["facturation_consultant"]["Row"]
