@@ -2589,6 +2589,7 @@ export type Database = {
         Args: {
           p_encours: number
           p_type: Database["public"]["Enums"]["type_frais"]
+          p_categorie?: string | null
         }
         Returns: number
       }
