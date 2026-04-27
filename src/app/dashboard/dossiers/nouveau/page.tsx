@@ -14,7 +14,7 @@ import { ArrowLeft, Loader2, Heart, X, Search } from 'lucide-react'
 
 interface FormData {
   nom: string; prenom: string; pays: string; ville: string; email: string; telephone: string
-  produitId: string; compagnieId: string
+  categorie: string; produitId: string; compagnieId: string
   montant: string; financement: string; dateOperation: string; dateEntreeRelation: string; dateSignature: string
   statut: string; modeDetention: string; commentaire: string; consultantId: string
 }
@@ -51,7 +51,8 @@ function NewDossierContent() {
   const [coTitulaireSearching, setCoTitulaireSearching] = React.useState(false)
   const [linkedPartners, setLinkedPartners] = React.useState<ClientInfo[]>([])
   const [formData, setFormData] = React.useState<FormData>({
-    nom: '', prenom: '', pays: '', ville: '', email: '', telephone: '', produitId: '', compagnieId: '',
+    nom: '', prenom: '', pays: '', ville: '', email: '', telephone: '',
+    categorie: '', produitId: '', compagnieId: '',
     montant: '', financement: 'cash',
     dateOperation: new Date().toISOString().split('T')[0],
     dateEntreeRelation: new Date().toISOString().split('T')[0],
@@ -169,6 +170,33 @@ function NewDossierContent() {
       setAutoTaux(null)
     }
   }, [formData.produitId, formData.compagnieId, tauxMap])
+
+  // Retours Maxine 2026-04-27 : la catégorie (SCPI / PE / CAV / GIRARDIN / SG…)
+  // doit être sélectionnable dès la création du dossier pour que la grille
+  // de rémunération s'applique correctement (cas Florent Sygall : sans
+  // catégorie, le moteur ne savait pas piocher la grille CAV).
+  // La liste est dérivée des produits.categorie côté DB → pas d'enum hardcodé.
+  const categoriesDisponibles = React.useMemo<string[]>(() => {
+    const set = new Set<string>()
+    for (const p of produits) if (p.categorie) set.add(p.categorie)
+    return Array.from(set).sort()
+  }, [produits])
+
+  // Produits filtrés par catégorie sélectionnée (si présente).
+  const produitsFiltres = React.useMemo(() => {
+    if (!formData.categorie) return produits
+    return produits.filter(p => p.categorie === formData.categorie)
+  }, [produits, formData.categorie])
+
+  // Reset produit_id quand la catégorie change si le produit courant
+  // n'appartient plus à la nouvelle catégorie.
+  React.useEffect(() => {
+    if (!formData.produitId || !formData.categorie) return
+    const current = produits.find(p => p.id === formData.produitId)
+    if (current && current.categorie !== formData.categorie) {
+      setFormData(prev => ({ ...prev, produitId: '' }))
+    }
+  }, [formData.categorie, formData.produitId, produits])
 
   const estimatedCommission = React.useMemo(() => {
     if (autoTaux === null || !formData.montant) return null
@@ -425,13 +453,23 @@ function NewDossierContent() {
               </Select>
             </div>
 
+            {/* Catégorie (filtre les produits proposés) — retour Maxine 2026-04-27 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie</label>
+              <Select name="categorie" value={formData.categorie} onChange={handleInputChange}>
+                <option value="">— Toutes —</option>
+                {categoriesDisponibles.map(c => <option key={c} value={c}>{c}</option>)}
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">SCPI, PE, CAV, GIRARDIN… détermine la grille de rémunération applicable.</p>
+            </div>
+
             {/* Produit + Compagnie (tous les deux optionnels) */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Produit</label>
                 <Select name="produitId" value={formData.produitId} onChange={handleInputChange}>
                   <option value="">— Aucun —</option>
-                  {produits.map(p => <option key={p.id} value={p.id}>{p.nom}</option>)}
+                  {produitsFiltres.map(p => <option key={p.id} value={p.id}>{p.nom}</option>)}
                 </Select>
               </div>
               <div>
