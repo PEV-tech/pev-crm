@@ -204,14 +204,30 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
           setEditApporteurId(data.apporteur_id || '')
           setEditApporteurTaux(data.taux_apporteur_ext ? (data.taux_apporteur_ext * 100).toFixed(2) : '')
 
-          // Fetch grille taux for entry + encours commission (LUX/PE)
+          // Fetch grille taux for entry + encours commission (CAV/LUX/PE).
+          //
+          // Retour Maxine 2026-04-27 (Florent Sygall, CAV Vitis Life 80K) :
+          // l'ancien check `isLuxPe` matchait sur le NOM produit alors que les
+          // produits réels sont nommés "VITIS LIFE", "COMETE", etc. — leur
+          // catégorie est CAV/PE/SCPI. Il faut matcher sur la catégorie pour
+          // déclencher le lookup. On passe aussi la catégorie au RPC pour qu'il
+          // pioche la bonne grille (sinon get_frais_taux confond les rangs CAV
+          // et PE qui se chevauchent en encours_min/max).
           if (data.montant && data.montant > 0) {
+            const prodCategorie = (data.produit_categorie || '').toUpperCase().trim()
             const prodNom = (data.produit_nom || '').toUpperCase().trim()
-            const isLuxPe = ['PE', 'CAPI LUX', 'CAV LUX'].includes(prodNom)
+            const needsGrille =
+              ['PE', 'CAV', 'CAPI', 'LUX', 'CAPI LUX', 'CAV LUX'].includes(prodCategorie) ||
+              ['PE', 'CAPI LUX', 'CAV LUX'].includes(prodNom)
+            // p_categorie : on transmet la catégorie produit normalisée pour
+            // que la grille filtre par (categorie + type + montant). Le RPC
+            // reste rétrocompatible : si p_categorie est NULL il garde
+            // l'ancien comportement (filtre seulement type + montant).
+            const rpcCategorie = prodCategorie || null
             try {
               const [gestionRes, entreeRes] = await Promise.all([
-                isLuxPe ? supabase.rpc('get_frais_taux', { p_type: 'gestion', p_encours: data.montant }) : Promise.resolve({ data: null }),
-                isLuxPe ? supabase.rpc('get_frais_taux', { p_type: 'entree', p_encours: data.montant }) : Promise.resolve({ data: null }),
+                needsGrille ? supabase.rpc('get_frais_taux', { p_type: 'gestion', p_encours: data.montant, p_categorie: rpcCategorie }) : Promise.resolve({ data: null }),
+                needsGrille ? supabase.rpc('get_frais_taux', { p_type: 'entree', p_encours: data.montant, p_categorie: rpcCategorie }) : Promise.resolve({ data: null }),
               ])
               if (typeof gestionRes.data === 'number' && gestionRes.data > 0) {
                 setTauxGestion(gestionRes.data)
@@ -690,11 +706,15 @@ export function DossierDetailWrapper({ id }: DossierDetailWrapperProps) {
     }
   }
 
-  // Encours only for PE, CAPI LUX, CAV LUX
+  // Encours only for PE, CAV, CAPI, LUX
+  // Retour Maxine 2026-04-27 : vérifier la catégorie produit (CAV/PE/CAPI/LUX)
+  // et non le nom — les produits sont nommés "VITIS LIFE", "COMETE", etc.
   const dossierHasEncours = React.useMemo(() => {
+    const cat = ((dossier as any)?.produit_categorie || '').toUpperCase().trim()
     const nom = (dossier?.produit_nom || '').toUpperCase().trim()
-    return ['PE', 'CAPI LUX', 'CAV LUX'].includes(nom)
-  }, [dossier?.produit_nom])
+    return ['PE', 'CAV', 'CAPI', 'LUX', 'CAPI LUX', 'CAV LUX'].includes(cat)
+      || ['PE', 'CAPI LUX', 'CAV LUX'].includes(nom)
+  }, [dossier?.produit_nom, (dossier as any)?.produit_categorie])
 
   // Effective taux: prefer custom (saved in commissions) over grille default
   // NULL = not set (use grille), 0 = explicitly 0% (no commission), >0 = custom taux

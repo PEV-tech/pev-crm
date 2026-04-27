@@ -503,6 +503,12 @@ function TauxForm({
           />
         </Labeled>
         <Labeled label="Catégorie">
+          {/* Retour Maxine 2026-04-27 : ce dropdown listait les noms produits
+              (ACTIVIMMO, VITIS LIFE…) alors que le label dit "Catégorie".
+              On dédoublonne maintenant par catégorie produit (SCPI, PE, CAV,
+              GIRARDIN, SG…) et on bind sur le 1er produit_id de la catégorie
+              choisie — l'utilisateur sélectionne bien une catégorie, pas un
+              produit spécifique. */}
           <select
             className="w-full border rounded-md px-2 py-1.5 text-sm bg-white disabled:bg-gray-100"
             value={value.produit_id || ''}
@@ -510,11 +516,23 @@ function TauxForm({
             onChange={(e) => update({ produit_id: e.target.value })}
           >
             <option value="">— Choisir —</option>
-            {produits.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nom}
-              </option>
-            ))}
+            {(() => {
+              const seen = new Set<string>()
+              const options: { produitId: string; label: string }[] = []
+              for (const p of produits) {
+                const cat = (p.categorie || p.nom || '').trim()
+                if (!cat || seen.has(cat)) continue
+                seen.add(cat)
+                options.push({ produitId: p.id, label: cat })
+              }
+              return options
+                .sort((a, b) => a.label.localeCompare(b.label))
+                .map((opt) => (
+                  <option key={opt.label} value={opt.produitId}>
+                    {opt.label}
+                  </option>
+                ))
+            })()}
           </select>
         </Labeled>
       </div>
